@@ -1,0 +1,135 @@
+---
+title: Projections
+description: Choosing perspective depth and camera angles for different visual styles.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import PolyDemo from '../../../components/PolyDemo.astro';
+
+PolyCSS uses CSS 3D perspective to project the scene. Camera attributes (`rot-x`, `rot-y`, `zoom`, `perspective`) live on the wrapping camera element — `<poly-camera>` for orthographic (default) or `<poly-perspective-camera>` for perspective — never on `<poly-scene>`. `PolyCamera` is orthographic by default; pick `PolyPerspectiveCamera` when depth foreshortening is needed.
+
+## Live demo: camera controls
+
+Use the sliders below to explore how `perspective`, `rotX`, and `rotY` interact.
+
+<PolyDemo
+  id="projections-demo"
+  model="/gallery/glb/tree.glb"
+  controls='["perspective","rotX","rotY","zoom","animate"]'
+  defaults='{"rotX":65,"animate": true,"rotY":45,"zoom":0.1,"light":{"ambient":0.7}}'
+/>
+
+## Perspective depth
+
+Higher `perspective` values feel flatter (more isometric-like); lower values exaggerate depth. For orthographic projection (no perspective distortion, the default), use `<poly-camera>` / `PolyCamera`. For perspective distortion, use `<poly-perspective-camera>` / `PolyPerspectiveCamera`.
+
+<Tabs syncKey="fw">
+<TabItem label="Vanilla JS">
+```html
+<script type="module" src="https://esm.sh/@layoutit/polycss/elements"></script>
+
+<!-- Orthographic (default) -->
+<poly-camera rot-x="65" rot-y="45">
+  <poly-scene>
+    <poly-icosahedron size="100" color="#ff6644"></poly-icosahedron>
+  </poly-scene>
+</poly-camera>
+
+<!-- Standard perspective -->
+<poly-perspective-camera perspective="1000" rot-x="65" rot-y="45">
+  <poly-scene>
+    <poly-icosahedron size="100" color="#ff6644"></poly-icosahedron>
+  </poly-scene>
+</poly-perspective-camera>
+
+<!-- Very flat / near-isometric perspective -->
+<poly-perspective-camera perspective="32000" rot-x="65" rot-y="45">
+  <poly-scene>
+    <poly-icosahedron size="100" color="#ff6644"></poly-icosahedron>
+  </poly-scene>
+</poly-perspective-camera>
+```
+</TabItem>
+<TabItem label="React">
+```tsx
+import { PolyCamera, PolyPerspectiveCamera, PolyScene, PolyIcosahedron } from "@layoutit/polycss-react";
+
+// Orthographic (default)
+<PolyCamera rotX={65} rotY={45}>
+  <PolyScene>
+    <PolyIcosahedron size={100} color="#ff6644" />
+  </PolyScene>
+</PolyCamera>
+
+// Standard perspective
+<PolyPerspectiveCamera perspective={1000} rotX={65} rotY={45}>
+  <PolyScene>
+    <PolyIcosahedron size={100} color="#ff6644" />
+  </PolyScene>
+</PolyPerspectiveCamera>
+
+// Very flat / near-isometric perspective
+<PolyPerspectiveCamera perspective={32000} rotX={65} rotY={45}>
+  <PolyScene>
+    <PolyIcosahedron size={100} color="#ff6644" />
+  </PolyScene>
+</PolyPerspectiveCamera>
+```
+</TabItem>
+<TabItem label="Vue">
+```vue
+<template>
+  <!-- Orthographic (default) -->
+  <PolyCamera :rot-x="65" :rot-y="45">
+    <PolyScene>
+      <PolyIcosahedron :size="100" color="#ff6644" />
+    </PolyScene>
+  </PolyCamera>
+
+  <!-- Perspective -->
+  <PolyPerspectiveCamera :perspective="1000" :rot-x="65" :rot-y="45">
+    <PolyScene>
+      <PolyIcosahedron :size="100" color="#ff6644" />
+    </PolyScene>
+  </PolyPerspectiveCamera>
+</template>
+
+<script setup lang="ts">
+import { PolyCamera, PolyPerspectiveCamera, PolyScene, PolyIcosahedron } from "@layoutit/polycss-vue";
+</script>
+```
+</TabItem>
+</Tabs>
+
+## Camera angles
+
+Use `rot-x` and `rot-y` on the camera element to position the camera:
+
+- `rotX`: vertical tilt. `90` is straight-down top view; `0` is horizontal.
+- `rotY`: horizontal rotation (0–360). Controls which face of the scene is forward.
+
+```html
+<!-- Vanilla -->
+<poly-camera rot-x="65" rot-y="45">…</poly-camera>   <!-- Classic isometric angle -->
+<poly-camera rot-x="80" rot-y="45">…</poly-camera>   <!-- More top-down (map view) -->
+<poly-camera rot-x="20" rot-y="0">…</poly-camera>    <!-- Front-facing -->
+```
+
+```tsx
+// React
+<PolyCamera rotX={65} rotY={45}>…</PolyCamera>
+<PolyCamera rotX={80} rotY={45}>…</PolyCamera>
+<PolyCamera rotX={20} rotY={0}>…</PolyCamera>
+```
+
+## When to adjust perspective
+
+- **High perspective (≥ 4000):** Near-isometric feel, minimal depth distortion. Good for architectural renders or strategy-game-style views.
+- **Low perspective (500–1000):** Strong depth foreshortening. Good for dramatic close-up shots or first-person-adjacent views.
+- **Orthographic (`PolyOrthographicCamera`):** Perfect isometric, no depth distortion at all. Good when you need pixel-perfect isometric scenes.
+
+## Related
+
+- [PolyScene](/components/poly-scene): Scene rendering and lighting reference.
+- [PolyCamera](/components/poly-camera): Full `perspective`, `rotX`, `rotY` prop reference.
+- [Performance](/guides/performance): Merge modes and DOM tuning.

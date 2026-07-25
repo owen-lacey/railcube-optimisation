@@ -1,0 +1,760 @@
+---
+title: Core Types
+description: TypeScript type definitions for polygons, camera state, lighting, and parse results.
+---
+
+Core parser and math types are exported from `@layoutit/polycss-react`, `@layoutit/polycss-vue`, `@layoutit/polycss`, and `@layoutit/polycss-core`. DOM render diagnostic types are exported from the renderer packages: `@layoutit/polycss-react`, `@layoutit/polycss-vue`, and `@layoutit/polycss`.
+
+## `Polygon`
+
+The atomic renderable primitive. Each visible polygon becomes one renderer-owned DOM leaf. The exact tag is an internal strategy choice: solid CSS primitives where possible, atlas slices for textured or irregular faces.
+
+```ts
+interface Polygon {
+  /** Three or more [x, y, z] world-space points, CCW winding from the outside. */
+  vertices: [number, number, number][];
+  /** CSS color. Falls back to "#cccccc" when neither color nor texture is set. */
+  color?: string;
+  /** Image URL for UV-mapped rendering. When set with `uvs`, the renderer
+   *  applies an affine UV transform. Without `uvs`, single-tile fill. */
+  texture?: string;
+  /** Imported texture wrap mode for UVs outside [0, 1]. */
+  textureWrap?: PolyTextureWrap;
+  /** Imported glTF texture alpha interpretation. */
+  textureAlphaMode?: PolyTextureAlphaMode;
+  /** Shared material. `material.texture` takes precedence over `texture`. */
+  material?: PolyMaterial;
+  /** UV coordinates: one per vertex. Must match vertices.length.
+   *  Mismatched arrays are stripped during normalizePolygons(). */
+  uvs?: [number, number][];
+  /** Source UV triangles preserved by import/merge passes for atlas rasterization. */
+  textureTriangles?: TextureTriangle[];
+  /** Source material requested two-sided rendering. */
+  doubleSided?: boolean;
+  /** User-controlled metadata. Reflected to the DOM as data-* attributes
+   *  when rendering via <Poly>. Keys must have string, number, or boolean values. */
+  data?: Record<string, string | number | boolean>;
+}
+```
+
+---
+
+## `PolyMaterial`
+
+Shared texture material referenced by one or more polygons.
+
+```ts
+interface PolyMaterial {
+  /** Image source. Anything CSS background-image: url(...) can use. */
+  texture: string;
+  /** Optional stable identity for renderer-side dedupe/cache paths. */
+  key?: string;
+}
+```
+
+---
+
+## Texture Metadata
+
+Importer-preserved texture fields used by atlas planning and rendering.
+
+```ts
+interface TextureTriangle {
+  vertices: [Vec3, Vec3, Vec3];
+  uvs: [Vec2, Vec2, Vec2];
+}
+
+type PolyTextureWrapMode = "repeat" | "clamp-to-edge" | "mirrored-repeat";
+
+interface PolyTextureWrap {
+  s: PolyTextureWrapMode;
+  t: PolyTextureWrapMode;
+}
+
+type PolyTextureAlphaMode = "opaque" | "mask" | "blend";
+```
+
+---
+
+## `PolyDirectionalLight`
+
+Controls the directional light for the scene.
+
+```ts
+interface PolyDirectionalLight {
+  /** Unit direction from the surface toward the distant light source. */
+  direction: [number, number, number];
+  /** Directional light color hex (default: "#ffffff"). */
+  color?: string;
+  /** Directional light intensity (default: 1). */
+  intensity?: number;
+}
+```
+
+---
+
+## `PolyPointLight`
+
+A positional light source. **Direction-only** — there is no distance falloff;
+per polygon the contribution is `color · intensity · max(0, n · L̂)` where `L̂`
+is the unit direction from the surface to `position`. Shading is flat per face
+(an approximation of three.js's `PointLight(distance: 0, decay: 0)`), and is
+**baked-mode only** — dynamic lighting ignores `pointLights` entirely (neither
+surface shading nor shadows; dynamic-mode cast shadows are directional-only).
+
+```ts
+interface PolyPointLight {
+  /** World-space position of the light. */
+  position: [number, number, number];
+  /** Point light color hex (default: "#ffffff"). */
+  color?: string;
+  /** Point light intensity (default: 1). */
+  intensity?: number;
+  /** When true, this light casts radial SVG shadows (default: false). */
+  castShadow?: boolean;
+}
+```
+
+---
+
+## `PolyAmbientLight`
+
+Ambient-only light (no directional component).
+
+```ts
+interface PolyAmbientLight {
+  /** Ambient light tint hex (default: "#ffffff"). */
+  color?: string;
+  /** Ambient light intensity (default: 0.4). */
+  intensity?: number;
+}
+```
+
+---
+
+## `PolyTextureLightingMode`
+
+Controls whether polygon lighting is baked into generated paint output or evaluated through CSS variables at runtime.
+
+```ts
+type PolyTextureLightingMode = "baked" | "dynamic";
+```
+
+---
+
+## `MeshResolution`
+
+Controls mesh post-processing intent.
+
+```ts
+type MeshResolution = "lossless" | "lossy";
+```
+
+`"lossless"` preserves the authored surface while applying exact reductions. `"lossy"` allows bounded geometric approximation when it reduces rendered polygon/DOM count.
+
+---
+
+## `TextureQuality` and `PolySeamBleed`
+
+Renderer quality controls accepted by scene, mesh, and atlas APIs.
+
+```ts
+type TextureQuality = number | "auto";
+type PolySeamBleed = number | "auto";
+
+type PolySeamBleedEdgeValue = ReadonlySet<number> | ReadonlyMap<number, number>;
+
+type PolySeamBleedEdges =
+  | ReadonlyMap<number, PolySeamBleedEdgeValue>
+  | readonly (PolySeamBleedEdgeValue | undefined)[];
+```
+
+`TextureQuality` controls atlas bitmap budget and CSS sprite size. `PolySeamBleed` controls solid-primitive overscan for detected shared seam edges.
+
+---
+
+## `PolyRenderStrategiesOption`
+
+Diagnostic render-strategy override accepted by scenes and atlas renderers. Disabled strategies fall through to the atlas path; `<s>` is the universal fallback and cannot be disabled.
+
+```ts
+type PolyRenderStrategy = "b" | "i" | "u";
+
+interface PolyRenderStrategiesOption {
+  disable?: PolyRenderStrategy[];
+}
+```
+
+## `PolyRenderStats`
+
+One-shot DOM diagnostic snapshot returned by `collectPolyRenderStats`.
+
+```ts
+interface PolyRenderSurfaceLeafCounts {
+  quad: number;
+  /** Border-shape `<i>` leaves. */
+  clippedSolid: number;
+  atlas: number;
+  /** `<u>` leaves, including triangles and exact corner-shape solids. */
+  stableTriangle: number;
+}
+
+interface PolyRenderStats {
+  /** Input polygon count when supplied, otherwise mounted polygon leaf count. */
+  polygonCount: number;
+  /** Mounted surface leaves, equal to the sum of surfaceLeafCounts. */
+  mountedPolygonLeafCount: number;
+  /** Mounted shadow nodes: SVG shadow surfaces plus retained compatibility shadow nodes. */
+  shadowLeafCount: number;
+  /** Surface leaf categories used by the renderer. */
+  surfaceLeafCounts: PolyRenderSurfaceLeafCounts;
+  /** Number of PolyCSS bucket wrapper nodes under the measured scope. */
+  bucketCount: number;
+}
+```
+
+---
+
+## `PolyRenderStatsOptions`
+
+Options for `collectPolyRenderStats`.
+
+```ts
+interface PolyRenderStatsOptions {
+  /** Source polygon count to include in the returned snapshot. */
+  polygonCount?: number;
+  /** Optional selector used to count only matching rendered subtrees. */
+  scopeSelector?: string;
+}
+```
+
+---
+
+## Vanilla Scene Handle Types
+
+Core imperative handles returned by `createPolyScene()` and `scene.add()`.
+
+```ts
+interface PolySceneOptions {
+  camera: PolyPerspectiveCameraHandle | PolyOrthographicCameraHandle;
+  directionalLight?: PolyDirectionalLight;
+  pointLights?: PolyPointLight[];
+  ambientLight?: PolyAmbientLight;
+  textureLighting?: PolyTextureLightingMode;
+  textureQuality?: TextureQuality;
+  seamBleed?: PolySeamBleed;
+  strategies?: PolyRenderStrategiesOption;
+  autoCenter?: boolean;
+  shadow?: {
+    color?: string;
+    opacity?: number;
+    lift?: number;
+    maxExtend?: number;
+  };
+}
+
+interface PolyMeshTransform {
+  id?: string;
+  position?: Vec3;
+  scale?: number | Vec3;
+  rotation?: Vec3;
+  merge?: boolean;
+  meshResolution?: MeshResolution;
+  stableDom?: boolean;
+  excludeFromAutoCenter?: boolean;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+}
+
+interface PolySceneHandle {
+  add(mesh: ParseResult, opts?: PolyMeshTransform): PolyMeshHandle;
+  setOptions(partial: Partial<Omit<PolySceneOptions, "camera">>): void;
+  getOptions(): Readonly<Omit<PolySceneOptions, "camera">>;
+  applyCamera(): void;
+  meshes(): readonly PolyMeshHandle[];
+  findMeshByElement(element: Element | null): PolyMeshHandle | null;
+  destroy(): void;
+  readonly host: HTMLElement;
+  readonly cameraEl: HTMLElement;
+  readonly sceneElement: HTMLElement;
+  readonly camera: PolyPerspectiveCameraHandle | PolyOrthographicCameraHandle;
+}
+
+interface PolyMeshHandle {
+  readonly element: HTMLElement;
+  readonly id?: string;
+  readonly transform: PolyMeshTransform;
+  polygons: Polygon[];
+  setTransform(transform: Partial<PolyMeshTransform>): void;
+  setPolygons(polygons: Polygon[], options?: {
+    merge?: boolean;
+    stableDom?: boolean;
+    recomputeAutoCenter?: boolean;
+  }): void;
+  updatePolygon(target: Polygon | number, partial: Partial<Polygon>): void;
+  rebakeAtlas(): void;
+  getPosition(): Vec3 | undefined;
+  getRotation(): Vec3 | undefined;
+  getScale(): number | Vec3 | undefined;
+  getPolygons(): Polygon[];
+  remove(): void;
+  dispose(): void;
+}
+```
+
+---
+
+## Framework Type Exports
+
+React and Vue export their public prop, event, context, and handle types next to the runtime components/composables. Vue mirrors the React names where applicable, with Vue-specific context/composable names such as `PolyCameraContextKey`, `PolySelectionContextKey`, `PolyContext`, and `UsePolyAnimationResultVue`.
+
+Runtime selection helpers are exported from the framework packages: `findPolyMeshHandle`, `pointInMeshElement`, and `findMeshUnderPoint`.
+
+<details>
+<summary>Framework type inventory</summary>
+
+- Component props: `PolyCameraProps`, `PolyOrthographicCameraProps`, `PolyPerspectiveCameraProps`, `PolySceneProps`, `PolyMeshProps`, `PolyGroundProps`, `PolyProps`, `PolyBoxProps`, `PolyPlaneProps`, `PolyRingProps`, `PolyOctahedronProps`, `PolySphereProps`, `PolyTetrahedronProps`, `PolyIcosahedronProps`, `PolyDodecahedronProps`, `PolyCylinderProps`, `PolyConeProps`, `PolyTorusProps`, `PolyAxesHelperProps`, `PolyDirectionalLightHelperProps`.
+- Control and selection props/handles: `PolyOrbitControlsProps`, `PolyMapControlsProps`, `PolyFirstPersonControlsProps`, `PolyTransformControlsProps`, `PolySelectProps`, `PolyControlsAnimateOptions`, `PolyControlsBaseOptions`, `PolyControlsCamera`, `PolyControlsHandle`, `PolyControlsChangeEvent`, `PolyControlsInteractionEvent`, `PolyControlsEvent`, `PolyControlsListener`, `PolyOrbitControlsCamera`, `PolyMapControlsCamera`, `PolyFirstPersonControlsOptions`, `PolyFirstPersonControlsHandle`, `PolyOrbitControlsOptions`, `PolyOrbitControlsHandle`, `PolyMapControlsOptions`, `PolyMapControlsHandle`, `PolyTransformControlsOptions`, `PolyTransformControlsHandle`, `PolySelectOptions`, `PolySelectionHandle`.
+- Hooks, events, and contexts: `UseCameraOptions`, `UseCameraResult`, `UseSceneContextOptions`, `UseSceneContextResult`, `UseMeshOptions`, `UseMeshResult`, `UsePolyAnimationResult`, `PolyPointerEvent`, `PolyMouseEvent`, `PolyWheelEvent`, `PolyEventHandler`, `InteractionProps`, `PolySelectionApi`, `PolyCameraContext`, `PolyCameraContextValue`.
+- Utility types: `PolyTransformControlsObject`, `PolyTransformControlsObjectChangeEvent`, `PolySceneSnapshotErrorCode`, `PolyShapeResult`, `TransformProps`, `DOMPassthroughProps`.
+
+</details>
+
+---
+
+## `Vec2`
+
+A 2D point or UV coordinate.
+
+```ts
+type Vec2 = [number, number];
+```
+
+---
+
+## `Vec3`
+
+A 3D point or direction.
+
+```ts
+type Vec3 = [number, number, number];
+```
+
+---
+
+## `ParseResult`
+
+Unified return shape from all mesh parsers (`parseObj`, `parseGltf`, `parseVox`, `parseStl`, `loadMesh`).
+
+```ts
+interface ParseResult {
+  /** Parsed and validated polygon array, ready for rendering. */
+  polygons: Polygon[];
+  /** Optional raw voxel source for .vox fast paths; polygon fallback remains authoritative. */
+  voxelSource?: PolyVoxelSource;
+  /** Blob URLs minted during parse (e.g. embedded GLB textures).
+   *  Revoked when dispose() is called. */
+  objectUrls: string[];
+  /** Revoke all objectUrls. Idempotent. Safe to call on unmount. */
+  dispose: () => void;
+  /** Non-fatal warnings raised during parse (dropped polygons, UV mismatches, etc.). */
+  warnings: string[];
+  /** Optional animation sampler for glTF/GLB files with usable animation clips. */
+  animation?: ParseAnimationController;
+  /** Optional format-specific metadata. */
+  metadata?: {
+    triangleCount?: number;
+    meshes?: string[];
+    materials?: string[];
+    animations?: ParseAnimationClip[];
+    sourceBytes?: number;
+    voxelCount?: number;
+    stlHeader?: string;
+    stlColor?: ParseStlColor;
+    stlSolids?: ParseStlSolid[];
+    stlTopology?: ParseStlTopology;
+  };
+}
+```
+
+---
+
+## `ParseStlTopology`
+
+STL winding/connectivity diagnostics exposed on `ParseResult.metadata.stlTopology`. The optimizer uses unreliable topology signals to avoid interior-culling shortcuts that can collapse malformed CAD meshes.
+
+```ts
+interface ParseStlTopology {
+  componentCount: number;
+  repairedTriangleCount: number;
+  outwardComponentCount: number;
+  suppliedNormalComponentCount: number;
+  inconsistentSharedEdgeCount: number;
+  nonManifoldSharedEdgeCount: number;
+}
+```
+
+---
+
+## `ParseStlColor` and `ParseStlSolid`
+
+STL-specific metadata for binary Magics colors and ASCII `solid` groups. `stlSolids` ranges use emitted polygon indices after malformed and degenerate facets have been filtered.
+
+```ts
+interface ParseStlColor {
+  format: "magics";
+  defaultColor: string;
+  alpha: number;
+  coloredTriangleCount: number;
+  defaultColorTriangleCount: number;
+}
+
+interface ParseStlSolid {
+  name: string;
+  start: number;
+  count: number;
+}
+```
+
+---
+
+## `PolyVoxelSource`
+
+Raw `.vox` metadata preserved by `parseVox` for renderer fast paths. The polygon list remains the fallback and public geometry.
+
+```ts
+interface PolyVoxelCell {
+  x: number;
+  y: number;
+  z: number;
+  color: string;
+}
+
+interface PolyVoxelSource {
+  kind: "magica-vox";
+  cells: PolyVoxelCell[];
+  rows: number;
+  cols: number;
+  depth: number;
+  scale: number;
+  sourceBytes: number;
+}
+```
+
+---
+
+## `ParseAnimationController`
+
+glTF / GLB parses can expose a lightweight sampler for animation clips. Framework hooks and the core animation mixer consume this controller.
+
+```ts
+interface ParseAnimationClip {
+  index: number;
+  name: string;
+  duration: number;
+  channelCount: number;
+}
+
+interface ParseAnimationController {
+  clips: ParseAnimationClip[];
+  sample: (clip: number | string, timeSeconds: number) => Polygon[];
+}
+```
+
+---
+
+## `PolyAnimationMixer`
+
+Core animation API used by `usePolyAnimation` and vanilla animation loops.
+
+```ts
+interface PolyAnimationTarget {
+  setPolygons(polygons: Polygon[]): void;
+}
+
+type PolyAnimationClip = ParseAnimationClip;
+
+interface PolyAnimationAction {
+  play(): PolyAnimationAction;
+  stop(): PolyAnimationAction;
+  reset(): PolyAnimationAction;
+  fadeIn(durationSeconds: number): PolyAnimationAction;
+  fadeOut(durationSeconds: number): PolyAnimationAction;
+  crossFadeTo(target: PolyAnimationAction, durationSeconds: number): PolyAnimationAction;
+  crossFadeFrom(from: PolyAnimationAction, durationSeconds: number): PolyAnimationAction;
+  setLoop(mode: LoopMode, repetitions: number): PolyAnimationAction;
+  setEffectiveTimeScale(scale: number): PolyAnimationAction;
+  setEffectiveWeight(weight: number): PolyAnimationAction;
+  clampWhenFinished: boolean;
+  timeScale: number;
+  weight: number;
+  time: number;
+  enabled: boolean;
+  paused: boolean;
+  readonly isRunning: boolean;
+}
+
+interface PolyAnimationMixer {
+  clipAction(clip: number | string): PolyAnimationAction;
+  existingAction(clip: number | string): PolyAnimationAction | null;
+  update(deltaSeconds: number): void;
+  stopAllAction(): void;
+  uncacheClip(clip: number | string): void;
+  uncacheRoot(): void;
+}
+```
+
+`LoopOnce`, `LoopRepeat`, and `LoopPingPong` are exported constants matching three.js loop modes.
+
+---
+
+## `LoadMeshOptions`
+
+Options for the high-level `loadMesh` dispatcher. Format-specific parser settings are nested under the matching key.
+
+```ts
+interface LoadMeshOptions {
+  /** Base URL for resolving relative .gltf textures/buffers. */
+  baseUrl?: string;
+  /** Companion .mtl URL for OBJ models. Ignored for STL/glTF/GLB/VOX. */
+  mtlUrl?: string;
+  /** Forwarded to parseObj; merged with materials from mtlUrl when present. */
+  objOptions?: ObjParseOptions;
+  /** Forwarded to parseGltf. */
+  gltfOptions?: GltfParseOptions;
+  /** Forwarded to parseVox. */
+  voxOptions?: VoxParseOptions;
+  /** Forwarded to parseStl. */
+  stlOptions?: StlParseOptions;
+  /** Convert uniform texture-backed faces into solid-color polygons before optimization. */
+  solidTextureSamples?: boolean | SolidTextureSampleOptions;
+  /** Shared mesh-resolution optimizer. Defaults to "lossy". */
+  meshResolution?: "lossless" | "lossy";
+}
+```
+
+`loadMesh()` applies `optimizeMeshParseResult()` internally. In default lossy mode this includes baked swatch color cleanup, static triangle simplification for eligible non-animated meshes, and final DOM-cost mesh optimization.
+
+---
+
+## `OptimizeMeshParseResultOptions`
+
+Options for `optimizeMeshParseResult()`, the core post-parse optimization path used by `loadMesh()`.
+
+```ts
+interface OptimizeMeshParseResultOptions {
+  meshResolution?: "lossless" | "lossy";
+  source?: ParseResult;
+  bakedTextureColorMergeDistance?: number;
+  simplifyTriangleMeshes?: boolean;
+  simplifyTriangleMeshOptions?: SimplifyTriangleMeshPolygonsOptions;
+  simplifyEarlyStopDropRatio?: number;
+}
+```
+
+---
+
+## `SolidTextureSampleOptions`
+
+Optional `loadMesh` optimization that converts texture-backed faces whose sampled UV region is effectively a uniform color into solid-color polygons before culling and merging.
+
+```ts
+interface SolidTextureSampleOptions {
+  /** Set false to keep every textured polygon texture-backed. */
+  enabled?: boolean;
+  /** Per-channel tolerance for declaring sampled texels uniform. Default: 2. */
+  colorTolerance?: number;
+  /** Skip decoding very large textures for this optimization. Default: 16 MP. */
+  maxTexturePixels?: number;
+}
+```
+
+---
+
+## `NormalizeResult`
+
+Return type of `normalizePolygons`.
+
+```ts
+interface NormalizeResult {
+  polygons: Polygon[];
+  warnings: string[];
+}
+```
+
+---
+
+## `ObjParseOptions`
+
+Options for `parseObj`.
+
+```ts
+interface ObjParseOptions {
+  /** Scale the model so its longest axis is this many world units. */
+  targetSize?: number;
+  /** Fallback color for un-colored faces (default: "#888888"). */
+  defaultColor?: string;
+  /** Override per-material colors (material name → CSS color). */
+  materialColors?: Record<string, string>;
+  /** Override per-material textures (material name → image URL). */
+  materialTextures?: Record<string, string>;
+  /** Only include these named OBJ objects. */
+  includeObjects?: string[];
+  /** Exclude these named OBJ objects. */
+  excludeObjects?: string[];
+  /** Quantize vertex colors to this palette. */
+  palette?: string[];
+}
+```
+
+---
+
+## `VoxParseOptions`
+
+Options for `parseVox`.
+
+```ts
+interface VoxParseOptions {
+  /** Scale near this longest-axis size; snapped to integer voxel CSS cells. Default: 60. */
+  targetSize?: number;
+  /** Lossy RGB distance for folding nearby opaque palette colors before greedy meshing. Default: disabled. */
+  paletteMergeDistance?: number;
+  /** Lossy RGB distance for recoloring small local color islands/streaks before greedy meshing. Default: disabled. */
+  colorRegionMergeDistance?: number;
+}
+```
+
+---
+
+## `StlParseOptions`
+
+Options for `parseStl`. STL is a triangle mesh format; it has no standard units, textures, UVs, or hierarchy. Binary Magics colors are parsed when the STL header declares `COLOR=rgba`.
+
+```ts
+interface StlParseOptions {
+  /** Scale the model so its longest axis is this many world units. */
+  targetSize?: number;
+  /** Shift all vertices by this amount after scaling. */
+  gridShift?: number;
+  /** Solid color assigned to every STL triangle. */
+  defaultColor?: string;
+  /** Source up axis. Default "z"; "y" applies the OBJ/glTF cyclic remap. */
+  upAxis?: "z" | "y";
+}
+```
+
+---
+
+## `GltfParseOptions`
+
+Options for `parseGltf`.
+
+```ts
+interface GltfParseOptions {
+  /** Scale the model so its longest axis is this many world units. */
+  targetSize?: number;
+  /** Fallback color for un-colored faces (default: "#888888"). */
+  defaultColor?: string;
+  /** Override per-material colors. */
+  materialColors?: Record<string, string>;
+  /** Override per-material textures (material name -> image URL). */
+  materialTextures?: Record<string, string>;
+  /** Treat the model's up axis as Y or Z. Most GLB files use Y. */
+  upAxis?: "y" | "z";
+  /** Base URL for resolving external texture references in .gltf files. */
+  baseUrl?: string;
+  /** Custom buffer resolver for external .bin files. */
+  resolveBuffer?: (uri: string) => Promise<Uint8Array> | Uint8Array;
+}
+```
+
+---
+
+## `MtlParseResult`
+
+Return type of `parseMtl`.
+
+```ts
+interface MtlParseResult {
+  /** Material name → CSS color. */
+  colors: Record<string, string>;
+  /** Material name → texture image path. */
+  textures: Record<string, string>;
+}
+```
+
+---
+
+## `AutoRotateOption`
+
+Configures automatic camera rotation.
+
+```ts
+type AutoRotateOption =
+  | boolean          // true = default Y-axis at speed 0.3, pauseOnInteraction
+  | number           // speed in degrees/frame on Y axis
+  | {
+      axis?: "x" | "y";
+      speed?: number;
+      pauseOnInteraction?: boolean;
+    };
+```
+
+## `CameraState`
+
+Internal camera state (used by `createIsometricCamera`).
+
+```ts
+interface CameraState {
+  target: [number, number, number];
+  rotX: number;
+  rotY: number;
+  zoom: number;
+  distance: number;           // dolly pull-back in pixels (default 0); adds translateZ(-distance)px
+}
+```
+
+## Camera Handles
+
+Vanilla camera handles returned by `createPolyCamera`, `createPolyOrthographicCamera`, and `createPolyPerspectiveCamera`.
+
+```ts
+interface PolyCameraOptions {
+  zoom?: number;
+  target?: Vec3;
+  rotX?: number;
+  rotY?: number;
+  distance?: number;
+}
+
+interface PolyPerspectiveCameraOptions extends PolyCameraOptions {
+  perspective?: number;
+}
+
+interface PolyOrthographicCameraOptions extends PolyCameraOptions {}
+
+interface CameraStyleInput {
+  rows?: number;
+  cols?: number;
+}
+
+interface CameraHandle {
+  readonly state: CameraState;
+  update(next: Partial<CameraState>): void;
+  getStyle(input?: CameraStyleInput): {
+    transform: string;
+    width: string;
+    height: string;
+  };
+}
+
+interface PolyPerspectiveCameraHandle extends CameraHandle {
+  readonly type: "perspective";
+  readonly perspectiveStyle: string;
+}
+
+interface PolyOrthographicCameraHandle extends CameraHandle {
+  readonly type: "orthographic";
+  readonly perspectiveStyle: "none";
+}
+```

@@ -1,0 +1,103 @@
+---
+title: Quickstart
+description: Render your first PolyCSS 3D mesh in under a minute.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import PolyDemo from '../../components/PolyDemo.astro';
+
+Get a 3D mesh rendering in your project in two steps.
+
+## 1. Install the package
+
+<Tabs syncKey="fw">
+<TabItem label="Vanilla JS">
+```bash
+npm install @layoutit/polycss
+```
+</TabItem>
+<TabItem label="React">
+```bash
+npm install @layoutit/polycss-react
+```
+</TabItem>
+<TabItem label="Vue">
+```bash
+npm install @layoutit/polycss-vue
+```
+</TabItem>
+</Tabs>
+
+## 2. Add a scene and load a mesh
+
+The camera element (`<poly-camera>` / `PolyCamera`) is always the outer node: it owns the projection and orbital state. `<poly-scene>` / `PolyScene` is nested inside it and carries lighting and atlas options. The mesh element (`<poly-mesh>` / `PolyMesh`) loads OBJ, STL, glTF, GLB, or VOX files and renders their polygons. `PolyCamera` uses orthographic projection by default; use `PolyPerspectiveCamera` for depth foreshortening.
+
+<Tabs syncKey="fw">
+<TabItem label="Vanilla JS">
+```html
+<script type="module" src="https://esm.sh/@layoutit/polycss/elements"></script>
+
+<poly-camera rot-x="65" rot-y="45">
+  <poly-scene>
+    <poly-box size="100" color="#ffd166"></poly-box>
+  </poly-scene>
+</poly-camera>
+```
+</TabItem>
+<TabItem label="React">
+```tsx
+import { PolyCamera, PolyScene, PolyBox } from "@layoutit/polycss-react";
+
+export function App() {
+  return (
+    <PolyCamera rotX={65} rotY={45}>
+      <PolyScene>
+        <PolyBox size={100} color="#ffd166" />
+      </PolyScene>
+    </PolyCamera>
+  );
+}
+```
+</TabItem>
+<TabItem label="Vue">
+```vue
+<template>
+  <PolyCamera :rot-x="65" :rot-y="45">
+    <PolyScene>
+      <PolyBox :size="100" color="#ffd166" />
+    </PolyScene>
+  </PolyCamera>
+</template>
+
+<script setup lang="ts">
+import { PolyCamera, PolyScene, PolyBox } from "@layoutit/polycss-vue";
+</script>
+```
+</TabItem>
+</Tabs>
+
+## Live preview
+
+<PolyDemo
+  id="quickstart-demo"
+  model="/gallery/obj/cottage.obj"
+  mtl="/gallery/obj/cottage.mtl"
+  controls='["zoom","rotX","rotY","rotZ","animate","interactive"]'
+  defaults='{"rotX":80,"rotY":50,"zoom":0.15,"interactive":true}'
+/>
+
+## What you get
+
+Every visible polygon in the loaded mesh becomes a real DOM element positioned with `transform: matrix3d(...)`. The renderer chooses an internal leaf strategy for each face: CSS solids for cheap rectangles/quads/triangles when possible, and atlas slices for textured or irregular faces. You can:
+
+- Inspect individual polygons in DevTools.
+- Target them with CSS selectors.
+- Attach `onClick`, `onMouseEnter`, and other standard DOM event handlers.
+
+## Related
+
+- [Core Concepts](/core-concepts): The mental model: PolyScene, PolyMesh, Poly, polygon data, pipeline.
+- [PolyCamera](/components/poly-camera): Camera props and usage reference.
+- [PolyScene](/components/poly-scene): Scene props and mesh options.
+- [Loading Meshes](/guides/textures): OBJ, STL, glTF, GLB, VOX, MTL loading, and UV textures.
+- [Gallery](/gallery): Browse mesh models for inspiration.

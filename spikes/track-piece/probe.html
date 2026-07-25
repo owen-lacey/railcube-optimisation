@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;height:100%;background:#0f172a}body{display:grid;place-items:center}poly-camera{width:900px;height:700px;display:block}</style>
+<script type="module" src="https://esm.sh/@layoutit/polycss/elements"></script></head><body>
+<poly-camera rot-x="65" rot-y="45" zoom="3">
+  <poly-scene directional-direction="0.5,-0.7,0.6" directional-intensity="1" ambient-intensity="0.5">
+    <poly-axes-helper size="60"></poly-axes-helper>
+    <!-- red bar: long in scale X, sitting left on the X axis -->
+    <poly-box size="20" color="#ef4444" scale="2,0.2,0.2" position="-60,0,0"></poly-box>
+    <!-- green bar: long in scale Y -->
+    <poly-box size="20" color="#22c55e" scale="0.2,2,0.2" position="-60,0,30"></poly-box>
+    <!-- blue bar: long in scale Z -->
+    <poly-box size="20" color="#3b82f6" scale="0.2,0.2,2" position="-60,0,60"></poly-box>
+  </poly-scene>
+</poly-camera></body></html>

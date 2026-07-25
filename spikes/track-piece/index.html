@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Rail Cube — composed track pieces (PolyCSS POC)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0f172a; }
+  body { display: grid; place-items: center; }
+  poly-camera { width: 900px; height: 700px; display: block; }
+</style>
+</head>
+<body>
+<!--
+  A composed run of straight pieces in the catalogue orientation (docs/coordinates.md):
+  rail on the top face, running forwards (entry pose UF). White start cube at the
+  origin cell, yellow straights clicking in forwards. The rail is a channel recessed
+  into the face, exactly as wide as the metal strip that forms its floor.
+
+  Axis mapping: project (x=right, y=up, z=forwards) → PolyCSS (X=right, Y=forwards, Z=up).
+  Grid placement: PolyCSS position = cell × CUBE.
+
+  Geometry is generated as Polygon[] chamfered cuboids (6 inset faces + 12 bevel strips
+  + 8 corner triangles) and added to the declarative scene via sceneEl.getScene().add().
+  PolyCSS shades each polygon by its normal, so the bevels read as moulded plastic edges.
+  Building cuboids from raw vertices also sidesteps the poly-box scale X/Y swap gotcha.
+-->
+<poly-camera rot-x="65" rot-y="45" zoom="5">
+  <poly-scene id="scene" directional-direction="0.5,-0.7,0.6" directional-intensity="1" ambient-intensity="0.5">
+  </poly-scene>
+</poly-camera>
+<script type="module">
+  import 'https://esm.sh/@layoutit/polycss/elements';
+
+  const CUBE = 20;
+  const BEVEL = 1.5;      // chamfer width on the cube bodies
+  const CHANNEL_W = 7;    // width of the rail channel sunk into the face
+  const CHANNEL_D = 2;    // channel depth; must exceed BEVEL or the wall polygons degenerate
+  const METAL = '#aab2bf';
+
+  // Straight pieces as grid cells in the project frame (x=right, y=up, z=forwards).
+  const pieces = [
+    { cell: [0, 0, 0], color: '#f8fafc' }, // start cube — white
+    { cell: [0, 0, 1], color: '#ffd166' },
+    { cell: [0, 0, 2], color: '#ffd166' },
+    { cell: [0, 0, 3], color: '#ffd166' },
+  ];
+
+  const toWorld = ([x, y, z]) => [x * CUBE, z * CUBE, y * CUBE]; // project → PolyCSS swap
+
+  // Orient a polygon so its normal points away from the local origin.
+  const oriented = vs => {
+    const [p, q, r] = vs;
+    const u = q.map((v, k) => v - p[k]), w = r.map((v, k) => v - p[k]);
+    const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+    const c = vs.reduce((acc, v) => acc.map((x, k) => x + v[k] / vs.length), [0, 0, 0]);
+    return n[0] * c[0] + n[1] * c[1] + n[2] * c[2] < 0 ? [...vs].reverse() : vs;
+  };
+
+  // Chamfered cuboid centred on local origin: sizes [sx, sy, sz], bevel width b.
+  // 6 inset faces + 12 bevel strips + 8 corner triangles = 26 polygons.
+  function chamferedBox([sx, sy, sz], b, color) {
+    const h = [sx / 2, sy / 2, sz / 2];       // half extents (face planes)
+    const i = h.map(v => v - b);              // inset extents (face borders)
+    const polys = [];
+
+    // A vertex on the chamfered hull: corner signs [s0,s1,s2], with axis `flat`
+    // pushed out to the face plane and the other two pulled in to the inset.
+    const vert = (signs, flat) =>
+      signs.map((s, a) => s * (a === flat ? h[a] : i[a]));
+
+    const add = vs => polys.push({ vertices: oriented(vs), color });
+
+    for (const s of [-1, 1]) {
+      for (let a = 0; a < 3; a++) {
+        // Face on axis a, side s: inset square walked corner-to-corner.
+        const [u, v] = [(a + 1) % 3, (a + 2) % 3];
+        add([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([su, sv]) => {
+          const signs = []; signs[a] = s; signs[u] = su; signs[v] = sv;
+          return vert(signs, a);
+        }));
+        // Corner triangles for the 4 corners on side s of axis 0 (done once, a === 0).
+        if (a === 0) for (const s1 of [-1, 1]) for (const s2 of [-1, 1]) {
+          const signs = [s, s1, s2];
+          add([vert(signs, 0), vert(signs, 1), vert(signs, 2)]);
+        }
+      }
+    }
+    // 12 bevel strips: one per edge, between the borders of its two adjacent faces.
+    for (let a = 0; a < 3; a++) {                    // a = axis the edge runs along
+      const [u, v] = [(a + 1) % 3, (a + 2) % 3];
+      for (const su of [-1, 1]) for (const sv of [-1, 1]) {
+        const at = (se, flat) => {
+          const signs = []; signs[a] = se; signs[u] = su; signs[v] = sv;
+          return vert(signs, flat);
+        };
+        add([at(-1, u), at(1, u), at(1, v), at(-1, v)]);
+      }
+    }
+    return polys;
+  }
+
+  // A track cube: chamfered cube with a channel sunk into the top face, running
+  // forwards edge-to-edge (matching the real piece, where the rail is recessed).
+  // Surgery on the chamferedBox hull: drop the top face, the two top bevel strips
+  // the channel crosses, and the front/back faces; re-add them split around the
+  // channel opening, then add the channel walls and floor.
+  function channeledCube(color) {
+    const h = CUBE / 2, i = h - BEVEL;
+    const wc = CHANNEL_W / 2, floor = h - CHANNEL_D;
+    const eq = (a, b) => Math.abs(a - b) < 1e-6;
+    // Every removed polygon lies entirely in {z = top} ∪ {|y| = front/back}.
+    const polys = chamferedBox([CUBE, CUBE, CUBE], BEVEL, color)
+      .filter(p => !p.vertices.every(([x, y, z]) => eq(z, h) || eq(Math.abs(y), h)));
+    const add = vs => polys.push({ vertices: oriented(vs), color });
+
+    for (const s of [-1, 1]) {
+      const x0 = s * wc, x1 = s * i;
+      add([[x0, -i, h], [x1, -i, h], [x1, i, h], [x0, i, h]]);            // top face half
+      for (const sy of [-1, 1]) {
+        add([[x0, sy * i, h], [x1, sy * i, h], [x1, sy * h, i], [x0, sy * h, i]]); // top bevel segment
+        add([[s * i, sy * h, -i], [x0, sy * h, -i], [x0, sy * h, i], [s * i, sy * h, i]]); // face side rect
+      }
+      add([[-wc, s * h, -i], [wc, s * h, -i], [wc, s * h, floor], [-wc, s * h, floor]]); // face below channel
+      // Channel wall at x = s·wc, normal facing INTO the channel (so `oriented`,
+      // which points away from the origin, is wrong here — wind it by hand).
+      const wall = [
+        [s * wc, -h, floor], [s * wc, -h, i], [s * wc, -i, h],
+        [s * wc, i, h], [s * wc, h, i], [s * wc, h, floor],
+      ];
+      polys.push({ vertices: s > 0 ? wall : [...wall].reverse(), color });
+    }
+    // Channel floor IS the metal rail: the channel is exactly as wide as the strip,
+    // so the exposed floor is the strip's upper surface.
+    polys.push({
+      vertices: oriented([[-wc, -h, floor], [wc, -h, floor], [wc, h, floor], [-wc, h, floor]]),
+      color: METAL,
+    });
+    return polys;
+  }
+
+  const translate = (polys, [tx, ty, tz]) =>
+    polys.map(p => ({ ...p, vertices: p.vertices.map(([x, y, z]) => [x + tx, y + ty, z + tz]) }));
+
+  await customElements.whenDefined('poly-scene');
+  const scene = document.getElementById('scene').getScene();
+
+  for (const { cell, color } of pieces) {
+    const [wx, wy, wz] = toWorld(cell);
+    const polygons = translate(channeledCube(color), [wx, wy, wz]);
+    scene.add({ polygons, objectUrls: [], warnings: [], dispose: () => {} }, {});
+  }
+</script>
+</body>
+</html>

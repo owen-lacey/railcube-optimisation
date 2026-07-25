@@ -1,0 +1,115 @@
+---
+title: Performance
+description: Optimizing PolyCSS scenes and understanding DOM-based rendering tradeoffs.
+---
+
+import PolyDemo from '../../../components/PolyDemo.astro';
+
+PolyCSS renders meshes as real DOM elements: every visible polygon is an HTML leaf with a CSS transform. That gives you DevTools inspection, DOM events, and CSS styling on every polygon, but it means **performance scales with mounted element count and atlas area**. Understanding both is key to building smooth scenes.
+
+## Live demo: polygon count vs. performance
+
+The sphere below starts at subdivision level 3 (320 triangles). Bump subdivisions up to 4 (1,280) or 5 (5,120) and watch the frame rate drop. This illustrates how quadrupling the subdivision level quadruples the DOM node count: and rendering cost.
+
+<PolyDemo
+  id="perf-sphere-demo"
+  generator="sphere"
+  generatorParams='{"subdivisions":2,"radius":15}'
+  controls='["subdivisions","radius","zoom","rotX","rotY","animate"]'
+  defaults='{"rotX":65,"rotY":45,"zoom":0.15,"animate":true}'
+  showStats
+/>
+
+## Polygon count matters
+
+The dominant cost in PolyCSS is usually browser work over the DOM tree: style, layout, paint, and compositing over many transformed leaves. Camera and mesh motion are expressed as ancestor transforms where possible, so the hot path avoids per-polygon JavaScript, but the browser still has to process every mounted leaf.
+
+Confirmed during benchmarking on a 10k-triangle mesh with auto-rotate:
+- **Scripting**: ~579ms / 7s (mostly React re-renders)
+- **Rendering (style recalc + layout)**: ~2,130ms / 7s: the dominant cost
+
+## Automatic mesh optimization
+
+PolyCSS automatically optimizes loaded meshes before rendering. The default `meshResolution: "lossy"` path bakes solid texture swatches, merges visually redundant baked swatch colors, tries static triangle simplification for eligible non-animated imports, merges compatible polygons, and can use bounded geometric approximation when that lowers estimated DOM render cost. Wider lossy candidates are gated by whole-mesh seam diagnostics and a minimum render-cost win. `meshResolution: "lossless"` keeps exact planar candidates only.
+
+This is most useful for architectural meshes with large flat surfaces: walls, floors, ceilings, voxel faces, and other areas where many same-material triangles can collapse without visual change.
+
+**Limitations:**
+- Per-polygon DOM addressing is lost for merged groups.
+- UV-textured polygons only merge when texture mapping can be preserved. Lossless mode requires exact coplanarity; lossy mode may project near-coplanar textured neighbors into one atlas sprite within the configured displacement budget.
+- Per-polygon DOM addressing is not available inside a merged flat region.
+
+## Render strategies
+
+Simple polygons are cheaper than textured or irregular polygons. The renderer uses CSS primitives where possible:
+
+- Axis-aligned rectangles and stable quads use solid `<b>` leaves.
+- Solid triangles and exact corner-shape solids use `<u>` leaves when supported.
+- Other supported solid clipped polygons use `<i>` leaves.
+- Textured polygons and fallbacks use atlas `<s>` leaves.
+- Cast shadows use SVG shadow surfaces for meshes with `castShadow`; light changes reproject the path without atlas redraw.
+
+Use `collectPolyRenderStats(root)` to inspect the mounted leaf mix. For diagnostics, `strategies={{ disable: ["b", "i", "u"] }}` forces fallback atlas rendering so you can compare output or isolate browser compositor bugs.
+
+## Voxel fast paths
+
+Voxel-shaped meshes are special. Generic voxel-shaped polygon meshes can mount only camera-facing normals and patch the mounted set as the camera or mesh rotation crosses a face boundary. Raw `.vox` sources also preserve `voxelSource`; eligible baked-mode meshes in vanilla, React, and Vue render visible voxel quads directly as `<b>` leaves inside face wrappers. Dynamic lighting, shadows, animation, non-exact voxel geometry, or geometry replaced via `setPolygons()` fall back to the polygon renderer.
+
+## `targetSize` and polygon count
+
+Use `targetSize` when parsing to keep models at a predictable world-space scale. This does not decimate the source mesh by itself, but it affects how large the generated DOM geometry and atlas footprints are. For real element-count reduction, rely on automatic coplanar merge, interior culling, or lower-poly source assets.
+
+```ts
+// Vanilla imperative loading
+const result = await loadMesh("/castle.obj", {
+  objOptions: { targetSize: 30 },
+});
+```
+
+```tsx
+// React
+<PolyMesh src="/castle.obj" parseOptions={{ objOptions: { targetSize: 30 } }} />
+<PolyMesh src="/castle.obj" parseOptions={{ objOptions: { targetSize: 80 } }} />
+```
+
+## `textureQuality` and texture memory
+
+Generated atlas pages default to `textureQuality="auto"`. Auto starts from the packed atlas area, caps oversized runtime bitmaps by page side length and decoded-memory budget, and chooses the fixed CSS sprite size used by atlas leaves. Desktop-class auto uses a 128px sprite to avoid Safari/Firefox compositor flattening artifacts; mobile-class auto and explicit numeric quality use 64px to keep layer memory lower.
+
+```html
+<!-- Vanilla -->
+<poly-camera rot-x="65" rot-y="45">
+  <poly-scene texture-quality="0.5">
+    <poly-mesh src="/model.glb"></poly-mesh>
+  </poly-scene>
+</poly-camera>
+```
+
+```tsx
+// React
+<PolyCamera>
+  <PolyScene textureQuality={0.5}>
+    <PolyMesh src="/model.glb" />
+  </PolyScene>
+</PolyCamera>
+
+// Or per mesh:
+<PolyMesh src="/model.glb" textureQuality={0.5} />
+```
+
+Use explicit numeric values when you want to override auto raster scale: `0.5` or `0.75` for distant or dense assets, `1` for close-up inspection when the runtime bitmap cost is acceptable. Numeric quality keeps the 64px atlas sprite size.
+
+## Atlas and Blob URL Lifecycle
+
+UV-textured polygons share generated atlas blob URLs (created during the canvas rasterization pass at mount). These are revoked on unmount. Keep these rules in mind:
+
+- Textured meshes do a one-time atlas generation pass at mount; very large texture footprints can still cost memory and startup time.
+- `solidTextureSamples` can convert uniform texture swatches into solid-color polygons before optimization, avoiding unnecessary atlas slices for low-poly assets that use a texture atlas as a color palette.
+- Call `dispose()` on `ParseResult` (or `usePolyMesh` result) when you've loaded the mesh imperatively.
+- The mesh element (`<poly-mesh>` / `<PolyMesh>`) handles disposal automatically on unmount or `src` change.
+
+## Related
+
+- [PolyScene](/components/poly-scene): Scene props reference.
+- [Loading Meshes](/guides/textures): Parsing options including `targetSize`.
+- [Core Concepts: Automatic Polygon Merge](/core-concepts#automatic-polygon-merge): Conceptual overview.
