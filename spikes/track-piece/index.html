@@ -24,8 +24,9 @@
   PolyCSS shades each polygon by its normal, so the bevels read as moulded plastic edges.
   Building cuboids from raw vertices also sidesteps the poly-box scale X/Y swap gotcha.
 -->
-<poly-camera rot-x="65" rot-y="45" zoom="5">
+<poly-camera rot-x="65" rot-y="45" zoom="4" target="0,45,30">
   <poly-scene id="scene" directional-direction="0.5,-0.7,0.6" directional-intensity="1" ambient-intensity="0.5">
+    <poly-orbit-controls drag wheel></poly-orbit-controls>
   </poly-scene>
 </poly-camera>
 <script type="module">
@@ -37,15 +38,61 @@
   const CHANNEL_D = 2;    // channel depth; must exceed BEVEL or the wall polygons degenerate
   const METAL = '#aab2bf';
 
-  // Straight pieces as grid cells in the project frame (x=right, y=up, z=forwards).
-  const pieces = [
-    { cell: [0, 0, 0], color: '#f8fafc' }, // start cube — white
-    { cell: [0, 0, 1], color: '#ffd166' },
-    { cell: [0, 0, 2], color: '#ffd166' },
-    { cell: [0, 0, 3], color: '#ffd166' },
+  // World (PolyCSS) direction of each project-frame letter:
+  const DIR = { U: [0, 0, 1], D: [0, 0, -1], F: [0, 1, 0], B: [0, -1, 0], R: [1, 0, 0], L: [-1, 0, 0] };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+  // Pieces are grid cells in the project frame (x=right, y=up, z=forwards), each with
+  // a pose from docs/coordinates.md: FACE the rail is on + HEADING of travel.
+  //
+  // Default view — NOT a legal track (that needs curve pieces), a demo of the pose
+  // system: a ground run, a wall climb up the far column, and a rotated piece on top.
+  const demoPieces = [
+    { cell: [0, 0, 0], pose: 'UF', color: '#f8fafc' }, // start cube — white
+    { cell: [0, 0, 1], pose: 'UF', color: '#ffd166' },
+    { cell: [0, 0, 2], pose: 'UF', color: '#ffd166' },
+    { cell: [0, 0, 3], pose: 'UF', color: '#ffd166' },
+    { cell: [0, 0, 4], pose: 'FU', color: '#ffd166' }, // wall column: rail on front face, heading up
+    { cell: [0, 1, 4], pose: 'FU', color: '#ffd166' },
+    { cell: [0, 2, 4], pose: 'FU', color: '#ffd166' },
+    { cell: [0, 3, 4], pose: 'UR', color: '#ffd166' }, // on top, rail running left–right
   ];
 
+  // ?poses view — the full catalogue: one straight in each of the 24 valid poses.
+  // One row per face (U D F B L R), one column per heading, two cells apart.
+  const FACES = ['U', 'D', 'F', 'B', 'L', 'R'];
+  const galleryPieces = FACES.flatMap((face, row) =>
+    FACES.filter(h => DIR[h].every((v, k) => v === 0 || DIR[face][k] === 0))
+      .map((heading, col) => ({
+        cell: [col * 2, 0, -row * 2],
+        pose: face + heading,
+        color: '#ffd166',
+      })));
+
+  const gallery = new URLSearchParams(location.search).has('poses');
+  const pieces = gallery ? galleryPieces : demoPieces;
+  if (gallery) {
+    const cam = document.querySelector('poly-camera');
+    cam.setAttribute('zoom', '2.2');
+    cam.setAttribute('target', '60,-100,0');
+  }
+
   const toWorld = ([x, y, z]) => [x * CUBE, z * CUBE, y * CUBE]; // project → PolyCSS swap
+
+  // Pose → rotation. A piece is authored in the canonical UF pose (rail on the up
+  // face, heading forwards). The rotation maps local up onto the pose's face
+  // direction and local forwards onto its heading; the third axis follows from
+  // right-handedness.
+  function poseRotation(pose) {
+    const [face, heading] = [DIR[pose[0]], DIR[pose[1]]];
+    if (face.some((v, k) => Math.abs(v) === Math.abs(heading[k]) && v !== 0)) {
+      throw new Error(`invalid pose ${pose}: heading must be perpendicular to face`);
+    }
+    return [cross(heading, face), heading, face]; // images of local X, Y (forwards), Z (up)
+  }
+  const rotate = (polys, [mx, my, mz]) =>
+    polys.map(p => ({ ...p, vertices: p.vertices.map(([x, y, z]) =>
+      [x * mx[0] + y * my[0] + z * mz[0], x * mx[1] + y * my[1] + z * mz[1], x * mx[2] + y * my[2] + z * mz[2]]) }));
 
   // Orient a polygon so its normal points away from the local origin.
   const oriented = vs => {
@@ -144,9 +191,8 @@
   await customElements.whenDefined('poly-scene');
   const scene = document.getElementById('scene').getScene();
 
-  for (const { cell, color } of pieces) {
-    const [wx, wy, wz] = toWorld(cell);
-    const polygons = translate(channeledCube(color), [wx, wy, wz]);
+  for (const { cell, pose, color } of pieces) {
+    const polygons = translate(rotate(channeledCube(color), poseRotation(pose)), toWorld(cell));
     scene.add({ polygons, objectUrls: [], warnings: [], dispose: () => {} }, {});
   }
 </script>
