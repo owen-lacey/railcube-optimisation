@@ -108,8 +108,8 @@ with it.
 
 Displacements point at the **next empty cell** (the head convention above), not at the
 last cell the piece occupies. "Cells occupied" is the piece's bounding box — what must
-be empty to place it. The cells the *train* sweeps through are a separate, still-open
-question ([pieces.md](pieces.md), open questions).
+be empty to place it. The cells the *train* needs are a second, separate list, tabled
+under [what the train needs](#what-the-train-needs) below.
 
 | Piece | Next empty cell | (x, y, z) | Exit pose | Cells occupied |
 |---|---|---|---|---|
@@ -136,3 +136,59 @@ the *inside* of a corner, so it needs a wide arc for the train to fit — hence 
 footprint. The outside curve wraps the train around the *outside* of a single cube's
 edge, so it can be as tight as the cube itself — no forwards progress at all; the next
 cube clicks in directly underneath.
+
+## What the train needs
+
+The train rides on the outside of the track, so it needs cells of its own on top of the
+ones the pieces occupy. **The rule: wherever the train is, it counts as filling the whole
+cell on the rail's face side** — the cell the rail's face points into, never the cube's
+own cell. It really only pokes a bit under half a cell past the surface, but a cell is
+the unit the model reasons in, and rounding up costs nothing: a cube in that cell would
+have its own surface right there to be hit.
+
+So each piece claims two lists — the cells its **material** fills, and the cells its
+**train** needs — and the no-collision rule becomes: no cell is ever both.
+
+Same convention as the table above: piece entered at `UF`, everything else is this
+rotated.
+
+| Piece | Cells the train needs | Count |
+|---|---|---|
+| Straight | 1 up | 1 |
+| Cross | 1 up | 1 |
+| Left curve | the whole 2×2 layer one up from the footprint | 4 |
+| Right curve | 2×2 layer one up, mirror of the left curve | 4 |
+| Inside curve | none beyond the piece's own footprint | 0 |
+| Outside curve | 1 up, 1 up+1 forwards, 1 forwards | 3 |
+
+Four of the six read straight off "one cell up". The other two are the interesting ones:
+
+- **The inside curve needs nothing extra.** Its rail is on the *concave* face, so the
+  cell the rail faces into is a cell the arc's own 2×2 footprint already claims — the
+  train runs through the hollow of the arc. Nothing else could be in there anyway.
+- **The outside curve needs three cells for a one-cube piece.** The train wraps the
+  *outside* of the edge, so it sweeps the rest of the 2×2 around that edge: above the
+  cube, in front of it, and diagonally across the corner between them.
+- **The flat curves need all four cells, not three.** The train is wider than the rail,
+  so on the arc its inner flank passes over the cell at the *inside* of the bend even
+  though the rail's centre line never enters it.
+- **The cross needs one cell, not two.** Both rails cross on the same face, so both
+  traversals want the same cell above it — and there is only ever one train, so the two
+  visits happen at different times and cost nothing extra.
+
+### Two things that follow
+
+**Trains never conflict with each other, only with material.** There is one train, so two
+pieces are free to want the same train cell (which is what makes a cross legal at all).
+Only material-vs-material and material-vs-train are collisions.
+
+**Joins need no special handling.** The train is 14 units long against a 20-unit cube, so
+crossing a join it overhangs the piece behind by up to 7 units. Sampling each piece's rail
+from its own entry mouth up to (not including) the next one, every such overhang lands in
+a cell that the neighbouring piece already claims itself — so the per-piece lists above
+stitch into a complete swept volume with no gaps and no extra bookkeeping.
+
+*(Derivation: sample `railFrame` along each piece and take the cell one cube along `up`.
+One rounding-scale caveat, noted for honesty and ignored: a rigid 14-long body tilts
+nose-up entering an inside curve, dipping its rear corner ~0.1 units below the previous
+cube's surface. The real loco is presumably a little shorter or articulated.)*

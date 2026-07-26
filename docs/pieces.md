@@ -170,10 +170,10 @@ itemised list above sums to 66 track cubes and is consistent across two retailer
 6. Does the start cube do anything beyond being white?
 7. Do the two rails on a cross block sit at the same height (true flat crossing)?
 8. Support system: attachment points, height per stand, stacking, T-support/joint roles.
-9. Clearance: which cells does the train sweep through on each piece? This is what the
-   no-collision constraint needs, and it differs from the piece's own footprint — e.g.
-   on the outside curve the train swings around the *outside* of the corner, needing the
-   2×2 corner region clear even though the piece is one cube. Parked for now.
+
+Settled since: **clearance** — which cells the train needs on each piece, as distinct from
+the piece's own footprint — is tabled in
+[coordinates.md](coordinates.md#what-the-train-needs).
 
 ## Sources
 
