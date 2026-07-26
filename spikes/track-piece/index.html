@@ -11,10 +11,11 @@
 </head>
 <body>
 <!--
-  A composed run of straight pieces in the catalogue orientation (docs/coordinates.md):
-  rail on the top face, running forwards (entry pose UF). White start cube at the
-  origin cell, yellow straights clicking in forwards. The rail is a channel recessed
-  into the face, exactly as wide as the metal strip that forms its floor.
+  All six Rail Cube track piece types (docs/pieces.md), composed on the cell grid
+  with poses from docs/coordinates.md. The rail is a channel recessed into the
+  face, exactly as wide as the metal strip that forms its floor. ?poses=<type>
+  shows any piece in all 24 valid poses (straight, cross, outsideCurve,
+  leftCurve, rightCurve, insideCurve).
 
   Axis mapping: project (x=right, y=up, z=forwards) → PolyCSS (X=right, Y=forwards, Z=up).
   Grid placement: PolyCSS position = cell × CUBE.
@@ -24,7 +25,7 @@
   PolyCSS shades each polygon by its normal, so the bevels read as moulded plastic edges.
   Building cuboids from raw vertices also sidesteps the poly-box scale X/Y swap gotcha.
 -->
-<poly-camera rot-x="65" rot-y="45" zoom="4" target="0,45,30">
+<poly-camera rot-x="65" rot-y="45" zoom="2.8" target="20,30,25">
   <poly-scene id="scene" directional-direction="0.5,-0.7,0.6" directional-intensity="1" ambient-intensity="0.5">
     <poly-orbit-controls drag wheel></poly-orbit-controls>
   </poly-scene>
@@ -48,33 +49,47 @@
   // Default view — NOT a legal track (that needs curve pieces), a demo of the pose
   // system: a ground run, a wall climb up the far column, and a rotated piece on top.
   const demoPieces = [
-    { cell: [0, 0, 0], pose: 'UF', color: '#f8fafc' }, // start cube — white
-    { cell: [0, 0, 1], pose: 'UF', color: '#ffd166' },
-    { cell: [0, 0, 2], pose: 'UF', color: '#ffd166' },
-    { cell: [0, 0, 3], pose: 'UF', color: '#ffd166' },
-    { cell: [0, 0, 4], pose: 'FU', color: '#ffd166' }, // wall column: rail on front face, heading up
-    { cell: [0, 1, 4], pose: 'FU', color: '#ffd166' },
-    { cell: [0, 2, 4], pose: 'FU', color: '#ffd166' },
-    { cell: [0, 3, 4], pose: 'UR', color: '#ffd166' }, // on top, rail running left–right
+    { cell: [0, 0, 0], type: 'straight', pose: 'UF', color: '#f8fafc' }, // start cube — white
+    { cell: [0, 0, 1], type: 'straight', pose: 'UF', color: '#ffd166' },
+    { cell: [0, 0, 2], type: 'cross', pose: 'UF', color: '#b48ce8' }, // crossing — purple
+    { cell: [0, 0, 3], type: 'straight', pose: 'UF', color: '#ffd166' },
+    { cell: [0, 0, 4], type: 'straight', pose: 'FU', color: '#ffd166' }, // wall column: rail on front face, heading up
+    { cell: [0, 1, 4], type: 'straight', pose: 'FU', color: '#ffd166' },
+    { cell: [0, 2, 4], type: 'straight', pose: 'FU', color: '#ffd166' },
+    { cell: [0, 3, 4], type: 'outsideCurve', pose: 'FU', color: '#ef6461' }, // red — crests the wall onto its top
+    { cell: [0, 3, 3], type: 'straight', pose: 'UB', color: '#ffd166' }, // on the roof, heading back towards the viewer
+    // Four left curves click into the free-standing donut ring from the
+    // product photos (docs/coordinates.md sanity check: displacements sum to
+    // zero and the 2×2 footprints tile a 4×4 square).
+    { cell: [4, 0, 0], type: 'leftCurve', pose: 'UF', color: '#6bbf59' },
+    { cell: [2, 0, 1], type: 'leftCurve', pose: 'UL', color: '#6bbf59' },
+    { cell: [1, 0, -1], type: 'leftCurve', pose: 'UB', color: '#6bbf59' },
+    { cell: [3, 0, -2], type: 'leftCurve', pose: 'UR', color: '#6bbf59' },
+    { cell: [-2, 0, 3], type: 'rightCurve', pose: 'UF', color: '#5b8def' }, // blue — standalone
+    { cell: [-2, 0, 0], type: 'insideCurve', pose: 'UF', color: '#f2933a' }, // orange — valley turn, ground to wall
   ];
 
-  // ?poses view — the full catalogue: one straight in each of the 24 valid poses.
+  // ?poses=<type> view — the full catalogue: one piece in each of the 24 valid poses.
   // One row per face (U D F B L R), one column per heading, two cells apart.
+  const params = new URLSearchParams(location.search);
+  const galleryType = params.get('poses') || 'straight';
   const FACES = ['U', 'D', 'F', 'B', 'L', 'R'];
+  const gap = ['leftCurve', 'rightCurve', 'insideCurve'].includes(galleryType) ? 4 : 2; // arcs span 2×2 cells
   const galleryPieces = FACES.flatMap((face, row) =>
     FACES.filter(h => DIR[h].every((v, k) => v === 0 || DIR[face][k] === 0))
       .map((heading, col) => ({
-        cell: [col * 2, 0, -row * 2],
+        cell: [col * gap, 0, -row * gap],
+        type: galleryType,
         pose: face + heading,
         color: '#ffd166',
       })));
 
-  const gallery = new URLSearchParams(location.search).has('poses');
+  const gallery = params.has('poses');
   const pieces = gallery ? galleryPieces : demoPieces;
   if (gallery) {
     const cam = document.querySelector('poly-camera');
-    cam.setAttribute('zoom', '2.2');
-    cam.setAttribute('target', '60,-100,0');
+    cam.setAttribute('zoom', String(4.4 / gap));
+    cam.setAttribute('target', `${30 * gap},${-50 * gap},0`);
   }
 
   const toWorld = ([x, y, z]) => [x * CUBE, z * CUBE, y * CUBE]; // project → PolyCSS swap
@@ -185,14 +200,244 @@
     return polys;
   }
 
+  // Wind a hand-built polygon so its normal points along dir (for faces whose
+  // normal direction `oriented`'s away-from-origin heuristic gets wrong).
+  const windToward = (vs, dir) => {
+    const [p, q, r] = vs;
+    const u = q.map((v, k) => v - p[k]), w = r.map((v, k) => v - p[k]);
+    const n = cross(u, w);
+    return n[0] * dir[0] + n[1] * dir[1] + n[2] * dir[2] < 0 ? [...vs].reverse() : vs;
+  };
+
+  // The cross piece: two straight channels crossing at right angles on the top
+  // face — one running forwards (cutting front/back, as on the straight), one
+  // running left–right (cutting left/right). Same surgery as channeledCube but
+  // fourfold: all four side faces and top bevels split around an opening, each
+  // channel wall interrupted where the other channel crosses it, and the two
+  // floors merging into one plus-shaped metal strip.
+  function crossCube(color) {
+    const h = CUBE / 2, i = h - BEVEL;
+    const wc = CHANNEL_W / 2, floor = h - CHANNEL_D;
+    const eq = (a, b) => Math.abs(a - b) < 1e-6;
+    // Remove the top face (4 top vertices), all four top bevels (2 top
+    // vertices), and all four side faces; corner triangles (1 top vertex),
+    // vertical bevels and everything below survive.
+    const polys = chamferedBox([CUBE, CUBE, CUBE], BEVEL, color).filter(p => {
+      const topCount = p.vertices.filter(v => eq(v[2], h)).length;
+      const isFace = a => p.vertices.every(v => eq(Math.abs(v[a]), h));
+      return topCount < 2 && !isFace(0) && !isFace(1);
+    });
+    const add = vs => polys.push({ vertices: oriented(vs), color });
+
+    // Top face: the four corner squares left between the two channel openings.
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      add([[sx * wc, sy * wc, h], [sx * i, sy * wc, h], [sx * i, sy * i, h], [sx * wc, sy * i, h]]);
+    }
+    // Both channels are the same shape rotated 90°: build one running
+    // forwards (cutting the front/back faces), then the same with x/y swapped.
+    const channel = swapXY => {
+      const m = ([x, y, z]) => swapXY ? [y, x, z] : [x, y, z];
+      for (const sy of [-1, 1]) {
+        add([m([-wc, sy * h, -i]), m([wc, sy * h, -i]), m([wc, sy * h, floor]), m([-wc, sy * h, floor])]); // face below channel
+        for (const s of [-1, 1]) {
+          add([m([s * i, sy * h, -i]), m([s * wc, sy * h, -i]), m([s * wc, sy * h, i]), m([s * i, sy * h, i])]); // face side rect
+          add([m([s * wc, sy * i, h]), m([s * i, sy * i, h]), m([s * i, sy * h, i]), m([s * wc, sy * h, i])]);   // top bevel segment
+          // Channel wall at ±wc, stopping where the crossing channel cuts
+          // through it — a pentagon per quadrant, facing INTO the channel.
+          const pent = [
+            [s * wc, sy * h, floor], [s * wc, sy * h, i], [s * wc, sy * i, h],
+            [s * wc, sy * wc, h], [s * wc, sy * wc, floor],
+          ].map(m);
+          polys.push({ vertices: windToward(pent, m([-s, 0, 0])), color });
+        }
+      }
+    };
+    channel(false);
+    channel(true);
+    // The metal floor: both channels share the same depth, so the two strips
+    // merge into a plus shape — centre square plus four arms. (Five convex
+    // rects, not one 12-gon: PolyCSS renders concave polygons wrongly.)
+    const rect = (x0, x1, y0, y1) => polys.push({
+      vertices: windToward([[x0, y0, floor], [x1, y0, floor], [x1, y1, floor], [x0, y1, floor]], [0, 0, 1]),
+      color: METAL,
+    });
+    rect(-wc, wc, -wc, wc);
+    rect(-wc, wc, wc, h); rect(-wc, wc, -h, -wc);   // forwards/backwards arms
+    rect(wc, h, -wc, wc); rect(-h, -wc, -wc, wc);   // right/left arms
+    return polys;
+  }
+
+  // The outside curve: single cube whose whole top-front edge is rounded off
+  // (matching the physical piece), the channel wrapping over the rounding —
+  // in from the back edge across the top, over the crest, down the front and
+  // out through the bottom edge (canonical UF entry → FD exit, next cube
+  // directly underneath). Around the edge everything is concentric arcs about
+  // the same centre: the hull rounding at EDGE_R, its chamfer band at
+  // EDGE_R − BEVEL (which lands exactly on the side faces' inset boundary),
+  // and the metal floor at EDGE_R − CHANNEL_D.
+  function outsideCurve(color) {
+    const h = CUBE / 2, i = h - BEVEL;
+    const wc = CHANNEL_W / 2, floor = h - CHANNEL_D;
+    const eq = (a, b) => Math.abs(a - b) < 1e-6;
+    const EDGE_R = 13, NE = 8;  // rounding radius and facets per quarter
+    const c = h - EDGE_R;       // arc centre (y, z) = (c, c); flat faces end here
+    const arcPts = r => Array.from({ length: NE + 1 }, (_, j) => {
+      const t = (j / NE) * Math.PI / 2;
+      return [c + r * Math.sin(t), c + r * Math.cos(t)]; // (y, z), top → front
+    });
+    const H = arcPts(EDGE_R), Hb = arcPts(EDGE_R - BEVEL), F = arcPts(EDGE_R - CHANNEL_D);
+
+    // Hull surgery: remove every polygon the channel or the rounding touches —
+    // all six faces except we keep nothing of top/back/front/bottom/sides
+    // outright removed below, plus the bevels along the affected edges and
+    // the two top-front corner triangles.
+    const polys = chamferedBox([CUBE, CUBE, CUBE], BEVEL, color).filter(p => {
+      const cnt = f => p.vertices.filter(f).length;
+      const all = f => p.vertices.every(f);
+      const top = cnt(v => eq(v[2], h)), bot = cnt(v => eq(v[2], -h));
+      const front = cnt(v => eq(v[1], h)), backOrFront = cnt(v => eq(Math.abs(v[1]), h));
+      const side = cnt(v => eq(Math.abs(v[0]), h));
+      return !(all(v => eq(v[2], h)) || all(v => eq(v[2], -h))
+        || all(v => eq(Math.abs(v[1]), h)) || all(v => eq(Math.abs(v[0]), h))
+        || (top >= 2 && backOrFront >= 2)  // back-top bevel (front-top too)
+        || (bot >= 2 && front >= 2)        // front-bottom bevel
+        || (top >= 2 && side >= 2)         // side-top bevels
+        || (front >= 2 && side >= 2)       // side-front bevels
+        || (top >= 1 && front >= 1));      // top-front corner triangles
+    });
+    const add = vs => polys.push({ vertices: oriented(vs), color });
+
+    add([[-wc, -h, -i], [wc, -h, -i], [wc, -h, floor], [-wc, -h, floor]]); // back face below channel
+    add([[-i, -i, -h], [i, -i, -h], [i, floor, -h], [-i, floor, -h]]);     // bottom face short of the exit mouth
+    for (const s of [-1, 1]) {
+      add([[s * wc, -i, h], [s * i, -i, h], [s * i, c, h], [s * wc, c, h]]);       // top face strip, to the rounding
+      add([[s * i, -h, -i], [s * wc, -h, -i], [s * wc, -h, i], [s * i, -h, i]]);   // back face side rect
+      add([[s * i, h, -i], [s * wc, h, -i], [s * wc, h, c], [s * i, h, c]]);       // front face strip, to the rounding
+      add([[s * wc, -i, h], [s * i, -i, h], [s * i, -h, i], [s * wc, -h, i]]);     // back-top bevel segment
+      add([[s * wc, h, -i], [s * i, h, -i], [s * i, i, -h], [s * wc, i, -h]]);     // front-bottom bevel segment
+      add([[s * wc, floor, -h], [s * i, floor, -h], [s * i, i, -h], [s * wc, i, -h]]); // bottom face beside exit mouth
+      add([[s * i, -i, h], [s * i, c, h], [s * h, c, i], [s * h, -i, i]]);         // side-top bevel, stops at the rounding
+      add([[s * i, h, -i], [s * i, h, c], [s * h, i, c], [s * h, i, -i]]);         // side-front bevel, stops at the rounding
+      // Side face with its top-front corner following the rounding's chamfer.
+      add([[-i, i], ...Hb, [i, -i], [-i, -i]].map(([y, z]) => [s * h, y, z]));
+      // The rounded edge itself and its chamfer band down to the side face.
+      for (let j = 0; j < NE; j++) {
+        add([[s * wc, ...H[j]], [s * i, ...H[j]], [s * i, ...H[j + 1]], [s * wc, ...H[j + 1]]]);
+        add([[s * i, ...H[j]], [s * h, ...Hb[j]], [s * h, ...Hb[j + 1]], [s * i, ...H[j + 1]]]);
+      }
+      // Channel wall at x = ±wc: flat slabs fore and aft of the corner, then
+      // radial strips between the floor arc and the hull arc.
+      const wall = vs => polys.push({
+        vertices: windToward(vs.map(([y, z]) => [s * wc, y, z]), [-s, 0, 0]),
+        color,
+      });
+      wall([[-h, floor], [c, floor], [c, h], [-i, h], [-h, i]]);   // top-back slab
+      wall([[floor, c], [floor, -h], [i, -h], [h, -i], [h, c]]);   // front slab
+      for (let j = 0; j < NE; j++) wall([F[j], F[j + 1], H[j + 1], H[j]]);
+    }
+    // The metal floor: flat top run, arc facets over the crest, flat front run.
+    const fl = [[-h, floor], ...F, [floor, -h]];
+    for (let k = 0; k < fl.length - 1; k++) {
+      const [[y0, z0], [y1, z1]] = [fl[k], fl[k + 1]];
+      polys.push({
+        vertices: oriented([[-wc, y0, z0], [wc, y0, z0], [wc, y1, z1], [-wc, y1, z1]]),
+        color: METAL,
+      });
+    }
+    return polys;
+  }
+
+  // ---- Arc pieces: quarter-donut bodies built by profile sweep -------------
+  // The cross-section perpendicular to travel — a chamfered square with the
+  // channel notch cut into the w = +h side — is placed at SEGMENTS+1 stations
+  // along a quarter arc and neighbouring stations are stitched with quads.
+  // u = transverse (canonical right), w = the side the channel faces.
+  // Traversal order is chosen so swept quads wind outward; the channel-floor
+  // edge is the metal strip.
+  const SEGMENTS = 8;
+  const PROFILE = (() => {
+    const h = CUBE / 2, i = h - BEVEL, wc = CHANNEL_W / 2, floor = h - CHANNEL_D;
+    return {
+      pts: [
+        [wc, h], [i, h], [h, i], [h, -i], [i, -h], [-i, -h],
+        [-h, -i], [-h, i], [-i, h], [-wc, h], [-wc, floor], [wc, floor],
+      ],
+      metalEdge: 10, // (-wc, floor) → (wc, floor): the channel floor
+      // End caps are the profile's area — concave (the notch), so decomposed
+      // into three convex pieces: the columns either side of the channel and
+      // the slab underneath it. (PolyCSS renders concave polygons wrongly.)
+      caps: [
+        [[-wc, h], [-i, h], [-h, i], [-h, -i], [-i, -h], [-wc, -h]],
+        [[wc, h], [wc, -h], [i, -h], [h, -i], [h, i], [i, h]],
+        [[-wc, floor], [-wc, -h], [wc, -h], [wc, floor]],
+      ],
+    };
+  })();
+
+  // Sweep the profile along a quarter arc. `map(u, w, θ)` places a profile
+  // point at station θ ∈ [0, π/2]; the piece's centreline — the future train
+  // path — is map(0, floor, θ). Entry/exit caps face along entryDir/exitDir.
+  function sweepPiece(map, color, entryDir, exitDir) {
+    const polys = [];
+    for (let j = 0; j < SEGMENTS; j++) {
+      const t0 = (j / SEGMENTS) * Math.PI / 2, t1 = ((j + 1) / SEGMENTS) * Math.PI / 2;
+      PROFILE.pts.forEach(([u0, w0], k) => {
+        const [u1, w1] = PROFILE.pts[(k + 1) % PROFILE.pts.length];
+        polys.push({
+          vertices: [map(u0, w0, t0), map(u1, w1, t0), map(u1, w1, t1), map(u0, w0, t1)],
+          color: k === PROFILE.metalEdge ? METAL : color,
+        });
+      });
+    }
+    for (const [t, dir] of [[0, entryDir], [Math.PI / 2, exitDir]]) {
+      for (const cap of PROFILE.caps) {
+        polys.push({ vertices: windToward(cap.map(([u, w]) => map(u, w, t)), dir), color });
+      }
+    }
+    return polys;
+  }
+
+  const ARC_R = 1.5 * CUBE; // centreline radius; body spans CUBE..2·CUBE
+
+  // Left curve: flat quarter arc across the 2×2 ground footprint, arc centre
+  // at the footprint's far-left corner. Rail stays on top (w → z).
+  function leftCurve(color) {
+    const map = (u, w, t) =>
+      [-ARC_R + (ARC_R + u) * Math.cos(t), -CUBE / 2 + (ARC_R + u) * Math.sin(t), w];
+    return sweepPiece(map, color, [0, -1, 0], [-1, 0, 0]);
+  }
+  // Right curve: the left curve mirrored (reversing winding to keep normals out).
+  const mirrorX = polys => polys.map(p => ({
+    ...p, vertices: p.vertices.map(([x, y, z]) => [-x, y, z]).reverse(),
+  }));
+  const rightCurve = color => mirrorX(leftCurve(color));
+
+  // Inside curve: the same quarter donut stood in the vertical plane, channel
+  // on the concave face (w → towards the arc centre, up-and-over the valley).
+  function insideCurve(color) {
+    const map = (u, w, t) =>
+      [u, -CUBE / 2 + (ARC_R - w) * Math.sin(t), ARC_R - (ARC_R - w) * Math.cos(t)];
+    return sweepPiece(map, color, [0, -1, 0], [0, 0, 1]);
+  }
+
+  // Geometry generator per piece type, all authored in the canonical UF pose.
+  const GEOMETRY = {
+    straight: channeledCube,
+    cross: crossCube,
+    outsideCurve,
+    leftCurve,
+    rightCurve,
+    insideCurve,
+  };
+
   const translate = (polys, [tx, ty, tz]) =>
     polys.map(p => ({ ...p, vertices: p.vertices.map(([x, y, z]) => [x + tx, y + ty, z + tz]) }));
 
   await customElements.whenDefined('poly-scene');
   const scene = document.getElementById('scene').getScene();
 
-  for (const { cell, pose, color } of pieces) {
-    const polygons = translate(rotate(channeledCube(color), poseRotation(pose)), toWorld(cell));
+  for (const { cell, type, pose, color } of pieces) {
+    const polygons = translate(rotate(GEOMETRY[type](color), poseRotation(pose)), toWorld(cell));
     scene.add({ polygons, objectUrls: [], warnings: [], dispose: () => {} }, {});
   }
 </script>
