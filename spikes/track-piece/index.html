@@ -162,6 +162,29 @@
   ];
   const loopPieces = chainTrack(loopRoute);
 
+  // ?scene=inversion — the complete tour: one closed loop that puts the rail on
+  // all six faces of a cube, so the train runs along the top, climbs both side
+  // walls, crosses the front and the back, and hangs upside down underneath.
+  // Reaching the left and right faces is what forces the horizontal turns: a loop
+  // that only climbs and inverts stays in a single vertical plane and can never
+  // touch more than four faces. The rail visits the faces in this order —
+  //
+  //   U U U R U L L L B R R D D F
+  //
+  // 2 straights, 4 left curves, 4 inside curves and 4 outside curves: every
+  // inside and every outside curve the starter set ships with. Found by exhaustive
+  // search over the piece catalogue — no closed loop of fewer than 12 pieces
+  // reaches all six faces at all, and of the 14-piece ones this is the most
+  // compact, 38 cubes inside a 5×4×5 box.
+  const inversionRoute = [
+    'straight', 'leftCurve', 'insideCurve',                  // along the ground, turn, climb
+    'outsideCurve', 'outsideCurve', 'leftCurve',             // over the crest onto the left wall
+    'straight', 'outsideCurve', 'outsideCurve', 'leftCurve', // across the back at ground level
+    'insideCurve', 'leftCurve',                              // up again and over the top
+    'insideCurve', 'insideCurve',                            // upside down, then down to the start
+  ];
+  const inversionPieces = chainTrack(inversionRoute);
+
   // ?scene=demo — the pre-loop illustration, kept for the blog: NOT a legal
   // track, just a tour of the pose system with a ground run, a wall climb up the
   // far column, a crest onto its roof, and three loose pieces beside it.
@@ -201,16 +224,29 @@
         color: '#ffd166',
       })));
 
+  // The views, keyed by ?scene= name. `camera` holds only the camera attributes
+  // this scene overrides — the loop keeps every default in the markup, and a
+  // target is the world-space centre of the pieces' bounding box. `drive` marks
+  // the scenes that are a real route, and so can have a train run on them: the
+  // demo is loose pieces and the gallery is a catalogue, neither of them a track.
   const gallery = params.has('poses');
-  const demo = params.get('scene') === 'demo';
-  const pieces = gallery ? galleryPieces : demo ? demoScene : loopPieces;
-  const cam = document.querySelector('poly-camera');
-  if (gallery) {
-    cam.setAttribute('zoom', String(4.4 / gap));
-    cam.setAttribute('target', `${30 * gap},${-50 * gap},0`);
-  } else if (demo) {
-    cam.setAttribute('zoom', '2.8');
-    cam.setAttribute('target', '20,30,25');
+  const SCENES = {
+    loop: { pieces: loopPieces, drive: true },
+    // A compact 3D tangle rather than a flat layout: the view swings round behind
+    // it, where the two interlocking rings read as separate instead of overlapping.
+    inversion: {
+      pieces: inversionPieces, drive: true,
+      camera: { zoom: 7.5, target: '-40,0,30', 'rot-x': 60, 'rot-y': 225 },
+    },
+    demo: { pieces: demoScene, camera: { zoom: 2.8, target: '20,30,25' } },
+    poses: { pieces: galleryPieces, camera: { zoom: 4.4 / gap, target: `${30 * gap},${-50 * gap},0` } },
+  };
+  const sceneName = gallery ? 'poses' : params.get('scene') || 'loop';
+  const active = SCENES[sceneName];
+  if (!active) throw new Error(`unknown scene ${sceneName}`);
+  if (active.camera) {
+    const cam = document.querySelector('poly-camera');
+    for (const [attr, value] of Object.entries(active.camera)) cam.setAttribute(attr, String(value));
   }
 
   const toWorld = ([x, y, z]) => [x * CUBE, z * CUBE, y * CUBE]; // project → PolyCSS swap
@@ -478,6 +514,13 @@
   // Traversal order is chosen so swept quads wind outward; the channel-floor
   // edge is the metal strip.
   const SEGMENTS = 8;
+  const ARC_R = 1.5 * CUBE; // centreline radius; body spans CUBE..2·CUBE
+  // Two pieces that click together have to look like two pieces. A cube's
+  // chamfered edges leave a groove 2·BEVEL wide at every join; a swept body has
+  // no such edge, so it stops BEVEL short of each mouth to leave the same groove.
+  // The metal strip still runs the full arc, bridging the groove exactly as it
+  // runs straight across a cube-to-cube join, so the wheels never cross a gap.
+  const SEAM = BEVEL / ARC_R; // the arc angle worth BEVEL of travel
   const PROFILE = (() => {
     const h = CUBE / 2, i = h - BEVEL, wc = CHANNEL_W / 2, floor = h - CHANNEL_D;
     return {
@@ -502,25 +545,26 @@
   // path — is map(0, floor, θ). Entry/exit caps face along entryDir/exitDir.
   function sweepPiece(map, color, entryDir, exitDir) {
     const polys = [];
+    const body = j => SEAM + (j / SEGMENTS) * (Math.PI / 2 - 2 * SEAM);
+    const strip = j => (j / SEGMENTS) * Math.PI / 2;
     for (let j = 0; j < SEGMENTS; j++) {
-      const t0 = (j / SEGMENTS) * Math.PI / 2, t1 = ((j + 1) / SEGMENTS) * Math.PI / 2;
       PROFILE.pts.forEach(([u0, w0], k) => {
         const [u1, w1] = PROFILE.pts[(k + 1) % PROFILE.pts.length];
+        const metal = k === PROFILE.metalEdge;
+        const [t0, t1] = metal ? [strip(j), strip(j + 1)] : [body(j), body(j + 1)];
         polys.push({
           vertices: [map(u0, w0, t0), map(u1, w1, t0), map(u1, w1, t1), map(u0, w0, t1)],
-          color: k === PROFILE.metalEdge ? METAL : color,
+          color: metal ? METAL : color,
         });
       });
     }
-    for (const [t, dir] of [[0, entryDir], [Math.PI / 2, exitDir]]) {
+    for (const [t, dir] of [[body(0), entryDir], [body(SEGMENTS), exitDir]]) {
       for (const cap of PROFILE.caps) {
         polys.push({ vertices: windToward(cap.map(([u, w]) => map(u, w, t)), dir), color });
       }
     }
     return polys;
   }
-
-  const ARC_R = 1.5 * CUBE; // centreline radius; body spans CUBE..2·CUBE
 
   // The two sweep maps, shared by the geometry below and by the train's path:
   // left curve is a flat quarter arc across the 2×2 ground footprint, arc centre
@@ -564,7 +608,7 @@
   await customElements.whenDefined('poly-scene');
   const scene = document.getElementById('scene').getScene();
 
-  for (const { cell, type, pose, color } of pieces) {
+  for (const { cell, type, pose, color } of active.pieces) {
     const polygons = translate(rotate(GEOMETRY[type](color), poseRotation(pose)), toWorld(cell));
     scene.add({ polygons, objectUrls: [], warnings: [], dispose: () => {} }, {});
   }
@@ -725,9 +769,7 @@
     });
   }
 
-  // Only the closed loop is a track a train can actually run on: the demo scene
-  // is loose pieces and the gallery is a catalogue, neither of them a route.
-  if (!gallery && !demo) runTrain(loopPieces);
+  if (active.drive) runTrain(active.pieces);
 </script>
 </body>
 </html>
