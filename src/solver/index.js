@@ -1,0 +1,514 @@
+// The CP-SAT model, behind one function. Tests talk to solveTrack and nothing
+// else, so the encoding underneath can change on a benchmark result without any
+// test moving.
+//
+// Shape of the model: step-indexed variables rather than addCircuit, because a
+// route is a sequence with pose state and a circuit constraint has no room for
+// the pose. Step i has a head — a cell and a pose — and a piece clicked into it.
+// The transition (cell, pose, type) → (cell, pose) is the 144-row table in
+// transitions.js.
+//
+// cpsat-js offers no allowed-assignments constraint, so the table is encoded as
+// one boolean per row per step with exactly one true. That turns out better than
+// a table would be anyway: because exactly one selector is true, the entire
+// transition is four plain linear equations over those booleans, with no
+// reification at all.
+
+import { CpModel, CpSolver, CpSolverStatus, LinearExpr } from 'cpsat-js';
+import { POSES, FACES, PIECE_TYPES, POOLS, POOL_OF, cellsFor, chainTrack } from '../track.js';
+import { transitionTable } from './transitions.js';
+
+/** The most cells any one piece's material fills — the 2×2 curves. */
+const MAX_FOOT = 4;
+
+// Loading the WASM costs far more than solving a small model, so do it once.
+let solverPromise = null;
+const getSolver = () => (solverPromise ??= CpSolver.create());
+
+// LinearExpr.plus takes another LinearExpr or a number — not an IntVar, which
+// only IntVar.plus accepts. Fold in expression space and the asymmetry is gone.
+const sum = terms => terms.reduce(
+  (acc, t) => acc.plus(t.toLinearExpr ? t.toLinearExpr() : t), LinearExpr.fromConstant(0));
+
+/**
+ * The selector booleans for one step: exactly one row of the table is taken, or
+ * none at all if the step is switched off. Everything else — displacement,
+ * claims, inventory — is a sum over these, so an inactive step contributes
+ * nothing anywhere without needing to be special-cased.
+ */
+function stepSelectors(model, rows, i, active) {
+  const vars = rows.map((_, r) => model.newBoolVar(`sel_${i}_${r}`));
+  model.add(sum(vars).equals(active));
+  return vars;
+}
+
+/**
+ * Which steps are used. Without `optionalSteps` every step is; with it, the used
+ * ones form a contiguous prefix.
+ *
+ * The prefix is not just tidiness. Left free, "which of the 32 steps are off" is
+ * an enormous symmetry — choosing 12 of 32 positions is some 225 million
+ * equivalent solutions, all describing the same track.
+ */
+function activeSteps(model, steps, optionalSteps) {
+  if (!optionalSteps) return Array.from({ length: steps }, () => 1);
+  const active = Array.from({ length: steps }, (_, i) => model.newBoolVar(`active_${i}`));
+  for (let i = 1; i < steps; i++) model.add(active[i].le(active[i - 1]));
+  model.add(active[0].equals(1)); // a track with no pieces is not a track
+  return active;
+}
+
+/**
+ * Objectives, kept as a table rather than baked into the constraints, so later
+ * chapters can swap one in without touching the model's shape.
+ *
+ * `minimiseDropped` is the endgame one: the step count is the whole inventory,
+ * so every step the loop does not use is a piece left in the box. Minimising
+ * those is the same as maximising the pieces used, and the loop's length becomes
+ * a decision variable for free.
+ */
+export const OBJECTIVES = {
+  // Cubes on the table, not steps in the route. A crossed cross is two steps
+  // and one cube, so counting steps here is how the solver mints free pieces.
+  minimiseDropped: ({ model, active, revisit }) =>
+    model.maximize(revisit ? sum(active).minus(sum(revisit)) : sum(active)),
+};
+
+/**
+ * Break the mirror symmetry: allow a right curve only after a left one has
+ * already appeared.
+ *
+ * Sound because reflecting a layout left-to-right maps left curves to right
+ * curves and leaves every other piece alone, so the mirror of a legal track is a
+ * legal track of the same length. It also spends the same inventory, because the
+ * two colours share one pool — with separate pools this break would be wrong.
+ *
+ * It halves the search without touching the optimal value. It does not break
+ * rotation (the same cyclic loop read from a different starting piece), which is
+ * the larger symmetry and a harder one to state.
+ */
+function breakMirrorSymmetry(model, rows, selectors) {
+  const ofType = (vars, name) =>
+    vars.flatMap((v, r) => (PIECE_TYPES[rows[r].type] === name ? [v] : []));
+
+  const leftsSoFar = [];
+  for (const vars of selectors) {
+    for (const right of ofType(vars, 'rightCurve')) {
+      model.addBoolOr([right.not(), ...leftsSoFar]);
+    }
+    leftsSoFar.push(...ofType(vars, 'leftCurve'));
+  }
+}
+
+/** Which axis a heading runs along: left/right 0, up/down 1, forwards/back 2. */
+const AXIS_OF = { L: 0, R: 0, U: 1, D: 1, F: 2, B: 2 };
+
+/**
+ * The cross, traversed twice.
+ *
+ * A cross is one cube with two rails on one face, so the train can pass over it
+ * twice — but only one of those passes puts a cube on the table. The later pass
+ * is a `revisit`: it claims no material and no clearance, because the earlier
+ * pass already claimed both.
+ *
+ * A revisit has to be earned, not declared. Each one is paired with an earlier
+ * step, and the pair must be the same cell, the same face, and headings on
+ * different axes — equal or opposite headings would be the same rail, which is
+ * retracing rather than crossing. Without the pairing the solver would label any
+ * step a revisit and get free pieces, which is exactly the bug this rung exists
+ * to prevent.
+ *
+ * Pairs are only formed backwards (j < i), which is not a restriction: of two
+ * passes over one cube, the earlier is the placement by definition.
+ */
+function addCrossings({ model, rows, selectors, x, y, z, active, maxCrossings }) {
+  const steps = selectors.length;
+  const revisit = selectors.map((_, i) => model.newBoolVar(`revisit_${i}`));
+  const isCross = selectors.map(vars =>
+    sum(vars.flatMap((v, r) => (PIECE_TYPES[rows[r].type] === 'cross' ? [v] : []))));
+  const faceOf = selectors.map(vars => pick(vars, rows, r => FACES.indexOf(POSES[r.pose][0])));
+  const axisOf = selectors.map(vars => pick(vars, rows, r => AXIS_OF[POSES[r.pose][1]]));
+
+  // asRevisit[i]: pairs in which step i is the second pass.
+  // asPlacement[j]: pairs in which step j is the cube being crossed.
+  const asRevisit = Array.from({ length: steps }, () => []);
+  const asPlacement = Array.from({ length: steps }, () => []);
+
+  for (let i = 1; i < steps; i++) {
+    for (let j = 0; j < i; j++) {
+      const pair = model.newBoolVar(`pair_${i}_${j}`);
+      asRevisit[i].push(pair);
+      asPlacement[j].push(pair);
+
+      const when = bounded => model.add(bounded).onlyEnforceIf(pair);
+      when(x[i].equals(x[j]));
+      when(y[i].equals(y[j]));
+      when(z[i].equals(z[j]));
+      when(faceOf[i].equals(faceOf[j]));
+      when(isCross[i].equals(1));
+      when(isCross[j].equals(1));
+      when(revisit[j].equals(0));   // the partner is the placement, not another revisit
+
+      // Headings on different axes: the two rails must actually cross. Said the
+      // long way round because notEquals does nothing — see `differ`.
+      const below = model.newBoolVar(`axis_${i}_${j}`);
+      model.add(axisOf[i].lt(axisOf[j])).onlyEnforceIf([pair, below]);
+      model.add(axisOf[i].gt(axisOf[j])).onlyEnforceIf([pair, below.not()]);
+    }
+  }
+
+  model.add(revisit[0].equals(0)); // nothing earlier to pair with
+  for (let i = 1; i < steps; i++) model.add(revisit[i].equals(sum(asRevisit[i])));
+  // One cube can only be crossed once: it has two rails, not three.
+  for (let j = 0; j < steps; j++) {
+    if (asPlacement[j].length) model.add(sum(asPlacement[j]).le(1));
+  }
+  for (const [i, r] of revisit.entries()) model.add(r.le(active[i]));
+  if (maxCrossings !== undefined) model.add(sum(revisit).le(maxCrossings));
+  return revisit;
+}
+
+/**
+ * You only have the pieces in the box (pieces.md:144-156).
+ *
+ * Counted in cubes, not in steps: a crossed cross is two steps and one cube, so
+ * the revisits come back off the total.
+ */
+function addInventory(model, rows, selectors, inventory, revisit) {
+  for (const pool of POOLS) {
+    const inPool = selectors.flatMap(vars =>
+      vars.flatMap((v, r) => (POOL_OF[PIECE_TYPES[rows[r].type]] === pool ? [v] : [])));
+    if (!inPool.length) continue;
+    const spent = pool === 'cross' && revisit ? sum(inPool).minus(sum(revisit)) : sum(inPool);
+    model.add(spent.le(inventory[pool] ?? 0));
+  }
+}
+
+/** sum of coefficient × selector — the value some quantity takes at this step. */
+const pick = (vars, rows, of) => sum(vars.map((v, r) => v.times(of(rows[r]))));
+
+/** The cells a row's piece claims, as offsets from the head cell. */
+const cellsOf = (row, kind) => cellsFor(PIECE_TYPES[row.type], POSES[row.pose], [0, 0, 0])[kind];
+
+/**
+ * The scalar cell-id scheme. A cell (x, y, z) becomes x + N·y + N²·z, shifted
+ * positive. That is linear in the head's coordinates, and a claimed cell's
+ * offset is a constant, so a claim is just the head's id plus a number the
+ * selectors pick out — no multiplication anywhere.
+ *
+ * The span has to cover every cell any claim can reach, or two different cells
+ * would fold onto the same id. Heads live within box + 1 (a head may sit one
+ * outside the box with its footprint inside), and a train cell reaches one
+ * further again.
+ */
+function grid(box) {
+  const span = box + 2;
+  const n = 2 * span + 1;
+  return {
+    n,
+    size: n ** 3,
+    idOf: offset => offset[0] + offset[1] * n + offset[2] * n * n,
+    shift: span * (1 + n + n * n),
+  };
+}
+
+/**
+ * One integer per cell a piece claims, of one kind — material or train.
+ *
+ * Pieces claim one cell or four depending on type, and type is a variable, so
+ * unused slots need somewhere to go. They get a sentinel past the end of the
+ * grid, distinct per slot and per kind, so that AllDifferent over material stays
+ * satisfiable and no material sentinel can ever collide with a train one.
+ */
+function claimSlots({ model, rows, selectors, x, y, z, g, kind, sentinel, revisit }) {
+  const claims = [];
+  const maxSlots = Math.max(...rows.map(row => cellsOf(row, kind).length));
+
+  selectors.forEach((vars, i) => {
+    const head = sum([x[i], y[i].times(g.n), z[i].times(g.n * g.n)]).plus(g.shift);
+    for (let k = 0; k < maxSlots; k++) {
+      const cellAt = row => cellsOf(row, kind)[k];
+      const used = model.newBoolVar(`${kind}Used_${i}_${k}`);
+      // A revisit claims nothing: the first pass over this cube already did.
+      // Only slot 0 needs the subtraction — a cross fills one cell and needs
+      // one clearance cell, so its later slots are empty either way.
+      const claimed = pick(vars, rows, row => (cellAt(row) ? 1 : 0));
+      model.add(used.equals(revisit && k === 0 ? claimed.minus(revisit[i]) : claimed));
+
+      const spare = sentinel + i * MAX_FOOT + k;
+      const claim = model.newIntVar(0, spare, `${kind}_${i}_${k}`);
+      model.add(claim.equals(head.plus(pick(vars, rows, row => (cellAt(row) ? g.idOf(cellAt(row)) : 0)))))
+        .onlyEnforceIf(used);
+      model.add(claim.equals(spare)).onlyEnforceIf(used.not());
+      claims.push({ claim, used, step: i, slot: k });
+    }
+  });
+  return claims;
+}
+
+/** The box and the floor bind material cells, not the head — as the oracle reads them. */
+function boundMaterial({ model, rows, selectors, x, y, z, box, minY }) {
+  selectors.forEach((vars, i) => {
+    for (let k = 0; k < MAX_FOOT; k++) {
+      const cellAt = row => cellsOf(row, 'material')[k];
+      const used = model.newBoolVar(`inBox_${i}_${k}`);
+      model.add(used.equals(pick(vars, rows, row => (cellAt(row) ? 1 : 0))));
+      [x, y, z].forEach((axis, a) => {
+        const coord = axis[i].plus(pick(vars, rows, row => (cellAt(row) ? cellAt(row)[a] : 0)));
+        model.add(coord.le(box)).onlyEnforceIf(used);
+        model.add(coord.ge(a === 1 && minY !== null ? minY : -box)).onlyEnforceIf(used);
+      });
+    }
+  });
+}
+
+/**
+ * Two variables must differ.
+ *
+ * NOT `a.notEquals(b)`: in cpsat-js 1.0.0 that constraint is silently a no-op —
+ * pin two variables to the same value, add it, and the model still solves. So
+ * this says the same thing the long way round, as a pair of strict inequalities
+ * under a reifying boolean, which does work. Fix the library and this can
+ * collapse back to one line; until then tests/library.test.js guards it.
+ */
+function differ(model, a, b, name) {
+  const below = model.newBoolVar(name);
+  model.add(a.lt(b)).onlyEnforceIf(below);
+  model.add(a.gt(b)).onlyEnforceIf(below.not());
+}
+
+/**
+ * Clearance: no cell is ever both material and train. Train cells may coincide
+ * with each other — there is only one train — so this is not an AllDifferent and
+ * cannot be folded into the material one. It is every material claim against
+ * every train claim, pairwise.
+ *
+ * That is quadratic, and it is the cost the boolean occupancy grid would buy
+ * back. The benchmark in tests/clearance.test.js is what decides whether it
+ * needs buying.
+ */
+function addClearance(model, material, train) {
+  for (const m of material) {
+    for (const t of train) {
+      differ(model, m.claim, t.claim, `clear_${m.step}_${m.slot}_${t.step}_${t.slot}`);
+    }
+  }
+}
+
+/**
+ * Build the model. Returns the variables the caller needs to read a solution
+ * back out, so that reading stays in one place.
+ */
+function buildModel({
+  steps, box, minY, exclude, startPose, collisions, checkTrain,
+  inventory, optionalSteps, objective, symmetryBreaking, crossings, require: forced,
+}) {
+  const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
+  const model = new CpModel();
+  const start = POSES.indexOf(startPose);
+
+  // Head position and pose before each step, plus one more for after the last:
+  // that final head is what has to be back where it started. The head's own
+  // domain is one wider than the box, because the box binds material cells and
+  // a head can sit at the edge of a footprint that is still inside it.
+  const reach = box + 1;
+  const x = [], y = [], z = [], pose = [];
+  for (let i = 0; i <= steps; i++) {
+    x.push(model.newIntVar(-reach, reach, `x_${i}`));
+    y.push(model.newIntVar(minY === null ? -reach : minY - 1, reach, `y_${i}`));
+    z.push(model.newIntVar(-reach, reach, `z_${i}`));
+    pose.push(model.newIntVar(0, POSES.length - 1, `pose_${i}`));
+  }
+
+  const active = activeSteps(model, steps, optionalSteps);
+  const selectors = [];
+  for (let i = 0; i < steps; i++) {
+    const vars = stepSelectors(model, rows, i, active[i]);
+    selectors.push(vars);
+    // At most one selector is true, so each of these reads off that row — and
+    // when the step is off every term is zero, which leaves the head exactly
+    // where it was. No special case needed for the displacement.
+    model.add(x[i + 1].equals(x[i].plus(pick(vars, rows, r => r.dx))));
+    model.add(y[i + 1].equals(y[i].plus(pick(vars, rows, r => r.dy))));
+    model.add(z[i + 1].equals(z[i].plus(pick(vars, rows, r => r.dz))));
+    // Chaining: the row's own pose must be the head's pose, and the row's exit
+    // pose must be the next head's. Sharing the pose variable between the two
+    // equations is what makes consecutive pieces click together. The pose does
+    // need the special case — a zero sum would mean pose index 0, not "unchanged".
+    if (optionalSteps) {
+      model.add(pose[i].equals(pick(vars, rows, r => r.pose))).onlyEnforceIf(active[i]);
+      model.add(pose[i + 1].equals(pick(vars, rows, r => r.nextPose))).onlyEnforceIf(active[i]);
+      model.add(pose[i + 1].equals(pose[i])).onlyEnforceIf(active[i].not());
+    } else {
+      model.add(pose[i].equals(pick(vars, rows, r => r.pose)));
+      model.add(pose[i + 1].equals(pick(vars, rows, r => r.nextPose)));
+    }
+  }
+
+  // The loop closes on cell AND pose: coming home with the wrong face or heading
+  // means the last piece cannot click into the first (coordinates.md:95-100).
+  for (const [v, want] of [[x[0], 0], [y[0], 0], [z[0], 0], [pose[0], start],
+                           [x[steps], 0], [y[steps], 0], [z[steps], 0], [pose[steps], start]]) {
+    model.add(v.equals(want));
+  }
+
+  // The box and the floor apply whether or not the collision rules are on, so
+  // that switching a rule off changes exactly one thing.
+  boundMaterial({ model, rows, selectors, x, y, z, box, minY });
+
+  // Crossings first: whether a step is a revisit decides whether it claims.
+  const revisit = crossings
+    ? addCrossings({
+      model, rows, selectors, x, y, z, active, maxCrossings: inventory?.cross,
+    })
+    : null;
+
+  const g = grid(box);
+  const slots = kind => claimSlots({
+    model, rows, selectors, x, y, z, g, kind, revisit,
+    sentinel: g.size + (kind === 'train' ? steps * MAX_FOOT : 0),
+  });
+
+  if (collisions) {
+    const material = slots('material');
+    model.addAllDifferent(material.map(c => c.claim));
+    if (checkTrain) addClearance(model, material, slots('train'));
+  }
+
+  if (inventory) addInventory(model, rows, selectors, inventory, revisit);
+  if (symmetryBreaking) breakMirrorSymmetry(model, rows, selectors);
+
+  if (objective) {
+    if (!optionalSteps) {
+      throw new Error(`objective ${objective} needs optionalSteps: with every step forced on, `
+        + 'there is nothing to drop');
+    }
+    const apply = OBJECTIVES[objective];
+    if (!apply) throw new Error(`unknown objective ${objective}`);
+    apply({ model, active, revisit, rows, selectors });
+  }
+
+  // Pin the route, for asking whether one particular track is feasible.
+  if (forced) {
+    forced.forEach((type, i) => {
+      model.addBoolOr(rows.flatMap((row, r) =>
+        (PIECE_TYPES[row.type] === type ? [selectors[i][r]] : [])));
+    });
+  }
+
+  return { model, rows, selectors, active, revisit };
+}
+
+const STATUS = {
+  [CpSolverStatus.OPTIMAL]: 'OPTIMAL',
+  [CpSolverStatus.FEASIBLE]: 'FEASIBLE',
+  [CpSolverStatus.INFEASIBLE]: 'INFEASIBLE',
+  [CpSolverStatus.MODEL_INVALID]: 'MODEL_INVALID',
+  [CpSolverStatus.UNKNOWN]: 'UNKNOWN',
+};
+
+/**
+ * Which row each step chose, read back from the selector booleans. An inactive
+ * step chose none, and shows up as -1 — dropped from the route, but kept in the
+ * no-good cut so that "off" is part of what gets forbidden.
+ */
+const chosenRows = (result, selectors) =>
+  selectors.map(vars => vars.findIndex(v => result.value(v) === 1));
+
+/**
+ * Solve for a closed track.
+ *
+ *   steps        how many pieces the loop has
+ *   box          no material cell further than this from the origin on any axis
+ *   minY         floor; null for none. 0 means nothing below the ground
+ *   exclude      piece types to leave out
+ *   collisions   enforce at most one piece per cell. Off is only useful for
+ *                comparing against an oracle run with the rule off too
+ *   checkTrain   enforce clearance as well: no cell both material and train
+ *   inventory    pool counts the loop may spend, e.g. STARTER. Omit for a
+ *                bottomless box of pieces
+ *   optionalSteps  let the loop be shorter than `steps`, leaving a contiguous
+ *                tail switched off
+ *   objective    a key of OBJECTIVES, e.g. 'minimiseDropped'. Needs optionalSteps
+ *   symmetryBreaking  rule out mirror-image duplicates. Off by default, because
+ *                enumerating every solution has to see them
+ *   crossings    let the train pass twice over one cross. Off by default: it is
+ *                the most expensive part of the model and the starter set has
+ *                no crosses to cross
+ *   require      pin the piece type at each step, to ask whether one particular
+ *                track is feasible
+ *   allSolutions enumerate every solution instead of returning one, by adding a
+ *                no-good cut for each and re-solving until infeasible
+ *   maxSolutions stop enumerating after this many and set `truncated` on the
+ *                result, so a capped sweep can never be mistaken for a complete one
+ *
+ * Returns `{ status, route, pieces, dropped }`, or `{ status, routes }` when
+ * enumerating. `route` is the order the train travels — a crossed cross is in
+ * it twice — while `pieces` is that route chained, each entry flagged `revisit`
+ * or not, and `dropped` counts cubes left in the box.
+ */
+export async function solveTrack({
+  steps, box = 6, minY = null, exclude = [], startPose = 'UF',
+  collisions = true, checkTrain = true, inventory, optionalSteps = false,
+  objective, symmetryBreaking = false, crossings = false, require,
+  allSolutions = false, maxSolutions, maxTimeInSeconds,
+}) {
+  // Check the numbers before handing them to the solver: a NaN reaches cpsat-js
+  // as a BigInt conversion error several frames deep, which says nothing useful.
+  for (const [name, value] of [['steps', steps], ['box', box]]) {
+    if (!Number.isInteger(value) || value < 1) {
+      throw new Error(`${name} must be a positive integer, got ${value}`);
+    }
+  }
+  if (minY !== null && !Number.isInteger(minY)) {
+    throw new Error(`minY must be an integer or null, got ${minY}`);
+  }
+
+  const solver = await getSolver();
+  const { model, rows, selectors, active } = buildModel({
+    steps, box, minY, exclude, startPose, collisions, checkTrain,
+    inventory, optionalSteps, objective, symmetryBreaking, crossings, require,
+  });
+  const params = maxTimeInSeconds ? { maxTimeInSeconds } : undefined;
+  const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);
+  // An inactive step is forbidden by its active flag; an active one by its row.
+  const noGood = chosen => chosen.map((r, i) => (r < 0 ? active[i] : selectors[i][r].not()));
+  // Chain the route back through the model to find out what it really costs.
+  // Not `steps - route.length`: a crossed cross is two steps and one cube, so
+  // counting steps is precisely how a model mints pieces it does not own. And
+  // not read off a solver variable either — chainTrack works the revisits out
+  // from the geometry, so it is an independent count. If the route is illegal it
+  // throws, which is the right thing to do with a bug of that kind.
+  const report = route => {
+    const pieces = chainTrack(route, startPose);
+    const cubes = pieces.filter(p => !p.revisit).length;
+    const held = inventory ? Object.values(inventory).reduce((a, b) => a + b, 0) : null;
+    return { route, pieces, dropped: held === null ? null : held - cubes };
+  };
+
+  if (!allSolutions) {
+    const result = solver.solve(model, params);
+    const status = STATUS[result.status];
+    if (status !== 'OPTIMAL' && status !== 'FEASIBLE') {
+      return { status, route: null, pieces: null, dropped: null };
+    }
+    return { status, ...report(routeOf(chosenRows(result, selectors))) };
+  }
+
+  // No-good cuts: forbid the exact set of selectors just used, and solve again.
+  // Each round adds a clause, so this is quadratic in the number of solutions —
+  // fine for the small cases, worth capping for the large ones.
+  const routes = [];
+  for (;;) {
+    if (routes.length === maxSolutions) return { status: 'OPTIMAL', routes, truncated: true };
+    const result = solver.solve(model, params);
+    const status = STATUS[result.status];
+    if (status !== 'OPTIMAL' && status !== 'FEASIBLE') {
+      if (status !== 'INFEASIBLE') throw new Error(`enumeration stopped on ${status}`);
+      return { status: 'OPTIMAL', routes, truncated: false };
+    }
+    const chosen = chosenRows(result, selectors);
+    routes.push(routeOf(chosen));
+    model.addBoolOr(noGood(chosen));
+  }
+}
