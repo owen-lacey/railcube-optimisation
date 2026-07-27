@@ -28,7 +28,7 @@ const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, {
 
 // Small enough to reason about: two crosses and the curves needed to get back to
 // them. Deliberately short on straights, so a cross is worth using as one.
-const TWO_CROSSES = { straight: 4, flatCurve: 8, insideCurve: 4, outsideCurve: 0, cross: 2 };
+const TWO_CROSSES = { straight: 4, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 0, cross: 2 };
 
 // ---- The foot-gun --------------------------------------------------------
 
@@ -128,9 +128,8 @@ test('a crossing needs no clearance beyond the first pass', () => {
 
 // ---- The foot-gun, at the solver ------------------------------------------
 
-// A crossing is never worth choosing under this objective — it spends a cross
-// and places no extra cube — so the accounting has to be tested by forcing one.
-// That is the point: a bug here would not show up in an ordinary optimal run.
+// Pinning the route rather than optimising for it, so the accounting is tested
+// in isolation from whether the objective happens to want a crossing.
 const eight = extra => solveTrack({
   steps: FIGURE_EIGHT.length, box: 5, minY: 0, require: FIGURE_EIGHT, ...extra,
 });
@@ -138,7 +137,7 @@ const eight = extra => solveTrack({
 // Eleven cubes, twelve steps. If the model counted steps, one cross would not be
 // enough and this would come back INFEASIBLE.
 test('a crossed cross is charged once, not twice', async () => {
-  const oneCross = { straight: 4, flatCurve: 6, insideCurve: 0, outsideCurve: 0, cross: 1 };
+  const oneCross = { straight: 4, leftCurve: 3, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 1 };
   const result = await eight({ crossings: true, inventory: oneCross });
   assert.equal(result.status, 'OPTIMAL', 'one cross should be enough to cross once');
 
@@ -151,7 +150,7 @@ test('a crossed cross is charged once, not twice', async () => {
 
 // ...and it still has to be paid for at all. Zero crosses, no crossing.
 test('a crossing still costs one cross', async () => {
-  const noCross = { straight: 4, flatCurve: 6, insideCurve: 0, outsideCurve: 0, cross: 0 };
+  const noCross = { straight: 4, leftCurve: 3, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 0 };
   assert.equal((await eight({ crossings: true, inventory: noCross })).status, 'INFEASIBLE');
 });
 
@@ -191,7 +190,7 @@ test('no solution can invent a revisit it has not earned', async () => {
 // drives straight over them — as here. It is not that crossings are never
 // chosen, though; see the test below.
 slow('a crossing is not chosen when the set closes without one', async () => {
-  const set = { straight: 0, flatCurve: 8, insideCurve: 4, outsideCurve: 0, cross: 2 };
+  const set = { straight: 0, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 0, cross: 2 };
   const result = await solveTrack({
     steps: total(set), box: 5, minY: 0, inventory: set,
     optionalSteps: true, objective: 'minimiseDropped', crossings: true,
@@ -206,7 +205,7 @@ slow('a crossing is not chosen when the set closes without one', async () => {
 // route, no hint. Twelve steps over eleven cubes, nothing dropped, which is only
 // possible with a revisit.
 slow('a crossing IS chosen when it is the only way to spend every cube', async () => {
-  const set = { straight: 4, flatCurve: 6, insideCurve: 0, outsideCurve: 0, cross: 1 };
+  const set = { straight: 4, leftCurve: 3, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 1 };
   const result = await solveTrack({
     steps: 12, box: 5, minY: 0, inventory: set,
     optionalSteps: true, objective: 'minimiseDropped', crossings: true,

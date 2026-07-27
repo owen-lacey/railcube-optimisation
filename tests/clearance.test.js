@@ -23,7 +23,7 @@ const shape = route => route.map(t => LETTER[t]).join('');
 const SLOW = process.env.SLOW === '1';
 const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
 
-const UNLIMITED = { straight: 99, flatCurve: 99, insideCurve: 99, outsideCurve: 99, cross: 0 };
+const UNLIMITED = { straight: 99, leftCurve: 99, rightCurve: 99, insideCurve: 99, outsideCurve: 99, cross: 0 };
 
 const oracleShapes = (n, opts) => enumerateLoops({
   inventory: UNLIMITED, maxPieces: n, minPieces: n, box: 6, minY: 0,

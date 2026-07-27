@@ -305,12 +305,24 @@ test('the starter set has no crosses and deluxe has two', () => {
   assert.equal(DELUXE.cross, 2);
 });
 
-// pieces.md:150 — green and blue flat curves are listed as "8/16 combined", so
-// they are one pool, not four of each. Every other type is its own pool.
-test('the flat curves share one inventory pool', () => {
-  assert.equal(POOL_OF.leftCurve, 'flatCurve');
-  assert.equal(POOL_OF.rightCurve, 'flatCurve');
-  assert.equal(POOLS.length, PIECE_TYPES.length - 1);
+// The product listings count green and blue together ("8/16 combined"), and a
+// reversible curve could legitimately be spent as either — a right curve fills
+// the same cells as a left one and moves the head the same way, differing only in
+// which face the rail ends on. Owen's set is not reversible, so they are two
+// mouldings and two pools.
+test('left and right curves are separate pools, half the listed total each', () => {
+  assert.equal(POOL_OF.leftCurve, 'leftCurve');
+  assert.equal(POOL_OF.rightCurve, 'rightCurve');
+  assert.equal(POOLS.length, PIECE_TYPES.length, 'every piece type is its own pool');
+  assert.equal(STARTER.leftCurve + STARTER.rightCurve, 8);
+  assert.equal(DELUXE.leftCurve + DELUXE.rightCurve, 16);
+});
+
+// The two colours must ship in equal numbers, or the solver's mirror symmetry
+// break becomes unsound — reflecting a layout swaps the two counts.
+test('the two curve colours ship in equal numbers', () => {
+  assert.equal(STARTER.leftCurve, STARTER.rightCurve);
+  assert.equal(DELUXE.leftCurve, DELUXE.rightCurve);
 });
 
 test('every inventory names every pool, and every type has one', () => {
@@ -320,12 +332,13 @@ test('every inventory names every pool, and every type has one', () => {
   for (const type of PIECE_TYPES) assert.ok(POOLS.includes(POOL_OF[type]), type);
 });
 
-// A route of 8 left curves would be legal under 4-left-plus-4-right bookkeeping
-// but not under a shared pool of 8 — this is the test that pins which we mean.
-test('the shared pool is spent by left and right curves together', () => {
+// The test that pins which bookkeeping we mean. Eight curves of one colour would
+// be fine against a shared pool of eight and is not fine here; four of each is
+// fine either way.
+test('one colour cannot be spent on the other colour\'s allowance', () => {
   // By type, because these lists are pool arithmetic rather than real tracks.
-  const fiveEach = [...Array(5).fill('leftCurve'), ...Array(5).fill('rightCurve')];
-  assert.equal(overflowingPoolByType(fiveEach, STARTER), 'flatCurve');
+  assert.equal(overflowingPoolByType(Array(8).fill('leftCurve'), STARTER), 'leftCurve');
+  assert.equal(overflowingPoolByType(Array(5).fill('rightCurve'), STARTER), 'rightCurve');
   const fourEach = [...Array(4).fill('leftCurve'), ...Array(4).fill('rightCurve')];
   assert.equal(overflowingPoolByType(fourEach, STARTER), null);
 });

@@ -217,24 +217,36 @@ export function chainTrack(route, startPose = 'UF') {
 }
 
 /**
- * What the sets ship (pieces.md:144-156). Keyed by *inventory pool*, not by piece
- * type: the green and blue flat curves are counted together in the product
- * listings ("8/16 combined"), so they draw from one shared pool. The white start
- * cube is geometrically a straight and is counted as one.
+ * What the sets ship (pieces.md:144-156). The white start cube is geometrically a
+ * straight and is counted as one.
+ *
+ * Green and blue flat curves are counted separately, half the listed total each.
+ * The product listings give them combined ("8/16"), and on paper they could share
+ * one pool: a right curve fills the same cells and moves the head the same way as
+ * a left curve, differing only in which face the rail ends on — so a reversible
+ * piece could serve as either. Owen's set is not reversible. They are two
+ * mouldings and you cannot spend one as the other.
+ *
+ * This matters to the answers, not just the bookkeeping: pooled, the solver spent
+ * six right curves and two left ones on a layout that set cannot build.
  */
 export const POOL_OF = {
   straight: 'straight',
   cross: 'cross',
-  leftCurve: 'flatCurve',
-  rightCurve: 'flatCurve',
+  leftCurve: 'leftCurve',
+  rightCurve: 'rightCurve',
   insideCurve: 'insideCurve',
   outsideCurve: 'outsideCurve',
 };
 
 export const POOLS = [...new Set(Object.values(POOL_OF))];
 
-export const STARTER = { straight: 16, flatCurve: 8, insideCurve: 4, outsideCurve: 4, cross: 0 };
-export const DELUXE = { straight: 32, flatCurve: 16, insideCurve: 8, outsideCurve: 8, cross: 2 };
+export const STARTER = {
+  straight: 16, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 4, cross: 0,
+};
+export const DELUXE = {
+  straight: 32, leftCurve: 8, rightCurve: 8, insideCurve: 8, outsideCurve: 8, cross: 2,
+};
 
 /**
  * Count entries in a route by inventory pool. Counts the traversal, so a crossed

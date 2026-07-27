@@ -80,8 +80,13 @@ export const OBJECTIVES = {
  *
  * Sound because reflecting a layout left-to-right maps left curves to right
  * curves and leaves every other piece alone, so the mirror of a legal track is a
- * legal track of the same length. It also spends the same inventory, because the
- * two colours share one pool — with separate pools this break would be wrong.
+ * legal track of the same length.
+ *
+ * It also has to be affordable, and that is the fragile part. Reflection swaps
+ * the two curve counts, so it stays within budget only because both sets ship the
+ * same number of each — four and four, eight and eight. Give the model an
+ * inventory with more of one colour than the other and this break starts ruling
+ * out real answers.
  *
  * It halves the search without touching the optimal value. It does not break
  * rotation (the same cyclic loop read from a different starting piece), which is

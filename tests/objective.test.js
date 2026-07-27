@@ -24,12 +24,18 @@ const total = inv => Object.values(inv).reduce((a, b) => a + b, 0);
 const SLOW = process.env.SLOW === '1';
 const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
 
-// A small set, so the tests can be exhaustive about it. Four flat curves and
-// four straights: enough for the ring, enough to make dropping a real choice.
-const SMALL = { straight: 4, flatCurve: 4, insideCurve: 0, outsideCurve: 0, cross: 0 };
+// A small set the tests can be exhaustive about. Four curves of each colour and
+// four straights, in a 4-cell box: the best it can do is eight pieces, so
+// dropping is a real choice rather than a formality.
+//
+// Four of each colour, not two: a flat loop turns through a full circle, so it
+// needs four turns of the SAME handedness. Two and two closes nothing at all,
+// and the whole file comes back INFEASIBLE.
+const SMALL = { straight: 4, leftCurve: 4, rightCurve: 4, insideCurve: 0, outsideCurve: 0, cross: 0 };
+const SMALL_BOX = 4;
 
 const longest = (inventory, opts = {}) => solveTrack({
-  steps: total(inventory), box: 6, minY: 0, exclude: ['cross'],
+  steps: total(inventory), box: SMALL_BOX, minY: 0, exclude: ['cross'],
   inventory, optionalSteps: true, objective: 'minimiseDropped', ...opts,
 });
 
@@ -61,7 +67,8 @@ test('the answer is a legal track', async () => {
 // be the longest of them — not merely a long one.
 test('the solver finds the longest loop the small set can build', async () => {
   const all = enumerateLoops({
-    inventory: SMALL, maxPieces: total(SMALL), box: 6, minY: 0, checkTrain: true, exclude: ['cross'],
+    inventory: SMALL, maxPieces: total(SMALL), box: SMALL_BOX, minY: 0,
+    checkTrain: true, exclude: ['cross'],
   });
   const best = Math.max(...all.map(r => r.length));
   const result = await longest(SMALL);
@@ -119,8 +126,8 @@ slow('the box is not what limits the answer', async () => {
 // swapping left curves for right ones — otherwise it would rule out real
 // answers. Checked against the oracle rather than assumed, because it is an
 // assumption about the piece catalogue, not about the solver: it needs the two
-// colours to share one inventory pool, and every other piece to be its own
-// mirror image.
+// colours to ship in equal numbers, and every other piece to be its own mirror
+// image.
 test('the loop set is closed under mirroring, which is what makes the break legal', () => {
   const mirror = s => s.replace(/[LR]/g, c => (c === 'L' ? 'R' : 'L'));
   for (const n of [4, 6, 8]) {

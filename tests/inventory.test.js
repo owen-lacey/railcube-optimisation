@@ -26,10 +26,10 @@ const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, {
 // geometry.
 test('a loop cannot use more pieces than the set ships', async () => {
   const ring = { steps: 4, box: 6, minY: 0, exclude: ['cross'], require: Array(4).fill('leftCurve') };
-  const enough = { straight: 0, flatCurve: 4, insideCurve: 0, outsideCurve: 0, cross: 0 };
+  const enough = { straight: 0, leftCurve: 4, rightCurve: 0, insideCurve: 0, outsideCurve: 0, cross: 0 };
 
   assert.equal((await solveTrack({ ...ring, inventory: enough })).status, 'OPTIMAL');
-  assert.equal((await solveTrack({ ...ring, inventory: { ...enough, flatCurve: 3 } })).status,
+  assert.equal((await solveTrack({ ...ring, inventory: { ...enough, leftCurve: 3 } })).status,
     'INFEASIBLE');
 });
 
@@ -47,20 +47,22 @@ test('every solution fits the inventory it was given', async () => {
   }
 });
 
-// pieces.md:150 — green and blue are counted together ("8/16 combined"), so they
-// are one pool. LRIIRLII is a real eight-piece loop spending two of each: under
-// a shared pool of four it fits exactly, and under three it cannot. Counting the
-// colours separately would let it through on two-and-two, so this is the test
-// that says which bookkeeping the model uses.
-test('left and right curves are spent from the same pool', async () => {
+// The two colours are separate pools, so one colour's shortfall cannot be covered
+// by the other's surplus. LRIIRLII is a real eight-piece loop spending two of
+// each: it fits two-and-two, and it must fail when either colour drops to one,
+// even with plenty of the other going spare.
+test('one curve colour cannot cover for the other', async () => {
   const mixed = {
     steps: 8, box: 6, minY: 0, exclude: ['cross'],
     require: [...'LRIIRLII'].map(l => ({ L: 'leftCurve', R: 'rightCurve', I: 'insideCurve' }[l])),
   };
-  const pool = n => ({ straight: 0, flatCurve: n, insideCurve: 4, outsideCurve: 0, cross: 0 });
+  const set = (l, r) => ({
+    straight: 0, leftCurve: l, rightCurve: r, insideCurve: 4, outsideCurve: 0, cross: 0,
+  });
 
-  assert.equal((await solveTrack({ ...mixed, inventory: pool(4) })).status, 'OPTIMAL');
-  assert.equal((await solveTrack({ ...mixed, inventory: pool(3) })).status, 'INFEASIBLE');
+  assert.equal((await solveTrack({ ...mixed, inventory: set(2, 2) })).status, 'OPTIMAL');
+  assert.equal((await solveTrack({ ...mixed, inventory: set(1, 8) })).status, 'INFEASIBLE');
+  assert.equal((await solveTrack({ ...mixed, inventory: set(8, 1) })).status, 'INFEASIBLE');
 });
 
 // ---- Optional steps ------------------------------------------------------
@@ -81,7 +83,7 @@ test('an inactive tail claims no cells and no inventory', async () => {
   // four-piece ring with six steps switched off, not a longer one.
   const result = await solveTrack({
     steps: 10, box: 6, minY: 0, exclude: ['cross'], optionalSteps: true,
-    inventory: { straight: 0, flatCurve: 0, insideCurve: 4, outsideCurve: 0, cross: 0 },
+    inventory: { straight: 0, leftCurve: 0, rightCurve: 0, insideCurve: 4, outsideCurve: 0, cross: 0 },
   });
   assert.equal(result.status, 'OPTIMAL');
   assert.deepEqual(shape(result.route), 'IIII');

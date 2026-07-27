@@ -53,7 +53,7 @@ const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, {
 // bottomless box of pieces. Handing one of them a real inventory would make them
 // answer different questions — and quietly: it bites only from eight pieces up,
 // where a loop first wants more than four inside curves.
-const UNLIMITED = { straight: 99, flatCurve: 99, insideCurve: 99, outsideCurve: 99, cross: 0 };
+const UNLIMITED = { straight: 99, leftCurve: 99, rightCurve: 99, insideCurve: 99, outsideCurve: 99, cross: 0 };
 
 const oracleShapes = (n, opts) => enumerateLoops({
   inventory: UNLIMITED, maxPieces: n, minPieces: n, box: 6, minY: 0,

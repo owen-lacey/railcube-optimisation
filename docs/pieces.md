@@ -58,7 +58,7 @@ sequence of coloured blocks (the coding/程 pedagogy angle in the Program Notebo
 
 | | |
 |---|---|
-| Count | 8 (starter) / 16 (deluxe), green+blue combined ✅ |
+| Count | 4 green + 4 blue (starter) / 8 + 8 (deluxe) ✅ |
 | Shape | quarter-arc block spanning a 2×2 footprint ✅ |
 | Effect on train | 90° turn within the plane it's riding in ✅ |
 
@@ -68,10 +68,17 @@ other travelling left (or right), ending up one cell forwards and one across, wi
 next cube clicking in one further across. Four of them click into a free-standing ring,
 as in the product photos.
 
-⚠️ Open question: whether green and blue are geometric mirror images or identical pieces
-in two colours. A flat elbow can be rotated on its face to serve as either a left or a
-right turn, so two distinct shapes are only necessary if the click-connectors key the
-cube's orientation. Check whether a green curve can be placed to turn both ways.
+✅ **Green and blue are mirror images, and they are not interchangeable.** Settled against
+the physical set: Owen's curves cannot be reversed to serve as the other hand. The two
+colours are therefore two separate allowances of four, not one shared allowance of eight,
+even though the product listings count them together.
+
+Worth recording why the tempting reading is tempting. On paper a right curve fills exactly
+the same four cells as a left curve and moves the head exactly the same way — the only
+difference is which face of the cube the rail ends up on. So a *reversible* elbow really
+could serve as either hand, and the model originally assumed one shared pool of eight on
+that basis. It cost a wrong answer: the solver spent six right curves and two left ones on
+a layout the set cannot build. See `src/layouts.js`.
 
 ### Inside curve — orange
 
@@ -147,7 +154,8 @@ one stand adds, whether stands can stack, and what the T-support and joint actua
 |---|---|---|---|
 | Straight | yellow | 15 | 31 |
 | Start (straight) | white | 1 | 1 |
-| Left/right curve | green/blue | 8 | 16 |
+| Left curve | green | 4 | 8 |
+| Right curve | blue | 4 | 8 |
 | Inside curve | orange | 4 | 8 |
 | Outside curve | red | 4 | 8 |
 | Cross | purple | 0 | 2 |
@@ -163,7 +171,8 @@ itemised list above sums to 66 track cubes and is consistent across two retailer
 2. Outside curve: confirm it is a single cube with the rail wrapping one edge, and that
    the next cube clicks in directly underneath — inferred from product photos; the other
    curves are verified against the physical set.
-3. Green vs blue: mirror shapes, or same shape in two colours? Are connectors keyed
+3. ~~Green vs blue: mirror shapes, or same shape in two colours?~~ **Settled: mirror
+   shapes, not interchangeable.** Four of each in the starter set. Are connectors keyed
    (limited orientations per face) or can any face attach at any rotation?
 4. Can a cube attach onto a face that carries rail, or are rail faces connection-free?
 5. Can the train traverse every piece in both directions?

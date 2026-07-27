@@ -22,7 +22,7 @@
                       cell, so the two hard constraints hold by construction.
     ?scene=inversion  one loop touching all six faces of a cube.
     ?scene=solved:<n> layouts CP-SAT found — the most pieces that will close into
-                      one loop inside a given box. See SOLVED below.
+                      one loop inside a given box, listed in src/layouts.js.
     ?scene=demo       the pre-loop illustration: a pose tour, not a legal track.
     ?poses=<type>     one piece in all 24 valid poses (straight, cross,
                       outsideCurve, leftCurve, rightCurve, insideCurve).
@@ -46,6 +46,7 @@
   // rendering — geometry, poses as rotations, the train — belongs to this file.
   import { MOVES, poseLetters, delta, chainTrack } from '../../src/track.js';
   import { loopRoute, inversionRoute } from '../../src/routes.js';
+  import { LAYOUTS, routeOf } from '../../src/layouts.js';
 
   const CUBE = 20;
   const BEVEL = 1.5;      // chamfer width on the cube bodies
@@ -162,38 +163,12 @@
     return { camera: { zoom: Math.min(8, 38 / diagonal), target: centre.join(','), ...extra } };
   }
 
-  // ?scene=solved:<name> — layouts the CP-SAT model found. Each is the most
-  // pieces that will close into one loop inside the stated box, from the starter
-  // set, with nothing below the ground. src/solver/ generated them; they are
-  // pasted here so the page stays a static file with no solver in it.
-  const SOLVED = {
-    // The whole starter set — all 32 cubes, nothing left in the box. Proved
-    // optimal in 83 s; it fills 7×6×12 cells.
-    32: { shape: 'SSLSSSRRSISSRSSSSSISSOSROIOORRIL' },
-    // The same starter set told to fit inside a 4-cell box instead of a 6-cell
-    // one. Twelve of the 32 cubes will not fit — the price of the smaller box —
-    // and the shape it settles on is symmetric: two vertical arcs, crested at
-    // both ends. Best found in 400 s rather than proved optimal, so the true
-    // answer may be a piece or two better.
-    tight: { shape: 'SSRRSSIIOORROOSSIISS' },
-    // Tighter still: a 3-cell box, which is the smallest that holds any loop at
-    // all. Eighteen cubes, and it fills its box exactly at 7×4×7. Also a
-    // 400 s best-found rather than a proof.
-    cramped: { shape: 'SSRRIIRRLLIISSSLLS' },
-    // A figure of eight through a single cross, from the deluxe set. Twelve steps
-    // but eleven cubes: the train drives over the middle cube twice, once on each
-    // of its two rails, and both rails are visible on it. That cube is the start
-    // cube here, so it renders white rather than the cross's purple.
-    //
-    // Pinned here for a tidy picture, but the solver finds this shape on its own
-    // when the inventory makes it the only way to spend every cube: given four
-    // straights, six flat curves and one cross it returns a rotation of exactly
-    // this, eleven cubes in twelve steps, nothing dropped.
-    eight: { shape: 'XSLLLSXSRRRS' },
-  };
-  const BY_LETTER = { S: 'straight', L: 'leftCurve', R: 'rightCurve', I: 'insideCurve', O: 'outsideCurve', X: 'cross' };
-  const solvedScenes = Object.fromEntries(Object.entries(SOLVED).map(([name, { shape }]) => {
-    const pieces = paint(chainTrack([...shape].map(l => BY_LETTER[l])));
+  // ?scene=solved:<name> — layouts the CP-SAT model found, from src/layouts.js so
+  // that the tests can check them. They are answers to a question, not decoration:
+  // an earlier version of this list included one that could not be built, and
+  // nothing but a pair of eyes caught it.
+  const solvedScenes = Object.fromEntries(Object.entries(LAYOUTS).map(([name, layout]) => {
+    const pieces = paint(chainTrack(routeOf(layout.shape)));
     return [`solved:${name}`, { pieces, drive: true, ...frame(pieces) }];
   }));
 
@@ -218,9 +193,13 @@
   const sceneName = gallery ? 'poses' : params.get('scene') || 'loop';
   const active = SCENES[sceneName];
   if (!active) throw new Error(`unknown scene ${sceneName}`);
-  if (active.camera) {
-    const cam = document.querySelector('poly-camera');
-    for (const [attr, value] of Object.entries(active.camera)) cam.setAttribute(attr, String(value));
+  // Any camera attribute can be overridden from the URL — ?rot-y=135&zoom=3 — which
+  // is how you walk round a layout you are trying to copy in real bricks.
+  const CAMERA_ATTRS = ['zoom', 'rot-x', 'rot-y', 'distance', 'target'];
+  const cam = document.querySelector('poly-camera');
+  for (const [attr, value] of Object.entries(active.camera ?? {})) cam.setAttribute(attr, String(value));
+  for (const attr of CAMERA_ATTRS) {
+    if (params.has(attr)) cam.setAttribute(attr, params.get(attr));
   }
 
   // Pose → rotation. A piece is authored in the canonical UF pose (rail on the up
