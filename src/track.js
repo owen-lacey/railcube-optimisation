@@ -249,6 +249,15 @@ export const DELUXE = {
 };
 
 /**
+ * Not a product: the starter set plus four extra inside curves, which is what
+ * Owen actually owns. 36 track cubes.
+ *
+ * Derived from STARTER rather than restated, so the one thing that differs stays
+ * visible and a future correction to the starter counts carries through.
+ */
+export const OWENS_SET = { ...STARTER, insideCurve: 8 };
+
+/**
  * Count entries in a route by inventory pool. Counts the traversal, so a crossed
  * cross counts twice — use countPieces for what is actually spent out of the box.
  */

@@ -165,6 +165,11 @@ Starter totals match the published "32 block pieces" exactly ✅. Deluxe marketi
 inconsistent — "66-piece" in some listings, "64 pieces + 2 trains" in others — but the
 itemised list above sums to 66 track cubes and is consistent across two retailers.
 
+Both tables above describe *products*. The set Owen actually owns is the starter set plus
+four extra inside curves — 36 track cubes, no crosses — and that is what the layouts he
+builds are solved against. It lives in code as `OWENS_SET` in `src/track.js`, derived from
+`STARTER` so the one difference stays visible.
+
 ## Open questions to settle with the physical set
 
 1. Measure the cube edge length.

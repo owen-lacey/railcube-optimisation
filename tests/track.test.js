@@ -8,7 +8,7 @@ import {
   POSES, FACES, OPPOSITE, PIECE_TYPES, POOLS, POOL_OF,
   isValidPose, poseLetters, cellsFor, step,
   assertNoCollisions, chainTrack, overflowingPool, overflowingPoolByType,
-  STARTER, DELUXE,
+  STARTER, DELUXE, OWENS_SET,
 } from '../src/track.js';
 import { loopRoute, inversionRoute } from '../src/routes.js';
 
@@ -319,10 +319,32 @@ test('left and right curves are separate pools, half the listed total each', () 
 });
 
 // The two colours must ship in equal numbers, or the solver's mirror symmetry
-// break becomes unsound — reflecting a layout swaps the two counts.
+// break becomes unsound — reflecting a layout swaps the two counts. Every
+// inventory the repo ships has to hold this, not just the two products.
 test('the two curve colours ship in equal numbers', () => {
-  assert.equal(STARTER.leftCurve, STARTER.rightCurve);
-  assert.equal(DELUXE.leftCurve, DELUXE.rightCurve);
+  for (const [name, inv] of Object.entries({ STARTER, DELUXE, OWENS_SET })) {
+    assert.equal(inv.leftCurve, inv.rightCurve, `${name} would break mirror symmetry`);
+  }
+});
+
+// ---- Owen's own set ------------------------------------------------------
+
+// Not a product: the starter set plus four extra inside curves. Worth its own
+// tests because it is the inventory the layouts he actually builds come from,
+// and an inventory that is one piece wrong produces a layout that cannot be
+// built — which has happened once already.
+test("Owen's set is the starter set plus four inside curves, and nothing else", () => {
+  const differences = POOLS.filter(pool => OWENS_SET[pool] !== STARTER[pool]);
+  assert.deepEqual(differences, ['insideCurve']);
+  assert.equal(OWENS_SET.insideCurve, STARTER.insideCurve + 4);
+});
+
+test("Owen's set totals 36 track cubes", () => {
+  assert.equal(Object.values(OWENS_SET).reduce((a, b) => a + b, 0), 36);
+});
+
+test("Owen's set has no crosses, so crossings cannot appear in his layouts", () => {
+  assert.equal(OWENS_SET.cross, 0);
 });
 
 test('every inventory names every pool, and every type has one', () => {

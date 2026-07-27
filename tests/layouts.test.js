@@ -13,9 +13,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf, shapeOf } from '../src/layouts.js';
-import { chainTrack, countPieces, POOLS, STARTER, DELUXE } from '../src/track.js';
+import { chainTrack, countPieces, POOLS, STARTER, DELUXE, OWENS_SET } from '../src/track.js';
 
-const SETS = { STARTER, DELUXE };
+// Every set a layout may claim. Miss one and that layout's inventory check
+// cannot run — the assertion below turns it into a failure rather than a skip.
+const SETS = { STARTER, DELUXE, OWENS_SET };
 const entries = Object.entries(LAYOUTS);
 
 test('there are layouts to check', () => {

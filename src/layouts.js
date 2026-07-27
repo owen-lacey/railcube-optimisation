@@ -50,6 +50,18 @@ export const LAYOUTS = {
     set: 'STARTER', box: 6, proved: true,
     note: 'the whole starter set — 32 cubes, nothing dropped',
   },
+  // Owen's own set — the starter set plus four extra inside curves — all 36 cubes
+  // in one loop with nothing left over. Proved optimal in 1190 s, filling
+  // 11×7×8 cells.
+  //
+  // Nothing dropped is the strongest possible answer, and it settles the box
+  // question for free: no larger box can beat spending every piece, so 6 was not
+  // the binding constraint.
+  owen: {
+    shape: 'LSLIOSSLLIIRIOSSRSOSISRSSSRSISOIISSS',
+    set: 'OWENS_SET', box: 6, proved: true,
+    note: "Owen's own set — all 36 cubes, nothing dropped",
+  },
   // The same set told to fit a smaller box. Twelve cubes will not fit.
   //
   // These two were found while the model still pooled the curve colours, so the

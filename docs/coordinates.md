@@ -228,13 +228,20 @@ in about 85 seconds.
 
 | Run | Box | Used | Dropped | Extent | Result | Scene |
 |---|---|---|---|---|---|---|
-| Starter set | 6 | **32** | 0 | 7×6×12 | optimal, 83 s | `solved:32` |
+| Owen's set (36) | 6 | **36** | 0 | 11×7×8 | optimal, 1190 s | `solved:owen` |
+| Starter set | 6 | **32** | 0 | 7×7×8 | optimal, 200 s | `solved:32` |
 | Starter set | 4 | 20 | 12 | 4×5×8 | best found in 400 s, not proved | `solved:tight` |
 | Starter set | 3 | 18 | 14 | 7×4×7 | best found in 400 s, not proved | `solved:cramped` |
 | Deluxe set | 7 | — | — | — | **no useful answer in 600 s** | — |
 
 Each is viewable in the spike as `?scene=solved:<name>`, alongside `solved:eight` — a
-twelve-step figure of eight over eleven cubes, which crosses itself once.
+twelve-step figure of eight over eleven cubes, which crosses itself once. `npm run
+build-sheet -- <name>` prints any of them as a numbered click-together order.
+
+The first row is the one that matters in practice: Owen's own set is the starter set plus
+four extra inside curves, and all 36 of its cubes go into one loop with nothing left over.
+Nothing dropped also settles the box question for free — no larger box can beat spending
+every piece, so 6 was never the binding constraint there.
 
 Three things fall out of the table. Shrinking the box from 6 to 4 costs a third of the set,
 so what binds is space rather than pieces. The 3-cell box fills itself exactly (7×4×7 in a
