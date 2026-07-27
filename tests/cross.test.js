@@ -185,11 +185,12 @@ test('no solution can invent a revisit it has not earned', async () => {
 
 // ---- What the objective actually does with a cross -----------------------
 
-// next-session.md predicted this: under "minimise dropped", a cross is worth
-// having as a spare straight, not as a crossing. Crossing spends a piece and
-// puts no extra cube on the table, so the optimum places its crosses and drives
-// straight over them.
-slow('the optimum uses crosses as spare straights, not as crossings', async () => {
+// next-session.md predicted half of this: under "minimise dropped", a cross is
+// worth having as a spare straight. Crossing puts no extra cube on the table, so
+// where the set already closes comfortably the optimum places its crosses and
+// drives straight over them — as here. It is not that crossings are never
+// chosen, though; see the test below.
+slow('a crossing is not chosen when the set closes without one', async () => {
   const set = { straight: 0, flatCurve: 8, insideCurve: 4, outsideCurve: 0, cross: 2 };
   const result = await solveTrack({
     steps: total(set), box: 5, minY: 0, inventory: set,
@@ -198,6 +199,23 @@ slow('the optimum uses crosses as spare straights, not as crossings', async () =
   assert.equal(result.status, 'OPTIMAL');
   assert.equal(result.pieces.filter(p => p.revisit).length, 0, 'crossing should not pay here');
   assert.ok(countPools(result.route).cross > 0, 'but the crosses should still get used');
+});
+
+// The other half. Give the solver an inventory that only closes into a
+// full-length loop by crossing, and it finds the crossing itself — no pinned
+// route, no hint. Twelve steps over eleven cubes, nothing dropped, which is only
+// possible with a revisit.
+slow('a crossing IS chosen when it is the only way to spend every cube', async () => {
+  const set = { straight: 4, flatCurve: 6, insideCurve: 0, outsideCurve: 0, cross: 1 };
+  const result = await solveTrack({
+    steps: 12, box: 5, minY: 0, inventory: set,
+    optionalSteps: true, objective: 'minimiseDropped', crossings: true,
+  });
+  assert.equal(result.status, 'OPTIMAL');
+  assert.equal(result.dropped, 0, `left pieces in the box: ${shape(result.route)}`);
+  assert.equal(result.pieces.filter(p => p.revisit).length, 1);
+  assert.equal(result.route.length, 12);
+  assert.equal(countPieces(result.pieces).cross, 1);
 });
 
 // ---- Counting, one last time ---------------------------------------------

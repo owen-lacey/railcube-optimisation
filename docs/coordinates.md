@@ -258,6 +258,8 @@ Three smaller results from the same model:
 Two more from the shape of the search itself, both surprises worth keeping:
 
 - **No closed loop has an odd number of pieces.** Both searches agree, at every length tried.
-- **Under this objective the cross is a spare straight, not a crossing.** Crossing spends a
-  cross and puts no extra cube on the table, so maximising cubes never chooses it — the
-  optimum places its crosses and drives straight over them.
+- **A crossing is a tie-breaker, not a prize.** Crossing puts no extra cube on the table, so
+  maximising cubes has no direct reason to want one: given a set that closes comfortably
+  without crossing, the optimum places its crosses and drives straight over them. But when
+  crossing is the only way to close a loop that spends *every* cube, the solver finds it
+  unprompted — `RRRSXSLLLSXS` uses eleven cubes in twelve steps and drops nothing.
