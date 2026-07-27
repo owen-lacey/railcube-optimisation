@@ -1,0 +1,11 @@
+{
+  "name": "railcube-optimisation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cpsat-js": "^1.0.0"
+  }
+}
