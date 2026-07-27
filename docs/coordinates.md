@@ -192,3 +192,72 @@ stitch into a complete swept volume with no gaps and no extra bookkeeping.
 One rounding-scale caveat, noted for honesty and ignored: a rigid 14-long body tilts
 nose-up entering an inside curve, dipping its rear corner ~0.1 units below the previous
 cube's surface. The real loco is presumably a little shorter or articulated.)*
+
+### What clearance costs
+
+Both lists are now executable — `src/track.js` carries them as `train:` alongside `foot:`,
+and `assertNoCollisions` enforces the full rule. Re-running the exhaustive search with and
+without clearance (`src/enumerate.js`, starter set, no cross, nothing below the ground,
+within a 6-cell box) shows where it bites:
+
+| Loop | Material only | With clearance |
+|---|---|---|
+| Shortest closed loop | 4 pieces — `LLLL`, `RRRR`, `IIII` | 4 pieces, the same three |
+| Shortest loop reaching all six faces | **12** pieces, 4 of them | **14** pieces, 72 of them |
+
+At four pieces clearance changes nothing: the rings are small enough that the train has the
+room it needs. At twelve it changes everything — all four of the material-only six-face
+loops are illegal once the train needs room, and so is everything at thirteen. So the
+earlier "twelve" was an upper bound, and the honest figure is **fourteen**.
+
+Two things follow. The 14-piece loop drawn in the spike is not one over the minimum, it *is*
+the minimum. And the four 12-piece loops are not four shapes but one: all four are the same
+cyclic sequence read from a different starting piece, and swapping every left curve for a
+right one maps that sequence onto one of its own rotations, so it is its own mirror.
+
+Take the ground away and a fourth four-piece ring appears: four outside curves cresting the
+edges of a 2×2 block, the train running round its outside. It is legal under both collision
+rules and is excluded only by `minY ≥ 0` — worth knowing, because "there are three rings" is
+a fact about the floor rather than about the pieces.
+
+### What the solver says
+
+Handed all 32 starter pieces, a 6-cell box, the ground, and "minimise dropped pieces",
+CP-SAT proves an optimum of **0 dropped**: every cube in the box goes into one closed loop,
+in about 85 seconds.
+
+| Run | Box | Used | Dropped | Extent | Result | Scene |
+|---|---|---|---|---|---|---|
+| Starter set | 6 | **32** | 0 | 7×6×12 | optimal, 83 s | `solved:32` |
+| Starter set | 4 | 20 | 12 | 4×5×8 | best found in 400 s, not proved | `solved:tight` |
+| Starter set | 3 | 18 | 14 | 7×4×7 | best found in 400 s, not proved | `solved:cramped` |
+| Deluxe set | 7 | — | — | — | **no useful answer in 600 s** | — |
+
+Each is viewable in the spike as `?scene=solved:<name>`, alongside `solved:eight` — a
+twelve-step figure of eight over eleven cubes, which crosses itself once.
+
+Three things fall out of the table. Shrinking the box from 6 to 4 costs a third of the set,
+so what binds is space rather than pieces. The 3-cell box fills itself exactly (7×4×7 in a
+box that allows 7×7×7) and settles on two vertical rings threaded through each other. And
+**the model does not currently scale to the deluxe set**: at 66 steps it returns a poor
+incumbent rather than an optimum, which is the point at which the pairwise clearance
+encoding should be replaced by a boolean occupancy grid. `tests/clearance.test.js` carries
+the benchmark that says so.
+
+Three smaller results from the same model:
+
+- **The box has a floor of 3.** Below that the model really is infeasible, which is the one
+  exception to "it can always drop everything but a four-piece ring". The start cube is
+  nailed to the origin facing forwards and the smallest ring spans four cells, so it must
+  reach three cells to one side; a box of 2 cannot hold one. At 3 and above it sheds pieces
+  rather than failing.
+- **The collision rule is free below eight pieces.** Nothing shorter than eight passes
+  through itself, so every four- and six-piece result is the same with the rule and without
+  it. Worth knowing before reading much into a small example.
+
+Two more from the shape of the search itself, both surprises worth keeping:
+
+- **No closed loop has an odd number of pieces.** Both searches agree, at every length tried.
+- **Under this objective the cross is a spare straight, not a crossing.** Crossing spends a
+  cross and puts no extra cube on the table, so maximising cubes never chooses it — the
+  optimum places its crosses and drives straight over them.
