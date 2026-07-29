@@ -113,6 +113,32 @@ export const MOVES = {
 
 export const PIECE_TYPES = Object.keys(MOVES);
 
+/**
+ * What each piece is worth to the objective. A straight is track; everything else
+ * does something to the train, and a layout that does more is a better layout.
+ *
+ * One table, meant to be edited: these are a taste judgement, not a fact about
+ * the pieces, and they are the knob to turn when the answers look dull.
+ *
+ * All positive on purpose. Scoring straights 0 or negative was considered and
+ * rejected. The consequence to keep in mind is that inventory is only a cap, so
+ * with every weight positive the solver still crams in every piece that fits —
+ * what the weights actually decide is which pieces lose when something must be
+ * dropped.
+ */
+export const SCORES = {
+  straight: 1,
+  cross: 2,
+  leftCurve: 2,
+  rightCurve: 2,
+  insideCurve: 2,
+  outsideCurve: 2,
+};
+
+if (PIECE_TYPES.some(type => !(type in SCORES))) {
+  throw new Error('the score table has drifted from the piece catalogue');
+}
+
 /** The cells one placed piece claims: its material, and the clearance its train needs. */
 export function cellsFor(type, pose, cell) {
   const move = MOVES[type];
@@ -177,8 +203,11 @@ export function assertNoCollisions(placed) {
  * Worked out from the geometry rather than declared by the caller, so that a
  * route cannot claim a revisit it has not earned. That is what makes chainTrack
  * an independent check on the solver's piece count.
+ *
+ * Exported so the brute-force oracle applies the very same rule rather than its
+ * own reading of it.
  */
-function isRevisit(type, cell, pose, placedAt) {
+export function isRevisit(type, cell, pose, placedAt) {
   if (type !== 'cross') return false;
   const already = placedAt.get(cell.join(','));
   return Boolean(already)
@@ -197,15 +226,29 @@ function isRevisit(type, cell, pose, placedAt) {
  * A route is the order the train travels, so a crossed cross appears in it
  * twice. The second appearance is marked `revisit` and claims nothing — no
  * material, and no clearance beyond what the first pass already asked for.
+ *
+ * Twice and no more. A third pass would be perpendicular to the placement and so
+ * would satisfy isRevisit, but it is necessarily along the *same rail* as the
+ * second pass — and a rail's two ends already click into two neighbours, so the
+ * train cannot run it again.
  */
 export function chainTrack(route, startPose = 'UF') {
   let cell = [0, 0, 0], pose = startPose;
   const placedAt = new Map();
+  const crossedAt = new Set();
   const placed = route.map(type => {
+    const at = cell.join(',');
     const revisit = isRevisit(type, cell, pose, placedAt);
     const claims = revisit ? { material: [], train: [] } : cellsFor(type, pose, cell);
     const piece = { cell, pose, type, revisit, ...claims };
-    if (!revisit) placedAt.set(cell.join(','), piece);
+    if (revisit) {
+      if (crossedAt.has(at)) {
+        throw new Error(`cross at cell ${at} is traversed more than twice: it has two rails, not three`);
+      }
+      crossedAt.add(at);
+    } else {
+      placedAt.set(at, piece);
+    }
     ({ cell, pose } = step(cell, pose, type));
     return piece;
   });
@@ -241,21 +284,38 @@ export const POOL_OF = {
 
 export const POOLS = [...new Set(Object.values(POOL_OF))];
 
-export const STARTER = {
-  straight: 16, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 4, cross: 0,
-};
-export const DELUXE = {
-  straight: 32, leftCurve: 8, rightCurve: 8, insideCurve: 8, outsideCurve: 8, cross: 2,
-};
-
 /**
- * Not a product: the starter set plus four extra inside curves, which is what
- * Owen actually owns. 36 track cubes.
+ * The set. One inventory, not a catalogue of products — everything that asks
+ * "what have I got to build with" asks this.
  *
- * Derived from STARTER rather than restated, so the one thing that differs stays
- * visible and a future correction to the starter counts carries through.
+ * Eighteen cubes: two straights and four of every curve. Chosen by measurement,
+ * not by taste (`scripts/benchmark-sets.js`), against one requirement — the
+ * browser has to solve it while somebody is watching.
+ *
+ * Why this shape rather than a scaled-down copy of a real product:
+ *
+ *   - Four of every curve is the floor, not a preference. A loop turns through a
+ *     full circle, so it needs four turns of the same handedness; at three of each
+ *     the solver slows by 50% and at two the set cannot close at all.
+ *   - The straights are what cost time, not the cube count. Sixteen cubes with
+ *     four straights and three of each curve is *smaller* than this and slower
+ *     (51 s against 34 s on one worker), because straights are interchangeable
+ *     filler and multiply the search without helping the loop close.
+ *   - Two straights, not none. A set of pure elbows solves fastest of all, but a
+ *     Rail Cube set without a single straight is not a Rail Cube set — and with no
+ *     straights the SCORES table has nothing to weigh.
+ *
+ * `src/routes.js`'s six-face inversion route fits this exactly: both straights and
+ * every left, inside and outside curve.
+ *
+ * No cross. A crossing needs a cube with two rails and the set holds none, so
+ * crossings are exercised by test fixtures rather than by this set — the encoding
+ * stays, and `src/layouts.js` keeps the figure-of-eight it found when there was a
+ * cross to spend.
  */
-export const OWENS_SET = { ...STARTER, insideCurve: 8 };
+export const SET = {
+  straight: 2, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 4, cross: 0,
+};
 
 /**
  * Count entries in a route by inventory pool. Counts the traversal, so a crossed

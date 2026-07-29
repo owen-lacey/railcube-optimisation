@@ -9,7 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, STARTER, overflowingPool } from '../src/track.js';
+import { chainTrack, overflowingPool } from '../src/track.js';
+import { STARTER } from './fixtures.js';
 import { inversionRoute } from '../src/routes.js';
 
 const SLOW = process.env.SLOW === '1';

@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import {
   POSES, FACES, OPPOSITE, PIECE_TYPES, POOLS, POOL_OF,
   isValidPose, poseLetters, cellsFor, step,
-  assertNoCollisions, chainTrack, overflowingPool, overflowingPoolByType,
-  STARTER, DELUXE, OWENS_SET,
+  assertNoCollisions, chainTrack, countPieces, overflowingPool, overflowingPoolByType,
+  SET, SCORES,
 } from '../src/track.js';
 import { loopRoute, inversionRoute } from '../src/routes.js';
 
@@ -283,75 +283,55 @@ test('the six-face inversion route is a legal track', () => {
   assert.equal(new Set(placed.map(p => p.pose[0])).size, 6);
 });
 
-test('both documented routes fit inside the starter set', () => {
-  assert.equal(overflowingPool(loopRoute, STARTER), null);
-  assert.equal(overflowingPool(inversionRoute, STARTER), null);
+// ---- The set -------------------------------------------------------------
+
+// The six-face tour fits SET exactly — both straights and every left, inside and
+// outside curve — which is a large part of why SET is shaped the way it is. If a
+// future tuning of the set breaks this, the spike's headline scene stops being
+// buildable and that should fail loudly rather than be noticed in a picture.
+test('the six-face inversion route fits the set, exactly', () => {
+  assert.equal(overflowingPool(inversionRoute, SET), null);
+  const spent = countPieces(chainTrack(inversionRoute));
+  assert.equal(spent.straight, SET.straight, 'it spends both straights');
+  for (const pool of ['leftCurve', 'insideCurve', 'outsideCurve']) {
+    assert.equal(spent[pool], SET[pool], `it spends every ${pool}`);
+  }
 });
 
-// ---- Inventory -----------------------------------------------------------
-
-// pieces.md:144-156. The white start cube is geometrically a straight and is
-// counted as one, so the totals are the published 32 and 66 track cubes.
-test('inventories total 32 and 66 track cubes', () => {
-  const total = inv => Object.values(inv).reduce((a, b) => a + b, 0);
-  assert.equal(total(STARTER), 32);
-  assert.equal(total(DELUXE), 66);
+// The flat rectangular loop does NOT fit, and that is the set doing its job
+// rather than a defect. Ten straights up the long sides is exactly the kind of
+// filler a browser-sized set cannot afford — measured: straights are what make
+// this model slow, not cube count.
+test('the flat loop route needs more straights than the set holds', () => {
+  assert.equal(overflowingPool(loopRoute, SET), 'straight');
 });
 
-// pieces.md:154 — the starter set ships no crosses at all, which is why the
-// cross/revisit rung has to run against deluxe.
-test('the starter set has no crosses and deluxe has two', () => {
-  assert.equal(STARTER.cross, 0);
-  assert.equal(DELUXE.cross, 2);
+// The two colours must be equal, or the solver's mirror symmetry break becomes
+// unsound — reflecting a layout swaps the two counts.
+test('the set holds equal numbers of the two curve colours', () => {
+  assert.equal(SET.leftCurve, SET.rightCurve, 'unequal colours would break mirror symmetry');
+});
+
+// The set has no cross, so nothing solved against it can cross itself. The
+// crossing encoding is exercised by fixtures instead — see tests/cross.test.js.
+test('the set holds no cross', () => {
+  assert.equal(SET.cross, 0);
+});
+
+test('the set names every pool, and every type has one', () => {
+  assert.deepEqual(Object.keys(SET).sort(), [...POOLS].sort());
+  for (const type of PIECE_TYPES) assert.ok(POOLS.includes(POOL_OF[type]), type);
 });
 
 // The product listings count green and blue together ("8/16 combined"), and a
 // reversible curve could legitimately be spent as either — a right curve fills
 // the same cells as a left one and moves the head the same way, differing only in
-// which face the rail ends on. Owen's set is not reversible, so they are two
+// which face the rail ends on. Owen's curves are not reversible, so they are two
 // mouldings and two pools.
-test('left and right curves are separate pools, half the listed total each', () => {
+test('left and right curves are separate pools', () => {
   assert.equal(POOL_OF.leftCurve, 'leftCurve');
   assert.equal(POOL_OF.rightCurve, 'rightCurve');
   assert.equal(POOLS.length, PIECE_TYPES.length, 'every piece type is its own pool');
-  assert.equal(STARTER.leftCurve + STARTER.rightCurve, 8);
-  assert.equal(DELUXE.leftCurve + DELUXE.rightCurve, 16);
-});
-
-// The two colours must ship in equal numbers, or the solver's mirror symmetry
-// break becomes unsound — reflecting a layout swaps the two counts. Every
-// inventory the repo ships has to hold this, not just the two products.
-test('the two curve colours ship in equal numbers', () => {
-  for (const [name, inv] of Object.entries({ STARTER, DELUXE, OWENS_SET })) {
-    assert.equal(inv.leftCurve, inv.rightCurve, `${name} would break mirror symmetry`);
-  }
-});
-
-// ---- Owen's own set ------------------------------------------------------
-
-// Not a product: the starter set plus four extra inside curves. Worth its own
-// tests because it is the inventory the layouts he actually builds come from,
-// and an inventory that is one piece wrong produces a layout that cannot be
-// built — which has happened once already.
-test("Owen's set is the starter set plus four inside curves, and nothing else", () => {
-  const differences = POOLS.filter(pool => OWENS_SET[pool] !== STARTER[pool]);
-  assert.deepEqual(differences, ['insideCurve']);
-  assert.equal(OWENS_SET.insideCurve, STARTER.insideCurve + 4);
-});
-
-test("Owen's set totals 36 track cubes", () => {
-  assert.equal(Object.values(OWENS_SET).reduce((a, b) => a + b, 0), 36);
-});
-
-test("Owen's set has no crosses, so crossings cannot appear in his layouts", () => {
-  assert.equal(OWENS_SET.cross, 0);
-});
-
-test('every inventory names every pool, and every type has one', () => {
-  for (const inv of [STARTER, DELUXE]) {
-    assert.deepEqual(Object.keys(inv).sort(), [...POOLS].sort());
-  }
-  for (const type of PIECE_TYPES) assert.ok(POOLS.includes(POOL_OF[type]), type);
 });
 
 // The test that pins which bookkeeping we mean. Eight curves of one colour would
@@ -359,8 +339,23 @@ test('every inventory names every pool, and every type has one', () => {
 // fine either way.
 test('one colour cannot be spent on the other colour\'s allowance', () => {
   // By type, because these lists are pool arithmetic rather than real tracks.
-  assert.equal(overflowingPoolByType(Array(8).fill('leftCurve'), STARTER), 'leftCurve');
-  assert.equal(overflowingPoolByType(Array(5).fill('rightCurve'), STARTER), 'rightCurve');
+  assert.equal(overflowingPoolByType(Array(8).fill('leftCurve'), SET), 'leftCurve');
+  assert.equal(overflowingPoolByType(Array(5).fill('rightCurve'), SET), 'rightCurve');
   const fourEach = [...Array(4).fill('leftCurve'), ...Array(4).fill('rightCurve')];
-  assert.equal(overflowingPoolByType(fourEach, STARTER), null);
+  assert.equal(overflowingPoolByType(fourEach, SET), null);
+});
+
+// ---- Scores --------------------------------------------------------------
+
+// SCORES is a taste judgement and meant to be edited, so nothing asserts the
+// numbers. What must hold is the shape: a straight is worth strictly less than
+// anything that turns the train, or the table has stopped saying what it means.
+test('every piece that turns the train outscores a straight', () => {
+  for (const type of PIECE_TYPES.filter(t => t !== 'straight' && t !== 'cross')) {
+    assert.ok(SCORES[type] > SCORES.straight, `${type} should beat a straight`);
+  }
+});
+
+test('every piece type has a score', () => {
+  assert.deepEqual(Object.keys(SCORES).sort(), [...PIECE_TYPES].sort());
 });

@@ -1,8 +1,12 @@
-// Rung 7: minimise dropped pieces.
+// Rung 7: the weighted objective — what a layout is worth, not how long it is.
 //
 // The step count IS the inventory, so no loop length is ever guessed: the model
 // is handed 32 steps for the starter set and decides for itself how many to use.
 // Dropped = inventory minus used, and the loop length falls out as a by-product.
+//
+// Pieces are scored rather than counted (SCORES in track.js: a straight 1,
+// everything that turns the train 2), so the longest loop and the best loop are
+// no longer the same thing — and the tests below have to ask about the score.
 //
 // The consequence next-session.md leans on: this model is trivially feasible.
 // Drop everything but a four-piece ring and you always have an answer, so an
@@ -12,7 +16,8 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, countPools, overflowingPool, STARTER } from '../src/track.js';
+import { chainTrack, countPools, overflowingPool, SCORES } from '../src/track.js';
+import { STARTER } from './fixtures.js';
 
 const LETTER = {
   leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
@@ -34,22 +39,30 @@ const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, {
 const SMALL = { straight: 4, leftCurve: 4, rightCurve: 4, insideCurve: 0, outsideCurve: 0, cross: 0 };
 const SMALL_BOX = 4;
 
-const longest = (inventory, opts = {}) => solveTrack({
+// Scored in plain JavaScript from a route, the same way the tests count
+// everything else. `scoreOf` inside the solver is a separate implementation on
+// purpose — if they ever disagree, one of them is wrong and this notices.
+//
+// This one scores the traversal rather than the table, which is only the same
+// number because every set in this file excludes the cross. Crossings are rung 8.
+const scoreOf = route => route.reduce((n, type) => n + SCORES[type], 0);
+
+const best = (inventory, opts = {}) => solveTrack({
   steps: total(inventory), box: SMALL_BOX, minY: 0, exclude: ['cross'],
-  inventory, optionalSteps: true, objective: 'minimiseDropped', ...opts,
+  inventory, objective: 'maximiseScore', ...opts,
 });
 
 // ---- The objective means what it says ------------------------------------
 
 test('dropped plus used equals the inventory', async () => {
-  const result = await longest(SMALL);
+  const result = await best(SMALL);
   assert.equal(result.status, 'OPTIMAL');
   assert.equal(result.route.length + result.dropped, total(SMALL));
 });
 
 // Never trust the solver's own count. Re-derive it from the route.
 test('the reported count matches the route actually returned', async () => {
-  const result = await longest(SMALL);
+  const result = await best(SMALL);
   const used = Object.values(countPools(result.route)).reduce((a, b) => a + b, 0);
   assert.equal(used, result.route.length);
   assert.equal(result.dropped, total(SMALL) - used);
@@ -57,23 +70,30 @@ test('the reported count matches the route actually returned', async () => {
 });
 
 test('the answer is a legal track', async () => {
-  const result = await longest(SMALL);
+  const result = await best(SMALL);
   assert.doesNotThrow(() => chainTrack(result.route), shape(result.route));
 });
 
 // ---- It really is a maximum ----------------------------------------------
 
 // The oracle knows every loop this inventory can build. The solver's answer must
-// be the longest of them — not merely a long one.
-test('the solver finds the longest loop the small set can build', async () => {
+// be the best-scoring of them — not merely a good one.
+//
+// It asks about the score, not the length, and the difference is real: with
+// curves worth 2 and straights 1, a shorter loop made of curves can beat a longer
+// one padded with straights. Asserting on length here would either fail or, worse,
+// pass by coincidence on a set where the two happen to agree.
+test('the solver finds the best-scoring loop the small set can build', async () => {
   const all = enumerateLoops({
     inventory: SMALL, maxPieces: total(SMALL), box: SMALL_BOX, minY: 0,
     checkTrain: true, exclude: ['cross'],
   });
-  const best = Math.max(...all.map(r => r.length));
-  const result = await longest(SMALL);
-  assert.equal(result.route.length, best,
-    `solver got ${result.route.length} (${shape(result.route)}), oracle's best is ${best}`);
+  const bestScore = Math.max(...all.map(scoreOf));
+  const result = await best(SMALL);
+  assert.equal(result.score, bestScore,
+    `solver scored ${result.score} (${shape(result.route)}), oracle's best is ${bestScore}`);
+  // And the score it reports is the score of the route it returned.
+  assert.equal(result.score, scoreOf(result.route));
 });
 
 // ---- Trivially feasible, by construction ---------------------------------
@@ -83,7 +103,7 @@ test('the solver finds the longest loop the small set can build', async () => {
 // but only once the box is big enough to hold a ring, and that needs saying.
 test('a cramped box sheds pieces rather than failing', async () => {
   for (const box of [3, 4, 5]) {
-    const result = await longest(STARTER, { box, steps: 12 });
+    const result = await best(STARTER, { box, steps: 12 });
     assert.equal(result.status, 'OPTIMAL', `box ${box} came back ${result.status}`);
     assert.ok(result.route.length >= 4);
     assert.doesNotThrow(() => chainTrack(result.route), `box ${box}: ${shape(result.route)}`);
@@ -97,10 +117,10 @@ test('a cramped box sheds pieces rather than failing', async () => {
 // five cells but not four *starting from the middle*. Three is the floor.
 test('a box smaller than three holds no loop at all', async () => {
   for (const box of [1, 2]) {
-    assert.equal((await longest(STARTER, { box, steps: 12 })).status, 'INFEASIBLE',
+    assert.equal((await best(STARTER, { box, steps: 12 })).status, 'INFEASIBLE',
       `box ${box} should not fit a ring`);
   }
-  assert.equal((await longest(STARTER, { box: 3, steps: 12 })).status, 'OPTIMAL');
+  assert.equal((await best(STARTER, { box: 3, steps: 12 })).status, 'OPTIMAL');
 });
 
 // ---- The box must not be the thing being measured ------------------------
@@ -109,11 +129,11 @@ test('a box smaller than three holds no loop at all', async () => {
 // growing the box improves the answer, the box was the binding constraint and
 // the objective was quietly measuring the wrong thing.
 slow('the box is not what limits the answer', async () => {
-  const at = async box => (await longest(STARTER, { box, steps: 16 })).route.length;
+  const at = async box => (await best(STARTER, { box, steps: 16 })).score;
   const six = await at(6);
   const seven = await at(7);
   assert.equal(seven, six,
-    `box 6 gives ${six} pieces but box 7 gives ${seven} — the box is binding, not the inventory`);
+    `box 6 scores ${six} but box 7 scores ${seven} — the box is binding, not the inventory`);
 });
 
 // ---- Symmetry breaking ---------------------------------------------------
@@ -143,17 +163,17 @@ test('the loop set is closed under mirroring, which is what makes the break lega
 });
 
 test('symmetry breaking does not change the optimal value', async () => {
-  const off = await longest(SMALL, { symmetryBreaking: false });
-  const on = await longest(SMALL, { symmetryBreaking: true });
-  assert.equal(on.route.length, off.route.length);
+  const off = await best(SMALL, { symmetryBreaking: false });
+  const on = await best(SMALL, { symmetryBreaking: true });
+  assert.equal(on.score, off.score);
   assert.equal(on.dropped, off.dropped);
   assert.doesNotThrow(() => chainTrack(on.route), shape(on.route));
 });
 
 // ---- The whole starter set -----------------------------------------------
 
-slow('the starter set builds its longest loop', async () => {
-  const result = await longest(STARTER, { maxTimeInSeconds: 300 });
+slow('the starter set builds its best-scoring loop', async () => {
+  const result = await best(STARTER, { maxTimeInSeconds: 300 });
   assert.ok(['OPTIMAL', 'FEASIBLE'].includes(result.status), result.status);
   assert.doesNotThrow(() => chainTrack(result.route), shape(result.route));
   assert.equal(overflowingPool(result.route, STARTER), null);

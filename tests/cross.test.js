@@ -2,9 +2,9 @@
 //
 // A cross is one piece, one cell, and two rails on the same face. The train can
 // pass over it twice, so it appears in a route twice — but it is one cube out of
-// the box, and only the starter set's successor ships any at all (0 in starter,
-// 2 in deluxe), which is why everything here runs against deluxe or a synthetic
-// set.
+// the box. The starter set ships none and the deluxe two, so the sets here are
+// deluxe or synthetic; Owen's own set has one, which is what took this rung from
+// theory to something he can build.
 //
 // The foot-gun, from next-session.md: "minimise dropped pieces" must count
 // active NON-revisit steps. Get it wrong and the solver mints free pieces — the
@@ -14,7 +14,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
-import { chainTrack, countPieces, countPools, OPPOSITE, POOLS, DELUXE } from '../src/track.js';
+import { enumerateLoops } from '../src/enumerate.js';
+import { chainTrack, countPieces, countPools, OPPOSITE, POOLS } from '../src/track.js';
+import { DELUXE } from './fixtures.js';
 
 const LETTER = {
   leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
@@ -38,7 +40,7 @@ const TWO_CROSSES = { straight: 4, leftCurve: 4, rightCurve: 4, insideCurve: 4, 
 slow('no solution spends more physical pieces than the inventory holds', async () => {
   const found = await solveTrack({
     steps: total(TWO_CROSSES), box: 5, minY: 0, inventory: TWO_CROSSES,
-    optionalSteps: true, objective: 'minimiseDropped', crossings: true,
+    objective: 'maximiseScore', crossings: true,
   });
   assert.equal(found.status, 'OPTIMAL');
 
@@ -54,7 +56,7 @@ slow('no solution spends more physical pieces than the inventory holds', async (
 slow('dropped counts cubes on the table, not steps in the route', async () => {
   const found = await solveTrack({
     steps: total(TWO_CROSSES), box: 5, minY: 0, inventory: TWO_CROSSES,
-    optionalSteps: true, objective: 'minimiseDropped', crossings: true,
+    objective: 'maximiseScore', crossings: true,
   });
   const placed = chainTrack(found.route);
   const cubes = placed.filter(p => !p.revisit).length;
@@ -193,7 +195,7 @@ slow('a crossing is not chosen when the set closes without one', async () => {
   const set = { straight: 0, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 0, cross: 2 };
   const result = await solveTrack({
     steps: total(set), box: 5, minY: 0, inventory: set,
-    optionalSteps: true, objective: 'minimiseDropped', crossings: true,
+    objective: 'maximiseScore', crossings: true,
   });
   assert.equal(result.status, 'OPTIMAL');
   assert.equal(result.pieces.filter(p => p.revisit).length, 0, 'crossing should not pay here');
@@ -208,13 +210,122 @@ slow('a crossing IS chosen when it is the only way to spend every cube', async (
   const set = { straight: 4, leftCurve: 3, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 1 };
   const result = await solveTrack({
     steps: 12, box: 5, minY: 0, inventory: set,
-    optionalSteps: true, objective: 'minimiseDropped', crossings: true,
+    objective: 'maximiseScore', crossings: true,
   });
   assert.equal(result.status, 'OPTIMAL');
   assert.equal(result.dropped, 0, `left pieces in the box: ${shape(result.route)}`);
   assert.equal(result.pieces.filter(p => p.revisit).length, 1);
   assert.equal(result.route.length, 12);
   assert.equal(countPieces(result.pieces).cross, 1);
+});
+
+// ---- Twice, and no more --------------------------------------------------
+
+// A cross has two rails, so the train runs it twice and no more. A third pass is
+// perpendicular to the placement and so *looks* like a revisit, which is exactly
+// the trap: it is necessarily the same rail as the second pass, and a rail's two
+// ends already click into their neighbours.
+//
+// Found by walking the head back to the same cell at each of three perpendicular
+// poses in turn. It does not close, and it does not need to — the rule has to
+// bite while the route is still being unrolled.
+const THRICE = [...'XSLLLSXSSSLLLRX'].map(l =>
+  ({ X: 'cross', S: 'straight', L: 'leftCurve', R: 'rightCurve' }[l]));
+
+test('a cross cannot be traversed three times', () => {
+  assert.throws(() => chainTrack(THRICE), /two rails, not three/);
+});
+
+// The solver's version of the same rule is that a step holds at most one role
+// across all crossing slots, so no cube can be the placement for two of them.
+test('the solver refuses a third pass as well', async () => {
+  const plenty = { straight: 9, leftCurve: 4, rightCurve: 4, insideCurve: 0, outsideCurve: 0, cross: 1 };
+  const result = await solveTrack({
+    steps: THRICE.length, box: 5, minY: 0, inventory: plenty, crossings: true, require: THRICE,
+  });
+  assert.equal(result.status, 'INFEASIBLE');
+});
+
+// ---- Agreement with the oracle -------------------------------------------
+
+// Rung 8's missing piece. Every other rung is cross-checked against the
+// brute-force enumerator, and until it understood revisits this one could not be:
+// asked for twelve-piece loops with a cross available it used to answer 0 while
+// chainTrack happily accepted the figure of eight.
+const CROSSING_SET = { straight: 4, leftCurve: 3, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 1 };
+
+// Up to twelve on both sides — `steps` is an upper bound and the loop uses a
+// prefix of it, so the shorter non-crossing loops are part of the answer now.
+const oracleShapes = box => enumerateLoops({
+  inventory: CROSSING_SET, maxPieces: 12, box, minY: 0,
+}).map(shape).sort();
+
+const solverShapes = async box => (await solveTrack({
+  steps: 12, box, minY: 0, inventory: CROSSING_SET, crossings: true, allSolutions: true,
+})).routes.map(shape).sort();
+
+// A small box on purpose: the two searches must agree exactly, and each no-good
+// cut makes the next solve slower, so the cheap case is the one worth running
+// every time. The big box is the same check with nothing held back.
+test('solver and oracle agree on every crossing loop in a small box', async () => {
+  const oracle = oracleShapes(3);
+  assert.ok(oracle.length > 0, 'the oracle must actually be finding crossings');
+  assert.deepEqual(await solverShapes(3), oracle);
+});
+
+slow('solver and oracle agree on every crossing loop in a box that holds them all', async () => {
+  assert.deepEqual(await solverShapes(6), oracleShapes(6));
+});
+
+// Twelve is the floor, and it is the oracle that can say so: a crossing needs the
+// loop to come back to the cross at right angles, and nothing shorter manages it.
+test('twelve steps is the shortest a loop can cross itself in', () => {
+  const shorter = enumerateLoops({ inventory: CROSSING_SET, maxPieces: 11, minPieces: 1, minY: 0 })
+    .filter(route => countPools(route).cross > 1);
+  assert.deepEqual(shorter.map(shape), []);
+  assert.ok(oracleShapes(6).length > 0, 'but twelve manages it');
+});
+
+// ---- Mandating a crossing ------------------------------------------------
+
+// A crossing puts no extra cube on the table, so minimise-dropped reaches for one
+// only when it is the only way to spend everything. `minCrossings` asks the other
+// question outright: the best track that *must* cross itself.
+//
+// The control carries the test. XLSLSLSL is a legal loop that places its cross
+// and drives straight over it — precisely what the model does when left to
+// choose — and the mandate is what rules it out.
+test('a mandated crossing rules out placing a cross and driving over it', async () => {
+  const set = { straight: 4, leftCurve: 4, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 1 };
+  const pinned = extra => solveTrack({
+    steps: 8, box: 5, minY: 0, inventory: set, crossings: true,
+    require: [...'XLSLSLSL'].map(l => ({ X: 'cross', L: 'leftCurve', S: 'straight' }[l])),
+    ...extra,
+  });
+  assert.equal((await pinned({})).status, 'OPTIMAL', 'legal with the cross merely placed');
+  assert.equal((await pinned({ minCrossings: 1 })).status, 'INFEASIBLE');
+});
+
+test('a mandated crossing is met by a route that actually crosses', async () => {
+  const result = await eight({ crossings: true, minCrossings: 1, inventory: CROSSING_SET });
+  assert.equal(result.status, 'OPTIMAL');
+  assert.equal(result.pieces.filter(p => p.revisit).length, 1);
+});
+
+// Both of these are modelling mistakes rather than infeasibilities, and saying so
+// beats an INFEASIBLE that looks like a fact about the pieces.
+test('mandating a crossing without the encoding is refused, not silently infeasible', async () => {
+  await assert.rejects(
+    () => eight({ crossings: false, minCrossings: 1, inventory: CROSSING_SET }),
+    /needs crossings/,
+  );
+});
+
+test('mandating more crossings than the box holds crosses is refused', async () => {
+  await assert.rejects(
+    () => eight({ crossings: true, minCrossings: 2, inventory: CROSSING_SET }),
+    /inventory holds 1 cross/,
+  );
 });
 
 // ---- Counting, one last time ---------------------------------------------

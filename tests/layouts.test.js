@@ -13,11 +13,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf, shapeOf } from '../src/layouts.js';
-import { chainTrack, countPieces, POOLS, STARTER, DELUXE, OWENS_SET } from '../src/track.js';
+import { chainTrack, countPieces, POOLS } from '../src/track.js';
 
-// Every set a layout may claim. Miss one and that layout's inventory check
-// cannot run — the assertion below turns it into a failure rather than a skip.
-const SETS = { STARTER, DELUXE, OWENS_SET };
 const entries = Object.entries(LAYOUTS);
 
 test('there are layouts to check', () => {
@@ -30,14 +27,22 @@ for (const [name, layout] of entries) {
     assert.equal(shapeOf(placed.map(p => p.type)), layout.shape, 'round-trips through the letters');
   });
 
-  // The one that would have caught the bug.
-  test(`${name} can be built from the ${layout.set} set`, () => {
-    const inventory = SETS[layout.set];
-    assert.ok(inventory, `unknown set ${layout.set}`);
+  // The one that would have caught the bug. The inventory is carried by the entry
+  // itself now, so there is no name to resolve and no map to fall out of date.
+  test(`${name} can be built from the set it was solved against`, () => {
     const spent = countPieces(chainTrack(routeOf(layout.shape)));
     for (const pool of POOLS) {
-      assert.ok(spent[pool] <= inventory[pool],
-        `${name} needs ${spent[pool]} ${pool} but ${layout.set} ships ${inventory[pool]}`);
+      assert.ok(spent[pool] <= layout.set[pool],
+        `${name} needs ${spent[pool]} ${pool} but its set holds ${layout.set[pool]}`);
+    }
+  });
+
+  // An inventory that omits a pool it happens not to use — `cross: 0` left off,
+  // say — passes every check above, because the route never asks about that pool.
+  // It would then quietly permit a crossing the next time the shape changed.
+  test(`${name} says which inventory it was solved against, in full`, () => {
+    for (const pool of POOLS) {
+      assert.equal(typeof layout.set[pool], 'number', `${name} has no ${pool} count`);
     }
   });
 

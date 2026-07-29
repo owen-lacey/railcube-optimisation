@@ -2,11 +2,11 @@
 // checked against. Deliberately plain depth-first search — when this and the
 // solver disagree, the suspicion should fall on the clever one.
 //
-// It knows nothing about the cross being traversable twice. A cross here is just
-// a straight that costs a cross, which is exactly how the real model treats one
-// that is placed but not crossed.
+// It knows the cross is traversable twice, and decides which passes are second
+// passes with `isRevisit` from track.js — the same predicate chainTrack uses, so
+// the oracle and the thing it checks cannot drift apart on the rule itself.
 
-import { PIECE_TYPES, POSES, cellsFor, step, POOL_OF, POOLS } from './track.js';
+import { PIECE_TYPES, POSES, cellsFor, step, POOL_OF, POOLS, isRevisit } from './track.js';
 
 const key = cell => cell.join(',');
 const l1 = cell => Math.abs(cell[0]) + Math.abs(cell[1]) + Math.abs(cell[2]);
@@ -70,8 +70,10 @@ const inBounds = (piece, box, minY) =>
 /**
  * Every closed loop that fits the given rules, as arrays of piece types.
  *
- *   inventory   pool counts, e.g. STARTER
- *   maxPieces   search depth
+ *   inventory   pool counts, e.g. SET. Counted in cubes, so a crossed cross
+ *               costs one however many times the train runs over it
+ *   maxPieces   search depth, counted in traversal steps rather than cubes — a
+ *               crossed cross is two steps
  *   minPieces   ignore loops shorter than this (they are still found)
  *   box         no material cell further than this from the origin on any axis
  *   minY        floor; null for none. 0 means nothing below the ground
@@ -88,7 +90,9 @@ export function enumerateLoops({
 }) {
   const types = PIECE_TYPES.filter(t => !exclude.includes(t) && (inventory[POOL_OF[t]] ?? 0) > 0);
   const homeDist = poseDistances(startPose);
-  const board = { solid: new Set(), train: new Map() };
+  // `crosses` is every cross already on the table, by its own cell, in the shape
+  // isRevisit reads. `crossed` is the ones the train has been back through.
+  const board = { solid: new Set(), train: new Map(), crosses: new Map(), crossed: new Set() };
   const spent = Object.fromEntries(POOLS.map(p => [p, 0]));
   const route = [];
   const faces = new Map();
@@ -108,18 +112,29 @@ export function enumerateLoops({
     if (cell.every(v => v === 0) && pose === startPose) record();
     if (!left) return;
 
+    const at = key(cell);
     for (const type of types) {
       const pool = POOL_OF[type];
-      if (spent[pool] >= inventory[pool]) continue;
+
+      // A second pass over a cross puts no cube on the table: it claims nothing
+      // and spends nothing. Twice is the limit — a third pass would run the same
+      // rail as the second, and a rail's two ends already have their neighbours.
+      const revisit = isRevisit(type, cell, pose, board.crosses);
+      if (revisit && board.crossed.has(at)) continue;
+      if (!revisit && spent[pool] >= inventory[pool]) continue;
 
       const piece = { type, ...cellsFor(type, pose, cell) };
       if (!inBounds(piece, box, minY)) continue;
-      const claimed = collisions ? claim(board, piece, checkTrain) : EMPTY_CLAIM;
+      const claimed = revisit || !collisions ? EMPTY_CLAIM : claim(board, piece, checkTrain);
       if (!claimed) continue;
 
       const head = step(cell, pose, type);
       if (reachable(head.cell, head.pose, left - 1)) {
-        spent[pool] += 1;
+        if (revisit) board.crossed.add(at);
+        else {
+          spent[pool] += 1;
+          if (type === 'cross') board.crosses.set(at, { type, pose });
+        }
         route.push(type);
         faces.set(pose[0], (faces.get(pose[0]) ?? 0) + 1);
 
@@ -128,7 +143,11 @@ export function enumerateLoops({
         const n = faces.get(pose[0]) - 1;
         if (n) faces.set(pose[0], n); else faces.delete(pose[0]);
         route.pop();
-        spent[pool] -= 1;
+        if (revisit) board.crossed.delete(at);
+        else {
+          spent[pool] -= 1;
+          if (type === 'cross') board.crosses.delete(at);
+        }
       }
       release(board, claimed);
     }

@@ -11,7 +11,8 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, STARTER } from '../src/track.js';
+import { chainTrack } from '../src/track.js';
+import { STARTER, UNLIMITED } from './fixtures.js';
 import { inversionRoute } from '../src/routes.js';
 
 const LETTER = {
@@ -23,10 +24,10 @@ const shape = route => route.map(t => LETTER[t]).join('');
 const SLOW = process.env.SLOW === '1';
 const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
 
-const UNLIMITED = { straight: 99, leftCurve: 99, rightCurve: 99, insideCurve: 99, outsideCurve: 99, cross: 0 };
 
+// Up to n on both sides — `steps` is an upper bound and the loop uses a prefix.
 const oracleShapes = (n, opts) => enumerateLoops({
-  inventory: UNLIMITED, maxPieces: n, minPieces: n, box: 6, minY: 0,
+  inventory: UNLIMITED, maxPieces: n, box: 6, minY: 0,
   checkTrain: true, exclude: ['cross'], ...opts,
 }).map(shape).sort();
 
@@ -107,17 +108,23 @@ test('the committed inversion route is feasible for the model', async () => {
 // the numbers are the decision, and they are deliberately loose, because a
 // budget that trips on a slow laptop teaches nothing.
 //
-// Measured on this machine, feasibility only, no objective:
+// Both of these need the objective, and that is not decoration. The step count is
+// an upper bound and the used steps are a prefix, so a solve with nothing to
+// maximise answers a 32-step question with a four-piece ring — instantly, and
+// while appearing to pass. These two tests did exactly that for a while: they
+// claimed to time a twelve- and a thirty-two-piece solve and were timing a
+// four-piece one. The objective is what forces the budget to be filled, and the
+// length assertions below are what would catch it happening again.
 //
-//            closure   +material   +clearance
-//   22 steps    1.9s        2.5s         7.1s
-//   32 steps    2.6s       12.9s        30.1s
+// Measured on this machine, with the objective, both collision rules on, no
+// symmetry breaking:
 //
-// Model building is 0.4s of that at 32 steps, so it is all search. Clearance
-// roughly doubles the material-only time; both collision rules cost real money
-// at full inventory. Whether that matters is rung 7's question, not this one —
-// with a contiguous prefix most of those 32 steps will be switched off, so 32
-// *active* steps overstates the real workload.
+//   12 steps, starter inventory     2.7s
+//   18 steps, SET                  18.4s
+//   32 steps, bottomless box       32.2s   (fills all 32, 64 pts)
+//
+// Symmetry breaking is worth roughly 2.4x on top of that — the same 18-step solve
+// runs in 7.8s with it on — so these numbers are the pessimistic end.
 const timed = async fn => {
   const started = process.hrtime.bigint();
   const result = await fn();
@@ -126,17 +133,22 @@ const timed = async fn => {
 
 test('a twelve-piece solve stays quick', async () => {
   const { result, seconds } = await timed(() => solveTrack({
-    steps: 12, box: 6, minY: 0, checkTrain: true, exclude: ['cross'], inventory: STARTER,
+    steps: 12, box: 6, minY: 0, checkTrain: true, exclude: ['cross'],
+    inventory: STARTER, objective: 'maximiseScore',
   }));
   assert.equal(result.status, 'OPTIMAL');
+  // Twelve pieces, or this is not the solve it claims to be timing.
+  assert.equal(result.route.length, 12, `only placed ${result.route.length}`);
   assert.ok(seconds < 20, `12-piece solve took ${seconds.toFixed(1)}s — consider the grid encoding`);
 });
 
-slow('a full-inventory solve is still tractable', async () => {
+slow('a thirty-two-piece solve is still tractable', async () => {
   const { result, seconds } = await timed(() => solveTrack({
     steps: 32, box: 6, minY: 0, checkTrain: true, exclude: ['cross'],
+    objective: 'maximiseScore',
   }));
   assert.equal(result.status, 'OPTIMAL');
+  assert.equal(result.route.length, 32, `only placed ${result.route.length}`);
   assert.ok(seconds < 180, `32-step solve took ${seconds.toFixed(1)}s — the pairwise clearance `
     + 'encoding has stopped scaling; build src/solver/collisions-grid.js');
 });

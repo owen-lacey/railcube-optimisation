@@ -35,9 +35,30 @@ if (Object.keys(LETTER_OF).length !== PIECE_TYPES.length) {
 }
 
 /**
+ * The inventories these answers were solved against.
+ *
+ * They live here, as data, rather than as exports from track.js, because that is
+ * what they are: facts about runs that already happened. The model holds one set
+ * — see `SET` in track.js — and none of these three is it. Two of the layouts
+ * below cannot be built from the model's set at all, which is why each entry has
+ * to say what it was solved against instead of naming a set the code still has.
+ *
+ * The published product counts are documented, with sources, in docs/pieces.md.
+ */
+const STARTER_SET = {
+  straight: 16, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 4, cross: 0,
+};
+const DELUXE_SET = {
+  straight: 32, leftCurve: 8, rightCurve: 8, insideCurve: 8, outsideCurve: 8, cross: 2,
+};
+/** What Owen owns: the starter set plus four inside curves, one straight swapped
+ * for a cross. Derived rather than restated, so the differences stay visible. */
+const OWENS_36 = { ...STARTER_SET, insideCurve: 8, straight: STARTER_SET.straight - 1, cross: 1 };
+
+/**
  * Each entry records the question that was asked, so a stale answer is obvious:
  *
- *   set     which inventory it is built from — 'STARTER' or 'DELUXE'
+ *   set     the inventory it was solved against, as data — not a name to look up
  *   box     no material cell further than this from the origin on any axis
  *   proved  whether the solver proved it optimal, or merely got that far in time
  */
@@ -47,19 +68,23 @@ export const LAYOUTS = {
   // 200 s, filling 7×7×8 cells.
   32: {
     shape: 'RSISISRLOSOSRSLSOSOSSSISISSLSLSR',
-    set: 'STARTER', box: 6, proved: true,
+    set: STARTER_SET, box: 6, proved: true,
     note: 'the whole starter set — 32 cubes, nothing dropped',
   },
-  // Owen's own set — the starter set plus four extra inside curves — all 36 cubes
-  // in one loop with nothing left over. Proved optimal in 1190 s, filling
-  // 11×7×8 cells.
+  // Owen's own set — all 36 cubes in one loop with nothing left over. Proved
+  // optimal in 3546 s, filling 13×7×10 cells.
   //
   // Nothing dropped is the strongest possible answer, and it settles the box
   // question for free: no larger box can beat spending every piece, so 6 was not
   // the binding constraint.
+  //
+  // Re-solved when the inventory was corrected: the set has one straight swapped
+  // for a cross, and the previous shape here spent 16 straights against the 15 he
+  // owns. The cross is placed and driven straight over, not crossed: crossing
+  // spends no extra cube, so nothing-dropped never has to reach for it.
   owen: {
-    shape: 'LSLIOSSLLIIRIOSSRSOSISRSSSRSISOIISSS',
-    set: 'OWENS_SET', box: 6, proved: true,
+    shape: 'SSISSSLSSXISSIILOSSLSIOOROIISRSIRSLR',
+    set: OWENS_36, box: 6, proved: true,
     note: "Owen's own set — all 36 cubes, nothing dropped",
   },
   // The same set told to fit a smaller box. Twelve cubes will not fit.
@@ -72,20 +97,39 @@ export const LAYOUTS = {
   // beat them, so they stand.
   tight: {
     shape: 'SSRRSSIIOORROOSSIISS',
-    set: 'STARTER', box: 4, proved: false,
+    set: STARTER_SET, box: 4, proved: false,
     note: 'a 4-cell box: two vertical arcs, crested at both ends',
   },
   // Three is the smallest box that holds any loop at all.
   cramped: {
     shape: 'SSRRIIRRLLIISSSLLS',
-    set: 'STARTER', box: 3, proved: false,
+    set: STARTER_SET, box: 3, proved: false,
     note: 'a 3-cell box: two vertical rings threaded through each other',
   },
   // Twelve steps over eleven cubes: the train drives over the middle cube twice,
   // once on each of its two rails.
   eight: {
     shape: 'XSLLLSXSRRRS',
-    set: 'DELUXE', box: 5, proved: true,
+    set: DELUXE_SET, box: 5, proved: true,
     note: 'a figure of eight through a single cross',
+  },
+  // Owen's set again, but told it must cross itself — `minCrossings: 1` rather
+  // than leaving it to the objective, which never reaches for a crossing because
+  // crossing spends no extra cube.
+  //
+  // Proved optimal in 342 s — but optimal *for a 36-step budget*, which is a
+  // weaker claim than it looks. A crossing spends a step without spending a cube,
+  // so within 36 steps one revisit leaves only 35 steps placing cubes: 35 is the
+  // ceiling by arithmetic, and the solver proved it reaches it.
+  //
+  // Whether all 36 cubes can be spent while crossing is a different question and
+  // is open. It needs a 37-step route, and 37 steps is past what this model can
+  // optimise — it found nothing at all in 25 minutes.
+  //
+  // The one piece left in the box is a straight.
+  crossed: {
+    shape: 'LIXSRRRSXROLLOILSSSISISIOOIISSSISSSS',
+    set: OWENS_36, box: 6, proved: true,
+    note: 'Owen\'s set forced to cross itself — 35 cubes, one straight left over',
   },
 };

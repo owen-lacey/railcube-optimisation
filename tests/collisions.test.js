@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { assertNoCollisions, cellsFor, step, STARTER, chainTrack } from '../src/track.js';
+import { assertNoCollisions, cellsFor, step, chainTrack } from '../src/track.js';
+import { STARTER, UNLIMITED } from './fixtures.js';
 
 const LETTER = {
   leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
@@ -53,10 +54,13 @@ const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, {
 // bottomless box of pieces. Handing one of them a real inventory would make them
 // answer different questions — and quietly: it bites only from eight pieces up,
 // where a loop first wants more than four inside curves.
-const UNLIMITED = { straight: 99, leftCurve: 99, rightCurve: 99, insideCurve: 99, outsideCurve: 99, cross: 0 };
 
+// Up to n, not exactly n, on both sides: `steps` is an upper bound and the loop
+// uses a prefix of it, so a six-step budget legitimately answers with a four-piece
+// loop. The oracle has always searched up-to-N; it is `minPieces` that used to
+// hide the shorter ones.
 const oracleShapes = (n, opts) => enumerateLoops({
-  inventory: UNLIMITED, maxPieces: n, minPieces: n, box: 6, minY: 0,
+  inventory: UNLIMITED, maxPieces: n, box: 6, minY: 0,
   checkTrain: false, exclude: ['cross'], ...opts,
 }).map(shape).sort();
 
@@ -71,13 +75,24 @@ test('solver and oracle agree on every loop up to six pieces', async () => {
   }
 });
 
-// Odd lengths come back empty, every time. Not derived from anything — just what
-// both searches say — but it is a cheap trap for a model that has quietly
-// stopped enforcing closure, since a broken closure check would find plenty.
+// Odd lengths never happen. Not derived from anything — just what both searches
+// say — but it is a cheap trap for a model that has quietly stopped enforcing
+// closure, since a broken closure check would find plenty.
+//
+// Said as "nothing odd comes back" rather than "an odd budget comes back empty",
+// because a budget is an upper bound: five steps legitimately answers with a
+// four-piece loop. Three still comes back empty, and that is worth pinning —
+// it is the one budget too small to hold any loop at all.
 test('no closed loop has an odd number of pieces', async () => {
-  for (const steps of [3, 5, 7]) {
-    assert.deepEqual(await solverShapes(steps), [], `${steps} pieces`);
-    assert.deepEqual(oracleShapes(steps), [], `${steps} pieces, oracle`);
+  assert.deepEqual(await solverShapes(3), [], 'three steps hold no loop');
+  assert.deepEqual(oracleShapes(3), [], 'three steps hold no loop, oracle');
+
+  for (const steps of [5, 7]) {
+    const solved = await solverShapes(steps);
+    assert.ok(solved.length > 0, `${steps} steps found nothing at all`);
+    for (const found of [solved, oracleShapes(steps)]) {
+      assert.deepEqual(found.filter(s => s.length % 2), [], `${steps} steps`);
+    }
   }
 });
 

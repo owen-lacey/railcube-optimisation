@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, countPools, overflowingPool, STARTER, DELUXE } from '../src/track.js';
+import { chainTrack, countPools, overflowingPool } from '../src/track.js';
+import { STARTER, DELUXE } from './fixtures.js';
 
 const LETTER = {
   leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
@@ -65,13 +66,13 @@ test('one curve colour cannot cover for the other', async () => {
   assert.equal((await solveTrack({ ...mixed, inventory: set(8, 1) })).status, 'INFEASIBLE');
 });
 
-// ---- Optional steps ------------------------------------------------------
+// ---- The step budget is an upper bound ------------------------------------
 
 // With more steps than the loop needs, the tail switches off. The prefix has to
 // be contiguous, or "which steps are off" becomes an enormous symmetry.
 test('a shorter loop can be found in a longer step budget', async () => {
   const result = await solveTrack({
-    steps: 10, box: 6, minY: 0, exclude: ['cross'], inventory: STARTER, optionalSteps: true,
+    steps: 10, box: 6, minY: 0, exclude: ['cross'], inventory: STARTER,
   });
   assert.equal(result.status, 'OPTIMAL');
   assert.ok(result.route.length >= 4 && result.route.length <= 10, `got ${result.route.length}`);
@@ -82,7 +83,7 @@ test('an inactive tail claims no cells and no inventory', async () => {
   // Ten steps but only four inside curves available: the loop must be the
   // four-piece ring with six steps switched off, not a longer one.
   const result = await solveTrack({
-    steps: 10, box: 6, minY: 0, exclude: ['cross'], optionalSteps: true,
+    steps: 10, box: 6, minY: 0, exclude: ['cross'],
     inventory: { straight: 0, leftCurve: 0, rightCurve: 0, insideCurve: 4, outsideCurve: 0, cross: 0 },
   });
   assert.equal(result.status, 'OPTIMAL');
@@ -138,7 +139,7 @@ test('every solution stays inside the box', async () => {
 test('solver and oracle agree with every rule switched on', async () => {
   for (const steps of [4, 6]) {
     const oracle = enumerateLoops({
-      inventory: STARTER, maxPieces: steps, minPieces: steps, box: 6, minY: 0,
+      inventory: STARTER, maxPieces: steps, box: 6, minY: 0,
       checkTrain: true, exclude: ['cross'],
     }).map(shape).sort();
     const solved = await solveTrack({
@@ -151,7 +152,7 @@ test('solver and oracle agree with every rule switched on', async () => {
 
 slow('solver and oracle agree at eight pieces under the full rules', async () => {
   const oracle = enumerateLoops({
-    inventory: STARTER, maxPieces: 8, minPieces: 8, box: 6, minY: 0,
+    inventory: STARTER, maxPieces: 8, box: 6, minY: 0,
     checkTrain: true, exclude: ['cross'],
   }).map(shape).sort();
   const solved = await solveTrack({
