@@ -165,10 +165,28 @@ Starter totals match the published "32 block pieces" exactly ✅. Deluxe marketi
 inconsistent — "66-piece" in some listings, "64 pieces + 2 trains" in others — but the
 itemised list above sums to 66 track cubes and is consistent across two retailers.
 
-Both tables above describe *products*. The set Owen actually owns is the starter set plus
-four extra inside curves — 36 track cubes, no crosses — and that is what the layouts he
-builds are solved against. It lives in code as `OWENS_SET` in `src/track.js`, derived from
-`STARTER` so the one difference stays visible.
+Both tables above describe *products*, and neither is what the model solves against. The
+code holds exactly one set — `SET` in `src/track.js` — and it is not a product at all:
+**two straights and four of every curve, eighteen cubes, no cross.**
+
+It is that small because the interactive post has to solve it in a browser, where cpsat-js
+runs single-threaded. The shape was chosen by measurement (`scripts/benchmark-sets.js`), and
+the two findings that decided it were both surprises:
+
+- **Four of every curve is a floor, not a taste.** A loop turns through a full circle, so it
+  needs four turns of the same handedness. At three of each the solve slows by half; at two
+  of each the set cannot close a loop at all.
+- **Straights are what cost time, not cubes.** Sixteen cubes with four straights is
+  *smaller* than this set and slower to solve, because straights are interchangeable filler
+  that multiply the search without helping the loop close. Two is enough to keep the set
+  honest — a Rail Cube set with no straights is not a Rail Cube set — without paying for a
+  boxful.
+
+Owen's own 36 cubes (the starter set plus four inside curves, one straight swapped for a
+cross) still exist as history: the layouts solved against them are recorded in
+`src/layouts.js`, each carrying the inventory it was solved against. Nothing in the model
+holds them any more, and with no cross in `SET`, crossings are exercised by test fixtures
+rather than by the set — the encoding stays, and the figure-of-eight it found stays with it.
 
 ## Open questions to settle with the physical set
 
