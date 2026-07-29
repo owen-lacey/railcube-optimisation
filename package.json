@@ -7,6 +7,6 @@
     "build-sheet": "node scripts/build-sheet.js"
   },
   "dependencies": {
-    "cpsat-js": "^1.0.0"
+    "cpsat-js": "^1.1.0"
   }
 }
