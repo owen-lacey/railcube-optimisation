@@ -8,9 +8,7 @@
 // are looking at a pile of plastic, not a spreadsheet.
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
-import { chainTrack, countPieces, POOLS, STARTER, DELUXE, OWENS_SET } from '../src/track.js';
-
-const SETS = { STARTER, DELUXE, OWENS_SET };
+import { chainTrack, countPieces, POOLS } from '../src/track.js';
 
 const COLOUR = {
   straight: 'yellow', leftCurve: 'green', rightCurve: 'blue',
@@ -54,12 +52,15 @@ function sheet(name) {
 
   const placed = chainTrack(routeOf(layout.shape));
   const spent = countPieces(placed);
-  const held = SETS[layout.set];
+  const held = layout.set;
   const shape = unsupported(placed);
 
   console.log(`\nRAIL CUBE — ${layout.note}`);
   console.log(`${'='.repeat(66)}\n`);
-  console.log(`From the ${layout.set} set.`,
+  // The layout carries its own inventory, so a sheet always reports the box it
+  // was actually solved against — which for the historical answers is not the set
+  // the model holds now.
+  console.log(`From a box of ${Object.values(layout.set).reduce((a, b) => a + b, 0)} cubes.`,
     layout.proved ? 'Proved optimal.' : 'Best found in the time allowed, not proved optimal.');
   console.log(`${placed.filter(p => !p.revisit).length} cubes on the table,`,
     `${Object.values(held).reduce((a, b) => a + b, 0) - placed.filter(p => !p.revisit).length} left in the box.\n`);
@@ -95,7 +96,8 @@ const [name] = process.argv.slice(2);
 if (!name) {
   console.log('\nUsage: npm run build-sheet -- <layout>\n\nLayouts:');
   for (const [key, l] of Object.entries(LAYOUTS)) {
-    console.log(`  ${key.padEnd(10)} ${l.note} (${l.set})`);
+    const held = Object.values(l.set).reduce((a, b) => a + b, 0);
+    console.log(`  ${key.padEnd(10)} ${l.note} (from ${held} cubes)`);
   }
   console.log();
 } else {
