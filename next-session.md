@@ -1,106 +1,83 @@
-# Handoff: a browser-sized set, defined once
+# Handoff: the live-solving prototype is done — what's open now is the tie-break
 
 ## Starting Prompt
 
-The interactive blog post needs to run the solver **in the browser**, and Owen's real
-36-cube set is too big for that. Last session established the ceiling empirically: the
-36-cube model needs 63 s under native OR-Tools on 14 cores, 342 s under cpsat-js in
-Node with 8 workers, and the browser gets **neither** — the portable cpsat-js build
-clamps to a single worker, and Python isn't available at all. So the blog post needs a
-smaller canonical set, chosen by measurement rather than by guess.
+Both things the last handoff asked for are done and committed: `cpsat-js` gained
+`addHint`/`onSolution`/`enumerateAllSolutions` (1.2.0, then 1.3.0), `solveTrack` exposes
+`hint` and `onSolution`, and `spikes/track-piece/index.html?scene=solve` runs it live in
+a Web Worker. That part of the prototype turned out to want a second iteration once it
+was actually watched: an *optimising* live search (`objective: 'maximiseScore'`) is
+exciting for a few incumbents and then just sits there converging, so the scene was
+reworked into a live *enumeration* instead — a stream of distinct, equally-good full
+layouts, one roughly every 2-3 s, for as long as `maxSolutions` says. See CLAUDE.md's
+PolyCSS section for the mechanism and the two things that were tried and rejected on the
+way there (`enumerateAllSolutions` can't be capped by count; dropping `fill` makes it
+slower *and* less interesting to watch, not faster).
 
-Three pieces of work, in this order:
-
-1. **Pick the set by measuring, under the build the browser actually uses.** Do not
-   benchmark in Node with default workers — 8-worker Node timings flatter the browser
-   case badly. Measure with `numWorkers: 1`, which is what the portable build gives you.
-   Sweep candidate set sizes and report solve time for each so Owen can pick the
-   trade-off. Bear in mind `crossings` is documented as the most expensive part of the
-   model (`src/solver/index.js:483`), so "does the small set include a cross" is a real
-   cost decision, not just a flavour one.
-
-2. **One definition of "the set".** `OWENS_SET` already lives in `src/track.js`, but
-   which set is in play is currently threaded around as a **string name**:
-   `src/layouts.js` records `set: 'OWENS_SET'`, `scripts/export-model.js` exports a
-   `sets` map, and `python/solve.py --set` resolves by name. That indirection is the
-   duplication to kill — the app should resolve the set from one export in
-   `src/track.js`, not by string lookup. Keep `STARTER`/`DELUXE` as product facts;
-   the tests depend on them.
-
-3. **Two changes Owen already decided** (see Key Context) — the weighted objective and
-   removing `optionalSteps`.
-
-Start by reading `docs/pieces.md` open question 7 and the `crossed`/`owen` entries in
-`src/layouts.js`, then propose candidate set sizes before measuring anything.
+There is no assigned next task. The open thread, raised but explicitly not decided last
+session, is still open: **is a tie-break term for the enumerated layouts wanted, and if
+so which one?** Now that the enumeration actually runs live and fast (16 cubes, not the
+40-in-154s pre-baked sweep the idea started from), the question is no longer abstract —
+Owen can watch the stream and decide whether "every layout ties on score" is fine as
+degenerate variety, or whether some layouts are visibly nicer (faces touched, span,
+inversions — `scripts/benchmark-sets.js` already computes these) and worth surfacing
+first. Don't decide this without him; it's exactly the kind of design call this repo's
+rules reserve for Owen.
 
 ## Relevant Files
 
-- `src/track.js` — `STARTER`, `DELUXE`, `OWENS_SET` (lines 261-280). Where the new
-  canonical set belongs. `OWENS_SET` is derived from `STARTER` rather than restated,
-  deliberately; keep that discipline.
-- `src/layouts.js` — every entry carries `set: '<NAME>'` as a string. This is the
-  main site of the string-name indirection to remove. Also holds the two 36-cube
-  results whose notes need the box findings below.
-- `src/solver/index.js` — `optionalSteps` (lines 53, 362, 377, 432), the `OBJECTIVES`
-  table (line 70) where weights go, and `numWorkers` (line 508).
-- `src/enumerate.js` — already supports up-to-N via `minPieces`/`maxPieces`
-  (lines 77, 106). The `optionalSteps` removal needs call-site changes, not new oracle
-  logic.
-- `scripts/check-route.js` — verify every route the solver produces through
-  `src/track.js`. Used throughout last session; it caught nothing wrong, which is
-  why it stays.
-- `python/solve.py` — still useful for proving things offline, but it is now
-  explicitly **not** the blog-post path. Don't let the browser model drift from it.
+- `spikes/track-piece/solve-worker.js` — the live enumeration. `INVENTORY` (16 cubes,
+  4 of every curve, no straights) and `MAX_SOLUTIONS` (50) are both named constants at
+  the top, deliberately easy to change if the pace or set is wrong for the blog post.
+- `spikes/track-piece/index.html` — the `?scene=solve` HUD, now reporting "layout N of
+  `MAX_SOLUTIONS`" rather than a score-vs-bound convergence line, because there is no
+  objective to converge. `?hint=` is gone; it belonged to the optimising search this
+  scene no longer runs.
+- `src/solver/index.js` — `solveTrack`'s `allSolutions`/`maxSolutions` path (the no-good
+  cut loop) is what the live scene actually uses, not `enumerateAllSolutions` (see Key
+  Context). `hint`/`onSolution` are still there and still used by anything that solves
+  with an objective — `tests/hint.test.js` and `tests/callback.test.js` cover both.
+- `scripts/benchmark-sets.js` — already computes faces/span/climb/inversion/turn-share
+  per layout, the candidate vocabulary for a tie-break term if one gets picked.
+- `vite.config.js` — new. Required because `?scene=solve`'s worker imports the bare
+  specifier `cpsat-js`, which only a bundler-aware dev server can resolve. `npm run
+  spike` replaces the old `python3 -m http.server` instructions.
 
 ## Key Context
 
-**Box size is not a constraint worth tuning — settled last session.** Three runs at
-37 steps with a mandated crossing, all `UNKNOWN`: box 6 at 3600 s, box 7 at 1800 s,
-box 8 at 1800 s. And at 36 steps, boxes 6/7/8 all proved **35 cubes optimal**
-(63 s / 126 s / 17 s — note the non-monotonicity, that's CP-SAT portfolio luck, don't
-read trends into single timings). Two conclusions: box 6 was never binding, and
-enlarging the box neither finds better answers nor makes the search tractable. Owen's
-decision is to keep the box small. Also worth recording: the `owen` layout's 13×7×10
-span *saturates* box 6 on one axis, which looked like evidence the box was binding —
-it wasn't. Given more room the solutions got more compact, not less.
+**`enumerateAllSolutions` and `allSolutions`+`maxSolutions` are not interchangeable, and
+picking the wrong one cost real measuring time this session.** `enumerateAllSolutions`
+is a single `solve()` call that streams every solution of one search — cpsat-js's own
+docs say the `onSolution` return value is ignored and nothing can stop that search
+early, only `maxTimeInSeconds` bounds it. `allSolutions`+`maxSolutions` re-solves with a
+no-good cut per round from plain JS, so it can stop at an exact count —
+`tests/callback.test.js` already proved this (`maxSolutions: 3` → exactly 3 calls). For
+"a handful of solutions, then stop," only the second one actually does that.
 
-**The 37-step question stays open and is now parked.** Whether 36 cubes and a crossing
-can coexist is unresolved in both directions — never found, never refuted. It needs a
-37-step route. The likely cause of the UNKNOWNs is that forcing all 37 steps on leaves
-the solver no partial credit to hill-climb on. If it's ever revisited, the move is a
-smaller encoding (the boolean occupancy grid named in `tests/clearance.test.js`), not
-a longer cap. This is *not* blocking the blog post.
+**Without an objective, the inventory size is what decides speed — not `fill`, not
+`symmetryBreaking`, not box size.** Measured on the browser's build, `allSolutions` +
+`fill: true` against the model's real 18-cube `SET` took 16 s for the first solution and
+~26-28 s per round after — worse than the *optimising* search's 2.4 s first-incumbent.
+Dropping just the two straights (18 → 16 cubes, otherwise identical) brought that to
+~2-3 s per round, climbing only slowly as no-good cuts accumulate (45 solutions in
+118 s). Two curve counts below 4 apiece were tried and came back `INFEASIBLE` in under a
+second — consistent with the standing note that four of one handedness is the
+geometric floor a loop can close at.
 
-**Weighted objective — decided, not implemented.** Replace "maximise cubes placed"
-with per-piece scores: **straights 1, interesting pieces (curves and the cross) 2**.
-Owen intends to fine-tune these, so they must live in **one easily-edited table**, not
-scattered through the model. He explicitly considered and **rejected** weighting
-straights 0 or negative — all-positive weights are the intent. Be aware of the
-consequence he accepted: since inventory is only a cap, all-positive weights mean the
-solver still crams in every piece that fits, so the weights mostly decide *which*
-pieces lose when something must be dropped.
+**`fill: true` is the better choice here, not a necessary evil.** The instinct that
+*not* forcing full-inventory spend would enumerate faster was tested and is backwards:
+without `fill`, CP-SAT reaches for the cheapest satisfying assignment first — a 4-piece
+ring, twice, dropping 12 of 16 cubes — and only grows the loop by a cube or two per
+no-good cut after that. It was both slower per round (irregular, 3-8 s) and a worse
+thing to watch (a slow crawl up in size, rather than a stream of full, distinct
+16-cube layouts).
 
-**`optionalSteps` goes away entirely — decided, not implemented.** Not a flipped
-default; removed. The step budget becomes an upper bound always, used steps a
-contiguous prefix. The knock-on to handle properly rather than work around: ~10
-`allSolutions` enumeration sites (`tests/solver.test.js`, `collisions`, `clearance`,
-`inventory`, `cross`) currently rely on `optionalSteps: false` meaning "loops of
-*exactly* N", checked against the DFS oracle. Since `enumerate.js` already does
-up-to-N, this is call-site work — but every one of those tests changes what it
-asserts, so change them deliberately and don't let a silently-weakened constraint
-through. That tier is what caught a real unenforced-constraint bug before.
+**Everything from this session and the one before it is committed on `main`.** Working
+tree was clean before this handoff except for one throwaway root-level probe script
+(`tmp-jitter.mjs`, testing the random-weight tie-break idea CLAUDE.md already documents
+as a dead end), now deleted rather than committed.
 
-**Two questions left open for Owen, deliberately not decided.**
-
-1. *What counts as "small enough"?* Nobody has measured single-worker browser timings
-   at any set size, so step 1 is written as a measurement task rather than a target.
-   Owen has not said whether interactive means a second or two, or whether ten
-   seconds behind a spinner is acceptable. Ask before optimising for the wrong number.
-2. *How strict is "one definition"?* Read here as killing the string-name indirection
-   while keeping `STARTER`/`DELUXE` as product facts. Owen has not confirmed that
-   reading.
-
-**Nothing is committed.** Everything from the last two sessions is uncommitted working
-tree — 11 modified files plus untracked `python/`, `scripts/check-route.js`,
-`scripts/export-model.js`. `npm test` passed clean at last check (116 pass, 15 skipped
-without `SLOW=1`). The fast tier is now ~68 s, not the ~35 s documented in `CLAUDE.md`.
+**Full-inventory ties are proven live now, not just argued from the objective's shape.**
+Every layout the live scene draws scores the same (32, for the 16-cube set) — direct,
+repeated confirmation of the `SCORES`-is-inert-at-full-inventory finding, seen this time
+as an actual behaviour rather than an algebraic argument.
