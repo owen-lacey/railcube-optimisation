@@ -38,10 +38,14 @@ if (Object.keys(LETTER_OF).length !== PIECE_TYPES.length) {
  * The inventories these answers were solved against.
  *
  * They live here, as data, rather than as exports from track.js, because that is
- * what they are: facts about runs that already happened. The model holds one set
- * — see `SET` in track.js — and none of these three is it. Two of the layouts
- * below cannot be built from the model's set at all, which is why each entry has
- * to say what it was solved against instead of naming a set the code still has.
+ * what they are: facts about runs that already happened. Two of the layouts below
+ * cannot be built from the model's set at all, which is why each entry has to say
+ * what it was solved against instead of naming a set the code still has.
+ *
+ * That applies to the model's own set too, which is why `MODEL_SET` restates its
+ * counts rather than importing `SET`. An entry records the inventory a run really
+ * used; a name is free to change meaning afterwards, and then the entry would be
+ * claiming something that never happened.
  *
  * The published product counts are documented, with sources, in docs/pieces.md.
  */
@@ -54,6 +58,12 @@ const DELUXE_SET = {
 /** What Owen owns: the starter set plus four inside curves, one straight swapped
  * for a cross. Derived rather than restated, so the differences stay visible. */
 const OWENS_36 = { ...STARTER_SET, insideCurve: 8, straight: STARTER_SET.straight - 1, cross: 1 };
+/** The set the model itself holds — `SET` in track.js, as it stood when these two
+ * were solved: four of every curve, which is the floor a loop can close at, plus two
+ * straights. Small enough that the browser's single worker can prove it optimal. */
+const MODEL_SET = {
+  straight: 2, leftCurve: 4, rightCurve: 4, insideCurve: 4, outsideCurve: 4, cross: 0,
+};
 
 /**
  * Each entry records the question that was asked, so a stale answer is obvious:
@@ -63,6 +73,28 @@ const OWENS_36 = { ...STARTER_SET, insideCurve: 8, straight: STARTER_SET.straigh
  *   proved  whether the solver proved it optimal, or merely got that far in time
  */
 export const LAYOUTS = {
+  // The model's own set, spent in full: 18 cubes, 34 points, nothing left in the box.
+  // Proved optimal in 34 s on the browser's single worker, 7.8 s at eight workers with
+  // symmetry breaking. This is the layout `solveTrack`'s `hint` starts a search from.
+  set: {
+    shape: 'LIRIROSOLORLLSORII',
+    set: MODEL_SET, box: 6, proved: true,
+    note: "the model's set — 18 cubes, nothing dropped",
+  },
+  // The same question put to a different solver: native OR-Tools 9.14, driven by a
+  // separately written Python model, answered with this instead — a different layout
+  // spending the same 18 cubes for the same 34 points. Two implementations, two
+  // optima, one value, which is evidence the model is right rather than merely
+  // self-consistent.
+  //
+  // That Python model has since been deleted, so this shape is the only thing left of
+  // it. It lives here rather than in a comment because a witness under test keeps
+  // being a witness, and a witness in prose stops the moment something drifts.
+  setOnNativeOrTools: {
+    shape: 'LRRIIOOSRLLOOLSRII',
+    set: MODEL_SET, box: 6, proved: true,
+    note: 'the same set and the same score, found independently on native OR-Tools',
+  },
   // Every cube the starter set ships, in one closed loop, nothing left over —
   // 16 straights, 4 of each curve, which is the set exactly. Proved optimal in
   // 200 s, filling 7×7×8 cells.

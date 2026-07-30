@@ -14,18 +14,26 @@
 //   flavour what that answer actually looks like — a set whose best layout is a
 //           flat ring is a bad set however quickly it solves
 //
+// Speed is now traced rather than sampled: one solve reports every incumbent through
+// `onSolution`, with the solver's own wall time, so the (time, score) curve comes out
+// of a single run. It used to take one run per deadline to guess at the same shape.
+//
+// `--hint=<shape>` starts the search from a known layout. Measured on the browser's
+// build over the model's 18-cube set: unhinted, the first layout arrives at 29.3s and
+// the proof at 36.8s; hinted from the 26-point inversion loop, 2.4s and 14.0s.
+//
 // Nothing here trusts the solver's own account of a route. Every number in the
 // flavour columns is computed from the route chained back through src/track.js.
 
 import { readFileSync } from 'node:fs';
 import { solveTrack } from '../src/solver/index.js';
+import { routeOf, shapeOf } from '../src/layouts.js';
 import { chainTrack, SCORES } from '../src/track.js';
 
-const LETTER = {
+const POOL_LETTER = {
   straight: 'S', cross: 'X', leftCurve: 'L',
   rightCurve: 'R', insideCurve: 'I', outsideCurve: 'O',
 };
-const shape = route => route.map(t => LETTER[t]).join('');
 const total = set => Object.values(set).reduce((a, b) => a + b, 0);
 
 /**
@@ -111,22 +119,36 @@ function flavour(route) {
   };
 }
 
-const run = async (set, maxTimeInSeconds) => {
+/**
+ * One solve, with the whole improving curve recorded as it happens.
+ *
+ * This used to be several solves at different deadlines, sampling the curve at a few
+ * points, because there was no way to see inside a solve. `onSolution` reports every
+ * incumbent with the solver's own wall time, so one run now yields the trace the
+ * deadline slices were approximating — and yields it in the time of the longest slice
+ * rather than the sum of all of them.
+ */
+const run = async (set, maxTimeInSeconds, hint) => {
   const started = process.hrtime.bigint();
+  const trace = [];
   const result = await solveTrack({
     steps: total(set), box: 6, minY: 0, exclude: ['cross'], inventory: set,
-    objective: 'maximiseScore', symmetryBreaking: true, maxTimeInSeconds,
+    objective: 'maximiseScore', symmetryBreaking: true, maxTimeInSeconds, hint,
+    onSolution: ({ seconds, score, route }) => trace.push({ seconds, score, route }),
   });
-  return { ...result, seconds: Number(process.hrtime.bigint() - started) / 1e9 };
+  return { ...result, trace, seconds: Number(process.hrtime.bigint() - started) / 1e9 };
 };
 
 const arg = (name, fallback) => {
   const found = process.argv.find(a => a.startsWith(`--${name}=`));
   return found ? found.slice(name.length + 3) : fallback;
 };
-const SLICES = arg('slices', '2,5,10,30').split(',').map(Number);
-const REPS = Number(arg('reps', 2));
+const REPS = Number(arg('reps', 1));
 const PROVE_CAP = Number(arg('prove-cap', 180));
+// A layout to start each solve from, as a shape string — `--hint=LIRIROSOLORLLSORII`.
+// Only sound for a candidate that can actually build it, so this is left off by
+// default: the ladder's whole point is that the sets differ.
+const HINT = arg('hint', null);
 // More than one ladder at a time, so two flavours can be compared in one run
 // under the same machine load.
 const LADDER = arg('ladder', 'curvesHeld');
@@ -146,61 +168,53 @@ if (threaded) {
   console.log('!! Re-run with `node --conditions=browser` — these numbers are not the '
     + 'browser\'s.\n');
 }
-// Solution callbacks are what would turn the slice probes below into a real
-// (time, score) curve. Until cpsat-js grows them, this samples the curve at a few
-// points instead, and says so rather than presenting samples as a trace.
-console.log(`Sampling best-score-by-deadline at ${SLICES.join('/')}s, ${REPS} rep(s) each. `
-  + 'cpsat-js has no solution callback yet, so this is a sampled curve, not a traced one.');
-console.log(`Then one run capped at ${PROVE_CAP}s to see whether optimality is provable.`);
+// One run per candidate, capped at PROVE_CAP, with every improving solution recorded
+// as the solver finds it. This used to be four solves at four deadlines, sampling the
+// curve because there was no way to watch one solve; cpsat-js 1.2.0's onSolution
+// reports incumbents with the solver's own wall clock, so the curve is now traced.
+console.log(`Tracing every incumbent of one solve per candidate, capped at ${PROVE_CAP}s, `
+  + `${REPS} rep(s).`);
+if (HINT) console.log(`Hinted from ${HINT} — only meaningful for sets that can build it.`);
 console.log(`Ladder: ${LADDER}.\n`);
 
 for (const set of CANDIDATES) {
   const held = total(set);
   const inventory = Object.entries(set)
-    .filter(([, n]) => n > 0).map(([pool, n]) => `${LETTER[pool]}${n}`).join(' ');
+    .filter(([, n]) => n > 0).map(([pool, n]) => `${POOL_LETTER[pool]}${n}`).join(' ');
   console.log(`── ${held} cubes  ${inventory}`);
 
-  for (const cap of SLICES) {
-    const scores = [];
-    let example = null;
-    for (let rep = 0; rep < REPS; rep++) {
-      const result = await run(set, cap);
-      if (result.route) {
-        scores.push(result.score);
-        example ??= result;
-      } else {
-        scores.push(null);
-      }
-    }
-    const got = scores.map(s => (s === null ? '—' : s)).join('/');
-    if (!example) {
-      console.log(`   ${String(cap).padStart(3)}s  nothing found (${got})`);
-      continue;
-    }
-    const f = flavour(example.route);
-    console.log(`   ${String(cap).padStart(3)}s  score ${got}  best: ${f.score} pts, `
-      + `${f.cubes}/${held} cubes, ${f.faces} faces, ${f.span}, `
-      + `${f.turnShare}% turns${f.inverts ? ', inverts' : ''}  ${shape(example.route)}`);
-  }
+  for (let rep = 0; rep < REPS; rep++) {
+    const solved = await run(set, PROVE_CAP, HINT ? routeOf(HINT) : undefined);
 
-  const proved = await run(set, PROVE_CAP);
-  if (proved.status === 'OPTIMAL' && proved.route) {
-    const f = flavour(proved.route);
-    console.log(`   PROVED optimal in ${proved.seconds.toFixed(1)}s: ${f.score} pts, `
-      + `${f.cubes}/${held} cubes, ${f.faces} faces, ${f.span}, `
-      + `${f.turnShare}% turns${f.inverts ? ', inverts' : ''}`);
-    console.log(`          ${shape(proved.route)}`);
-    // The disqualifier worth shouting about: fast to solve because there is
-    // nothing to solve. A set whose best answer leaves half itself in the box is
-    // the wrong set however good the timing looks.
-    if (f.cubes < held * 0.8) {
-      console.log(`   !! DEGENERATE — the optimum leaves ${held - f.cubes} of ${held} `
-        + 'cubes in the box');
+    // The curve, as the solver walked it. Each entry is re-flavoured from its own
+    // route, so "how good was it at four seconds" is answerable without a second run.
+    if (!solved.trace.length) {
+      console.log(`   no solution at all within ${PROVE_CAP}s (${solved.status})`);
     }
-  } else if (proved.status === 'INFEASIBLE') {
-    console.log('   !! INFEASIBLE — this set cannot close a loop at all');
-  } else {
-    console.log(`   not proved within ${PROVE_CAP}s (${proved.status})`);
+    for (const step of solved.trace) {
+      const f = flavour(step.route);
+      console.log(`   ${step.seconds.toFixed(1).padStart(6)}s  ${String(f.score).padStart(3)} pts  `
+        + `${f.cubes}/${held} cubes, ${f.faces} faces, ${f.span}, `
+        + `${f.turnShare}% turns${f.inverts ? ', inverts' : ''}`);
+    }
+
+    if (solved.status === 'OPTIMAL' && solved.route) {
+      const f = flavour(solved.route);
+      console.log(`   PROVED optimal in ${solved.seconds.toFixed(1)}s: ${f.score} pts, `
+        + `${f.cubes}/${held} cubes`);
+      console.log(`          ${shapeOf(solved.route)}`);
+      // The disqualifier worth shouting about: fast to solve because there is
+      // nothing to solve. A set whose best answer leaves half itself in the box is
+      // the wrong set however good the timing looks.
+      if (f.cubes < held * 0.8) {
+        console.log(`   !! DEGENERATE — the optimum leaves ${held - f.cubes} of ${held} `
+          + 'cubes in the box');
+      }
+    } else if (solved.status === 'INFEASIBLE') {
+      console.log('   !! INFEASIBLE — this set cannot close a loop at all');
+    } else {
+      console.log(`   not proved within ${PROVE_CAP}s (${solved.status})`);
+    }
   }
   console.log('');
 }

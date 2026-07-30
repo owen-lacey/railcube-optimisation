@@ -309,6 +309,36 @@ function boundMaterial({ model, rows, selectors, x, y, z, box, minY }) {
 }
 
 /**
+ * Start the search from a route we already have.
+ *
+ * A hint constrains nothing. The model is the same model and the optimum is the same
+ * optimum; all this does is give CP-SAT somewhere to begin. That matters here for one
+ * reason: the first thing the solver finds is the first thing there is to draw, and
+ * on the browser's single worker that is otherwise half a minute of blank screen.
+ *
+ * Only the true selectors are named, plus which steps are on at all. The false ones
+ * follow from `sum(selectors) == active` the moment the true one is fixed, so naming
+ * them would add a few thousand entries and no information.
+ */
+function hintRoute({ model, rows, selectors, active, route, startPose }) {
+  if (route.length > selectors.length) {
+    throw new Error(`hint is ${route.length} pieces but there are only ${selectors.length} steps`);
+  }
+  // Chained first, so an illegal hint throws here rather than quietly costing a solve.
+  chainTrack(route, startPose).forEach((piece, i) => {
+    const r = rows.findIndex(row =>
+      POSES[row.pose] === piece.pose && PIECE_TYPES[row.type] === piece.type);
+    if (r < 0) {
+      throw new Error(`hint step ${i} is a ${piece.type} at ${piece.pose}, which this model `
+        + 'has no row for — is that type excluded?');
+    }
+    model.addHint(selectors[i][r], 1);
+    model.addHint(active[i], 1);
+  });
+  for (let i = route.length; i < selectors.length; i++) model.addHint(active[i], 0);
+}
+
+/**
  * Two variables must differ.
  *
  * NOT `a.notEquals(b)`: through cpsat-js 1.1.0 that constraint is silently a no-op —
@@ -348,7 +378,7 @@ function addClearance(model, material, train) {
 function buildModel({
   steps, box, minY, exclude, startPose, collisions, checkTrain,
   inventory, objective, symmetryBreaking, crossings, minCrossings,
-  require: forced,
+  require: forced, hint, fill,
 }) {
   const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
   const model = new CpModel();
@@ -368,6 +398,15 @@ function buildModel({
   }
 
   const active = activeSteps(model, steps);
+  // Every step used, which turns "the most cubes you can spend" from something an
+  // objective reaches for into something the model demands. One equation does it: the
+  // active steps are a contiguous prefix, so pinning the last one on pins them all.
+  //
+  // With crossings off — the case this exists for — a step is a cube, so this is
+  // exactly "spend the whole inventory". With crossings on it is weaker than that: a
+  // revisit is a step that costs no cube, so a filled route could still leave one in
+  // the box.
+  if (fill) model.add(active[steps - 1].equals(1));
   const selectors = [];
   for (let i = 0; i < steps; i++) {
     const vars = stepSelectors(model, rows, i, active[i]);
@@ -437,6 +476,8 @@ function buildModel({
     apply({ model, active, revisit, rows, selectors });
   }
 
+  if (hint) hintRoute({ model, rows, selectors, active, route: hint, startPose });
+
   // Pin the route, for asking whether one particular track is feasible.
   if (forced) {
     forced.forEach((type, i) => {
@@ -491,8 +532,38 @@ const chosenRows = (result, selectors) =>
  *                answer may spend fewer cubes than the unconstrained optimum
  *   require      pin the piece type at each step, to ask whether one particular
  *                track is feasible
+ *   hint         a route to start the search from, as an array of piece types.
+ *                Advisory only — it cannot change the optimum, and a wrong one
+ *                costs search time and nothing else. Worth having because the
+ *                first solution found is the first one there is to draw. Chained
+ *                before it is used, so an illegal hint throws rather than solving
+ *   onSolution   called for each improving solution the search finds, with
+ *                `{ index, live, seconds, score, bound, route, pieces, dropped }`.
+ *                The last four are exactly what this function returns, from the
+ *                same code — so an incumbent and an answer can be drawn by one
+ *                draw. `index` counts from 0, `seconds` is the solver's own wall
+ *                clock, `bound` is the best objective bound at that moment (an
+ *                upper bound under maximiseScore, so score <= bound), and `live`
+ *                says whether it arrived during the search or was replayed at the
+ *                end — see cpsat-js, which can only enter JS from the search when
+ *                there is one worker. Watch-only: the return value is ignored
+ *   fill         demand that every step is used, rather than leaving the length to
+ *                an objective. With crossings off that is "spend the whole
+ *                inventory", so every solution is already as good as a loop can
+ *                be — which is what makes enumeration worth watching, since a
+ *                model with no objective has no way to report progress
+ *   enumerateAllSolutions
+ *                report every solution through onSolution as the search finds
+ *                them, rather than stopping at the first. Needs no objective:
+ *                CP-SAT enumerates only when there is nothing to optimise. Pair
+ *                it with `fill` or the stream is mostly four-piece rings, since
+ *                the step budget is an upper bound and short loops are plentiful.
+ *                Not the same thing as `allSolutions` below — this is one solve
+ *                streaming live, that is many solves with cuts between them, and
+ *                only that one works with an objective
  *   allSolutions enumerate every solution instead of returning one, by adding a
- *                no-good cut for each and re-solving until infeasible
+ *                no-good cut for each and re-solving until infeasible. onSolution
+ *                fires for every incumbent of every round, index counting on
  *   maxSolutions stop enumerating after this many and set `truncated` on the
  *                result, so a capped sweep can never be mistaken for a complete one
  *
@@ -505,8 +576,9 @@ const chosenRows = (result, selectors) =>
 export async function solveTrack({
   steps, box = 6, minY = null, exclude = [], startPose = 'UF',
   collisions = true, checkTrain = true, inventory,
-  objective, symmetryBreaking = false, crossings = false, minCrossings, require,
-  allSolutions = false, maxSolutions, maxTimeInSeconds, numWorkers,
+  objective, symmetryBreaking = false, crossings = false, minCrossings, require, hint,
+  fill = false, enumerateAllSolutions = false,
+  allSolutions = false, maxSolutions, maxTimeInSeconds, numWorkers, onSolution,
 }) {
   // Check the numbers before handing them to the solver: a NaN reaches cpsat-js
   // as a BigInt conversion error several frames deep, which says nothing useful.
@@ -522,14 +594,8 @@ export async function solveTrack({
   const solver = await getSolver();
   const { model, rows, selectors, active } = buildModel({
     steps, box, minY, exclude, startPose, collisions, checkTrain,
-    inventory, objective, symmetryBreaking, crossings, minCrossings, require,
+    inventory, objective, symmetryBreaking, crossings, minCrossings, require, hint, fill,
   });
-  // numWorkers picks which subsolver portfolio runs, not just how much
-  // parallelism: 1 or >= 6, never in between. Left unset it is 8 in Node, and
-  // clamped to 1 in the browser, which has no threads.
-  const params = maxTimeInSeconds || numWorkers
-    ? { ...(maxTimeInSeconds ? { maxTimeInSeconds } : {}), ...(numWorkers ? { numWorkers } : {}) }
-    : undefined;
   const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);
   // An inactive step is forbidden by its active flag; an active one by its row.
   const noGood = chosen => chosen.map((r, i) => (r < 0 ? active[i] : selectors[i][r].not()));
@@ -547,6 +613,41 @@ export async function solveTrack({
       route, pieces, score: scoreOf(pieces),
       dropped: held === null ? null : held - cubes,
     };
+  };
+
+  // Each improving solution, read the same way an answer is read: through the
+  // selectors and then through `report`, so it arrives chained, scored and counted
+  // rather than as solver variables. That ordering is the point — an illegal
+  // incumbent throws out of `chainTrack` at the moment it appears, before anything
+  // can draw it. A live callback runs inside the solve, so that throw unwinds
+  // through WASM and abandons the search, which is the right outcome for a model bug
+  // and a poor one to catch and carry on from.
+  let seen = 0;
+  const observe = onSolution && (solution => onSolution({
+    index: seen++,
+    live: solution.live,
+    seconds: solution.wallTime,
+    bound: solution.bestObjectiveBound,
+    ...report(routeOf(chosenRows(solution, selectors))),
+  }));
+
+  // numWorkers picks which subsolver portfolio runs, not just how much
+  // parallelism: 1 or >= 6, never in between. Left unset it is 8 in Node, and
+  // clamped to 1 in the browser, which has no threads — and that clamp is also what
+  // decides whether onSolution is live, since only a single-worker search can enter
+  // JS from inside itself.
+  if (enumerateAllSolutions && objective) {
+    throw new Error('enumerateAllSolutions needs a model with no objective — CP-SAT '
+      + 'enumerates only when there is nothing to optimise, so this would silently '
+      + `report improving solutions instead. Drop the objective, or use fill to demand `
+      + 'the length that maximiseScore would have reached for');
+  }
+
+  const params = {
+    ...(maxTimeInSeconds ? { maxTimeInSeconds } : {}),
+    ...(numWorkers ? { numWorkers } : {}),
+    ...(enumerateAllSolutions ? { enumerateAllSolutions } : {}),
+    ...(observe ? { onSolution: observe } : {}),
   };
 
   if (!allSolutions) {
@@ -573,5 +674,8 @@ export async function solveTrack({
     const chosen = chosenRows(result, selectors);
     routes.push(routeOf(chosen));
     model.addBoolOr(noGood(chosen));
+    // The hint told the solver where to start; from here on it points at a solution
+    // the cuts have just forbidden, which is the one place it is worse than nothing.
+    model.clearHints();
   }
 }
