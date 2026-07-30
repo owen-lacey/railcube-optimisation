@@ -7,6 +7,20 @@
   html, body { margin: 0; height: 100%; background: #0f172a; }
   body { display: grid; place-items: center; }
   poly-camera { width: 900px; height: 700px; display: block; }
+
+  /* The live-solve readout. Only ?scene=solve reveals it. */
+  #hud[hidden] { display: none; }
+  #hud {
+    position: fixed; top: 1rem; left: 1rem; padding: 0.75rem 1rem;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #e2e8f0; background: #1e293bd9; border: 1px solid #334155; border-radius: 6px;
+    min-width: 15rem;
+  }
+  #hud h1 { margin: 0 0 0.5rem; font-size: 13px; font-weight: 600; color: #94a3b8; }
+  #hud ol { margin: 0.5rem 0 0; padding: 0; list-style: none; }
+  #hud li { display: flex; justify-content: space-between; gap: 1rem; }
+  #hud .waiting { color: #94a3b8; }
+  #hud .failed { color: #ef6461; }
 </style>
 </head>
 <body>
@@ -23,6 +37,13 @@
     ?scene=inversion  one loop touching all six faces of a cube.
     ?scene=solved:<n> layouts CP-SAT found — the most pieces that will close into
                       one loop inside a given box, listed in src/layouts.js.
+    ?scene=solve      the solver enumerating: a fresh 16-cube layout (4 of every
+                      curve, no straights) appears roughly every 2-3 s, each one
+                      spending the whole inventory and none of them worth more than
+                      any other — see src/solver/index.js's `fill` and CLAUDE.md on
+                      why a full-inventory loop's score is constant. Needs a dev
+                      server that can resolve bare specifiers — see vite.config.js —
+                      because the solve runs in a module worker.
     ?scene=demo       the pre-loop illustration: a pose tour, not a legal track.
     ?poses=<type>     one piece in all 24 valid poses (straight, cross,
                       outsideCurve, leftCurve, rightCurve, insideCurve).
@@ -35,6 +56,11 @@
   PolyCSS shades each polygon by its normal, so the bevels read as moulded plastic edges.
   Building cuboids from raw vertices also sidesteps the poly-box scale X/Y swap gotcha.
 -->
+<div id="hud" hidden>
+  <h1>CP-SAT, working</h1>
+  <p id="hud-status" class="waiting">starting…</p>
+  <ol id="hud-log"></ol>
+</div>
 <poly-camera rot-x="65" rot-y="45" zoom="4" target="-40,30,0">
   <poly-scene id="scene" directional-direction="0.5,-0.7,0.6" directional-intensity="1" ambient-intensity="0.5">
     <poly-orbit-controls drag wheel></poly-orbit-controls>
@@ -187,6 +213,10 @@
       camera: { zoom: 7.5, target: '-40,0,30', 'rot-x': 60, 'rot-y': 225 },
     },
     demo: { pieces: demoScene, camera: { zoom: 2.8, target: '20,30,25' } },
+    // ?scene=solve — the solver enumerating. Nothing to draw until the first
+    // solution arrives (a few seconds); `live` is what turns the worker on further
+    // down.
+    solve: { pieces: [], drive: true, live: true },
     poses: { pieces: galleryPieces, camera: { zoom: 4.4 / gap, target: `${30 * gap},${-50 * gap},0` } },
     ...solvedScenes,
   };
@@ -561,11 +591,22 @@
 
   // Cubes only. A crossed cross is in the route twice — the train drives over it
   // both times — but there is one cube there, so the second pass must not mesh a
-  // duplicate on top of the first. runTrain still gets the whole route below.
-  for (const { cell, type, pose, color } of active.pieces.filter(p => !p.revisit)) {
-    const polygons = translate(rotate(GEOMETRY[type](color), poseRotation(pose)), toWorld(cell));
-    scene.add({ polygons, objectUrls: [], warnings: [], dispose: () => {} }, {});
+  // duplicate on top of the first. The train still gets the whole route below.
+  //
+  // The handles are kept because the live scene replaces the layout whenever the
+  // solver improves on it. Nothing is reused across a redraw: a better layout is a
+  // different number of pieces in different places, and PolyCSS re-mounts a mesh whose
+  // geometry changes anyway, so there is nothing to be saved by being clever. This
+  // happens a handful of times per solve, not per frame.
+  let drawn = [];
+  function drawPieces(pieces) {
+    for (const handle of drawn) handle.dispose();
+    drawn = pieces.filter(p => !p.revisit).map(({ cell, type, pose, color }) => {
+      const polygons = translate(rotate(GEOMETRY[type](color), poseRotation(pose)), toWorld(cell));
+      return scene.add({ polygons, objectUrls: [], warnings: [], dispose: () => {} }, {});
+    });
   }
+  drawPieces(active.pieces);
 
   // ---- Where the rail runs through each piece -----------------------------
   // railMap(u, w, s) is the point `u` to the right of the rail and `w` above it,
@@ -798,15 +839,24 @@
   // Drive the train round the loop at a steady speed. Between two rail samples
   // both the heading and the up direction are blended and squared back up, so
   // the train leans into the corners instead of snapping between facets.
-  function runTrain(placed) {
-    const path = trackPath(placed);
-    const gaps = path.map((p, k) => len(sub(path[(k + 1) % path.length].pos, p.pos)));
-    const lap = gaps.reduce((a, b) => a + b, 0);
-    const SPEED = 40; // scene units per second — two cubes a second
-    const place = addTrain();
-
+  //
+  // One loop for the life of the page, with a route that can be swapped: the live
+  // scene hands it a new layout each time the solver finds a better one, and starting
+  // a second loop per layout would leave every previous one running as well, each
+  // driving the same train from a different track.
+  const SPEED = 40; // scene units per second — two cubes a second
+  function trainDriver() {
+    // Built on the first route, not up front: an unhinted solve has nothing drawn for
+    // its first half-minute, and a train parked in mid-air over no track at all is a
+    // worse picture than an empty box.
+    let place = null;
+    let path = [], gaps = [], lap = 0;
     let k = 0, travelled = 0; // travelled = distance to the start of sample k
+
     requestAnimationFrame(function tick(now) {
+      requestAnimationFrame(tick);
+      if (!lap) return; // no track yet, so nowhere to put a train
+
       let d = (now / 1000 * SPEED) % lap;
       if (d < travelled) { k = 0; travelled = 0; } // lapped: back to the start
       while (d - travelled >= gaps[k]) { travelled += gaps[k]; k = (k + 1) % path.length; }
@@ -818,11 +868,78 @@
       const dot = raw.reduce((acc, v, i) => acc + v * fwd[i], 0);
       const up = unit(raw.map((v, i) => v - dot * fwd[i])); // square up against the heading
       place(blend(a.pos, b.pos), [cross(fwd, up), fwd, up]);
-      requestAnimationFrame(tick);
     });
+
+    return placed => {
+      if (!placed.length) return;
+      place ??= addTrain();
+      path = trackPath(placed);
+      gaps = path.map((p, i) => len(sub(path[(i + 1) % path.length].pos, p.pos)));
+      lap = gaps.reduce((a, b) => a + b, 0);
+      k = 0; travelled = 0; // the cursor indexed the old path; it means nothing now
+    };
   }
 
-  if (active.drive) runTrain(active.pieces);
+  const drive = active.drive ? trainDriver() : null;
+  if (drive) drive(active.pieces);
+
+  // ---- ?scene=solve — the search, drawn as it happens ----------------------
+
+  if (active.live) {
+    const hud = document.getElementById('hud');
+    const status = document.getElementById('hud-status');
+    const log = document.getElementById('hud-log');
+    hud.hidden = false;
+
+    const line = (left, right) => {
+      const li = document.createElement('li');
+      li.append(Object.assign(document.createElement('span'), { textContent: left }),
+        Object.assign(document.createElement('span'), { textContent: right }));
+      log.append(li);
+      return li;
+    };
+
+    status.textContent = 'nothing to draw until the first layout — a few seconds away';
+
+    // The route is chained again here rather than trusted from the worker, so the
+    // layout on screen is derived from the same route the solver claimed and by the
+    // same code every other scene uses.
+    const worker = new Worker(new URL('./solve-worker.js', import.meta.url), { type: 'module' });
+    let framed = false;
+
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'error') {
+        status.textContent = `failed: ${data.message}`;
+        status.className = 'failed';
+        return;
+      }
+      if (data.type === 'done') {
+        status.textContent = data.truncated
+          ? `stopped after ${data.count} of ${data.total} layouts`
+          : `enumerated all ${data.count} layouts — none left to find`;
+        status.className = '';
+        return;
+      }
+
+      const pieces = paint(chainTrack(routeOf(data.shape)));
+      drawPieces(pieces);
+      drive(pieces);
+      // Framed once, on the first layout, and then left alone. Reframing on every
+      // solution makes the camera jump about while the thing you are watching is the
+      // layout, and every layout of one inventory is much of a size anyway.
+      if (!framed) {
+        framed = true;
+        for (const [attr, value] of Object.entries(frame(pieces).camera)) {
+          cam.setAttribute(attr, String(value));
+        }
+      }
+      const cubes = pieces.filter(p => !p.revisit).length;
+      line(`${data.seconds.toFixed(1)}s`, `${data.score} pts · ${cubes} cubes`);
+      status.textContent = `layout ${data.index + 1} of ${data.total} — enumerating…`;
+    };
+
+    worker.postMessage({ maxTimeInSeconds: 300 });
+  }
 </script>
 </body>
 </html>

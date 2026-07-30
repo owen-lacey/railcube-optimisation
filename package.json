@@ -4,9 +4,13 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "build-sheet": "node scripts/build-sheet.js"
+    "build-sheet": "node scripts/build-sheet.js",
+    "spike": "vite"
   },
   "dependencies": {
-    "cpsat-js": "^1.1.0"
+    "cpsat-js": "^1.3.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
   }
 }
