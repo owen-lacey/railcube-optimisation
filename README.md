@@ -39,9 +39,10 @@ installs are needed before it will build.
 ## Deployment
 
 `.github/workflows/pages.yml` builds the site and publishes it to GitHub Pages on every push
-to `main`. It needs Pages turned on first: **Settings → Pages → Source: GitHub Actions**.
-Until that is done the build step passes and the deploy step fails, which is expected rather
-than a problem with the workflow.
+to `main`. It turns Pages on itself the first time it runs (`configure-pages` with
+`enablement: true`), so there is nothing to set up by hand. If that ever fails — an org
+policy can forbid it — the manual equivalent is **Settings → Pages → Source: GitHub
+Actions**.
 
 ## The solver
 
