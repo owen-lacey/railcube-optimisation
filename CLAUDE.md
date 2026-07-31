@@ -20,10 +20,15 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 
 | File | |
 |---|---|
-| `src/track.js` | poses, the piece catalogue, `SCORES`, both hard constraints. The single source of truth — solver, tests and spike all import it |
+| `src/track.js` | poses, the piece catalogue, `SCORES`, both hard constraints. The single source of truth — solver, tests and site all import it |
 | `src/routes.js` | known-good routes |
 | `src/enumerate.js` | brute-force DFS. The oracle the solver is checked against |
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |
+
+The showcase site is `site/` — SvelteKit, prerendered to static files, deployed to GitHub
+Pages by `.github/workflows/pages.yml`. It has its own `package.json`, and it imports the
+model from `src/` by relative path rather than copying it, so both installs are needed
+before it builds. `npm run site` from the root starts it.
 
 **The step budget is always an upper bound.** `steps` is the most pieces a loop may have;
 the used ones are a contiguous prefix and the tail is switched off. So the model is
@@ -77,16 +82,25 @@ rewritten; it was never committed.
 
 Track layouts and the train are rendered with [PolyCSS](https://polycss.com) (`@layoutit/polycss`), a CSS 3D engine that renders meshes as real DOM elements. Use the `polycss` skill (`.claude/skills/polycss/`) when touching visualisation code — it has the API cheat-sheet, verified gotchas where the official docs are wrong, and the full docs mirrored offline. A working example lives at `spikes/polycss/index.html`.
 
-Serve the spike with **Vite, from the repo root** — `npm run spike`, then open
-`/spikes/track-piece/index.html`. Root, because it imports `../../src/track.js` from
-outside the spike directory; Vite rather than `python3 -m http.server`, because
-`?scene=solve` runs the solver in a module worker, that worker imports the bare
-specifier `cpsat-js`, and a browser cannot resolve one — nor can a worker be given an
-import map, which are window-only. See `vite.config.js`, which also documents why
-`optimizeDeps.exclude` and no COOP/COEP.
+**The renderer lives in the site now** — `site/src/lib/render/`, split into `dimensions.js`
+(measurements), `vec.js` (the project → PolyCSS axis map and pose rotations), `pieces.js`
+(one geometry generator per piece type), `rail.js` (where the rail runs, plus the
+`assertRailMouths` check that runs at import), `train.js` (the lofted body) and `viewer.js`
+(the imperative PolyCSS binding). `site/src/lib/scenes.js` is the scene catalogue that the
+old `?scene=` query parameters used to select. The 945-line `spikes/track-piece/index.html`
+this was extracted from is gone; `spikes/polycss/index.html` stays as the minimal
+working example.
 
-`?scene=solve` is the live one, but not an optimising one: it enumerates rather than
-maximises. `spikes/track-piece/solve-worker.js` runs `allSolutions: true, maxSolutions`
+Run it with `npm run site` from the repo root (or `npm --prefix site run dev`). The site
+imports the model by relative path — `../../../src/track.js` — so `site/vite.config.js`
+sets `server.fs.allow` to reach outside its own root, and it still needs
+`optimizeDeps.exclude: ['cpsat-js']` and deliberately still sets no COOP/COEP; both
+comments moved there from the deleted root `vite.config.js`. It also sets
+`worker.format: 'es'`, because the solve worker's bundle code-splits on cpsat-js's glue
+and Rollup cannot code-split into Vite's default `iife` worker format.
+
+The `/solve` page is the live one, but not an optimising one: it enumerates rather than
+maximises. `site/src/lib/solve-worker.js` runs `allSolutions: true, maxSolutions`
 against a 16-cube curves-only inventory (4 of every curve, no straights), with `fill`
 forcing every solution to spend the whole thing — so a fresh, legal, full layout appears
 roughly every 2-3 s, and every one of them ties on score (`CLAUDE.md`, above, on why a
@@ -98,6 +112,18 @@ optimum. `enumerateAllSolutions` (streaming one uncapped search) was tried first
 rejected — cpsat-js's `onSolution` return value is ignored, so nothing can stop that
 search by count, only by `maxTimeInSeconds`. `allSolutions` + `maxSolutions` (re-solving
 with a no-good cut per round) is the one that can actually be capped at a number.
+
+**What "pause" can honestly mean on that page.** `solve()` blocks its thread for a whole
+round and cpsat-js ignores `onSolution`'s return value, so a running sweep cannot be
+paused. The page therefore separates two things and says so in the copy: *pause* stops the
+canvas advancing onto each new layout while the search carries on filling the list, and
+*stop* ends the sweep. Every layout found stays in the list and can be clicked back to,
+which costs nothing because only the shape string ever crosses the worker boundary.
+
+**Camera zoom is scaled by viewer size.** Every camera in `scenes.js` — auto-framed and
+hand-tuned alike — is calibrated against the old spike's fixed 900×700 canvas, so
+`viewer.js` scales `zoom` by the element's actual fit against that reference. Without it
+every layout is cropped on anything smaller, which is every card on the site.
 
 ## Solver: cpsat-js
 

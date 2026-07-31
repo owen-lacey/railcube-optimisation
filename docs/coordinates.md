@@ -210,7 +210,7 @@ room it needs. At twelve it changes everything — all four of the material-only
 loops are illegal once the train needs room, and so is everything at thirteen. So the
 earlier "twelve" was an upper bound, and the honest figure is **fourteen**.
 
-Two things follow. The 14-piece loop drawn in the spike is not one over the minimum, it *is*
+Two things follow. The 14-piece loop the site draws is not one over the minimum, it *is*
 the minimum. And the four 12-piece loops are not four shapes but one: all four are the same
 cyclic sequence read from a different starting piece, and swapping every left curve for a
 right one maps that sequence onto one of its own rotations, so it is its own mirror.
@@ -234,7 +234,7 @@ in about 85 seconds.
 | Starter set | 3 | 18 | 14 | 7×4×7 | best found in 400 s, not proved | `solved:cramped` |
 | Deluxe set | 7 | — | — | — | **no useful answer in 600 s** | — |
 
-Each is viewable in the spike as `?scene=solved:<name>`, alongside `solved:eight` — a
+Each is on the site's layouts page, alongside the figure of eight — a
 twelve-step figure of eight over eleven cubes, which crosses itself once. `npm run
 build-sheet -- <name>` prints any of them as a numbered click-together order.
 

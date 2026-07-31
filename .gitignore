@@ -1,1 +1,3 @@
 node_modules/
+site/.svelte-kit/
+site/build/
