@@ -5,12 +5,10 @@
   "scripts": {
     "test": "node --test",
     "build-sheet": "node scripts/build-sheet.js",
-    "spike": "vite"
+    "site": "npm --prefix site run dev",
+    "site:build": "npm --prefix site run build"
   },
   "dependencies": {
     "cpsat-js": "^1.3.0"
-  },
-  "devDependencies": {
-    "vite": "^7.1.5"
   }
 }
