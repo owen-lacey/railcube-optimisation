@@ -1,6 +1,7 @@
 <script>
   import { onDestroy } from 'svelte';
   import TrackViewer from '$lib/components/TrackViewer.svelte';
+  import ViewLink from '$lib/components/ViewLink.svelte';
   import { paint, frame, cubesIn } from '$lib/scenes.js';
   import { chainTrack } from '../../../../src/track.js';
   import { routeOf } from '../../../../src/layouts.js';
@@ -175,6 +176,7 @@
           layout {current.index + 1} · {current.cubes} cubes · {current.score} pts ·
           found at {current.seconds.toFixed(1)}s
         </span>
+        <ViewLink shape={current.shape} />
       {/if}
     </div>
 

@@ -1,5 +1,6 @@
 <script>
   import TrackViewer from '$lib/components/TrackViewer.svelte';
+  import ViewLink from '$lib/components/ViewLink.svelte';
   import { solvedLayouts, loop, inversion } from '$lib/scenes.js';
 
   const handBuilt = [loop, inversion];
@@ -64,6 +65,7 @@
           <li class="tag">{layout.proved ? 'proved optimal' : 'best found'}</li>
         </ul>
         <p class="shape">{layout.shape}</p>
+        <ViewLink shape={layout.shape} />
         <button
           type="button"
           onclick={() => (expanded = expanded === layout.id ? null : layout.id)}
