@@ -44,6 +44,30 @@ weights. Every full-inventory loop ties. Re-weighting the piece types cannot bre
 ties; only a term that reads the arrangement (faces reached, span, inversions) can. Worth
 knowing before tuning the table and expecting the answers to move.
 
+**Two parities every closed route obeys** — check them before asking a solver whether an
+inventory can be fully spent, because they answer some of those questions for free:
+
+- **The curve count is even.** Every curve — left, right, inside, outside alike — is a
+  quarter-turn of the cube, and quarter-turns split the 24 poses into two families of 12
+  that every curve swaps and every straight preserves (verified computationally against
+  `step`). Closing on the start pose means an even number of swaps. This is the 3D
+  generalisation of the flat-track rule that left-turns minus right-turns is a multiple
+  of 4 — which itself does *not* survive into 3D.
+- **The straight count is even too.** Every piece moves the head an odd number of cells,
+  so a closed route has even length (3D checkerboard); even total minus even curves
+  leaves even straights.
+
+So an inventory with an odd number of straights, or an odd total of curves (however split
+across the four types), can never be spent in full — no solve needed. The cross is the one
+escape hatch: a crossed cross is traversed twice, so the even quantity is really straights
+plus *uncrossed* crosses, and one uncrossed cross can pair with an odd straight.
+
+These parities are necessary, not sufficient — the geometry adds its own infeasibilities
+on top (two of each curve cannot close at all, per `src/track.js` on `SET`). Where the
+line sits: 4 straights + 3 of each curve *is* fully spendable — `explore.py` (full-spend
+is its only mode now) found and verified a 16-cube witness in ~12 s — so three-of-each
+closes; it is only the solve that slows there, and only two-of-each that is impossible.
+
 `npm test` runs the fast tier (~73 s, no dev dependencies). `SLOW=1 npm test` adds the exhaustive searches and full-inventory solves. Slow tests are skipped by name, never silently.
 
 Three rules that keep the tests honest, all learned the hard way:
@@ -71,8 +95,52 @@ That Python model has since been deleted. It existed because cpsat-js ran out of
 on the old 36-cube set, and the set is now browser-sized, so it was 436 lines of untested
 duplicate model — transitions, collisions, crossings, inventory, objective — with nothing
 keeping it in step. The DFS oracle in `src/enumerate.js` is the testable version of the same
-idea and runs on every `npm test`. If native CP-SAT is ever wanted again it has to be
-rewritten; it was never committed.
+idea and runs on every `npm test`. Native CP-SAT has since been rewritten as an exploration
+tool, on different terms — see the next section.
+
+### Exploration on native CP-SAT: `scripts/explore.py`
+
+`uv run scripts/explore.py` is the core model on native OR-Tools, and it is the tool for
+**exploratory questions that might not be performant** — bigger inventories, wider boxes,
+speculative constraint or objective tweaks, anything where a wrong guess on the WASM build
+costs minutes per attempt. Try things here first; only what survives is worth the slower
+JS solve.
+
+**Every piece in the inventory must be used — this is the only mode, and it diverges from
+`src/solver/index.js` on purpose.** The loop length is always `sum(inventory.values())`,
+inventory constraints are `==` not `<=`, and there is no `--steps`/`--fill` flag because
+there is nothing to switch between. That makes `INFEASIBLE` here mean something different
+from the JS model's steps-are-an-upper-bound reading above: it legitimately means *this
+inventory cannot be fully spent in this box*, not "box too small or a bug". Full spend also
+means every solution ties on score (see "SCORES is inert" above), so there is no
+`model.maximize` — the model is satisfiability-only and the score is computed arithmetically
+for reporting. This is faster, not just simpler: the 18-cube `SET` goes from proving optimal
+in ~21 s cold (~7 s hinted) down to ~3 s feasible, because there is no search over shorter
+loops and no improvement phase to prove past. If fill-always ever needs an
+arrangement-reading objective back (consecutive-piece penalties etc.), that is a separate
+piece of follow-up work, and would need to earn back that speed.
+
+It avoids the fate of the deleted Python model by construction, not by discipline:
+
+- **Geometry is never hand-ported.** It runs `node scripts/export-geometry.js` on every
+  invocation and reads the tables — poses, transition rows, cell footprints, `SCORES` —
+  off `src/track.js`. There is no generated file to go stale.
+- **Every answer goes back through the JS.** The solved route is checked with
+  `node scripts/check-route.js <shape> --any`; a solve that fails verification exits
+  nonzero. The Python side never trusts its own solver, same rule as the tests.
+- **Core scope only**: no crossings encoding, no cross piece (it errors on an inventory
+  holding crosses), no `allSolutions` loop. `src/solver/index.js` is the model of record —
+  it still allows dropping pieces and keeps the optimisation objective — and the two are
+  kept diffable function by function apart from the full-spend divergence above.
+
+Two consequences of that scope. First, anything it finds is a *candidate* until the JS
+model or a test owns it — a layout worth keeping goes into `src/layouts.js` where
+`tests/layouts.test.js` re-chains it, not into a comment. Second, if exploration ever
+needs a feature the JS model doesn't have, that is the signal to build it in the JS
+first, or accept that the Python has become the untested duplicate again.
+
+(Its first run reproduced the witness: `RSIILOOLRRSROOLIIL`, a third distinct 34-point
+18-cube layout.)
 
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 
