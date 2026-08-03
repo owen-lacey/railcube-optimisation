@@ -1,14 +1,10 @@
-// The scene catalogue — what the old spike selected with `?scene=` query
-// parameters, as data instead.
+// The scene factories the components are built on.
 //
-// Every entry is `{ id, title, blurb, pieces, drive, camera }`. `drive` marks
-// the scenes that are a real route, and so can have a train run on them: the
-// pose tour is loose pieces and the gallery is a catalogue, neither of them a
-// track.
+// A scene is `{ pieces, drive, camera }` — everything `TrackViewer` needs.
+// `drive` marks the scenes that are a real route, and so can have a train run
+// on them: a single piece and the pose gallery are catalogues, not tracks.
 
 import { chainTrack, cellsFor, SCORES } from '../../../src/track.js';
-import { loopRoute, inversionRoute } from '../../../src/routes.js';
-import { LAYOUTS, routeOf } from '../../../src/layouts.js';
 import { COLORS, START_COLOR } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
 
@@ -50,89 +46,6 @@ export const sceneFromRoute = (route, extra = {}) => {
   const pieces = paint(chainTrack(route));
   return { pieces, drive: true, camera: frame(pieces), ...extra };
 };
-
-// ---- The hand-built scenes ------------------------------------------------
-
-export const loop = {
-  id: 'loop',
-  title: 'A simple closed loop',
-  blurb: 'Fourteen pieces flat on the ground — four straights up each long side, one across '
-    + 'each short side, a green left curve at every corner. The chain throws unless the route '
-    + 'closes and no two pieces share a cell, so both hard constraints hold by construction.',
-  ...sceneFromRoute(loopRoute),
-};
-
-export const inversion = {
-  id: 'inversion',
-  title: 'All six faces',
-  blurb: 'One closed loop that puts the rail on every face of a cube: along the top, up both '
-    + 'side walls, across the front and the back, and hanging upside down underneath. '
-    + 'Fourteen pieces is not one over the minimum — it is the minimum, once the train needs '
-    + 'room to fit.',
-  // A compact 3D tangle rather than a flat layout: the view swings round behind
-  // it, where the two interlocking rings read as separate instead of overlapping.
-  ...sceneFromRoute(inversionRoute, {
-    camera: { zoom: 7.5, target: '-40,0,30', 'rot-x': 60, 'rot-y': 225 },
-  }),
-};
-
-// The pre-loop illustration, kept for the blog: NOT a legal track, just a tour
-// of the pose system with a ground run, a wall climb up the far column, a crest
-// onto its roof, and three loose pieces beside it.
-const demoPieces = [
-  { cell: [0, 0, 0], type: 'straight', pose: 'UF', color: '#f8fafc' }, // start cube — white
-  { cell: [0, 0, 1], type: 'straight', pose: 'UF', color: '#ffd166' },
-  { cell: [0, 0, 2], type: 'cross', pose: 'UF', color: '#b48ce8' }, // crossing — purple
-  { cell: [0, 0, 3], type: 'straight', pose: 'UF', color: '#ffd166' },
-  { cell: [0, 0, 4], type: 'straight', pose: 'FU', color: '#ffd166' }, // wall column: rail on front face, heading up
-  { cell: [0, 1, 4], type: 'straight', pose: 'FU', color: '#ffd166' },
-  { cell: [0, 2, 4], type: 'straight', pose: 'FU', color: '#ffd166' },
-  { cell: [0, 3, 4], type: 'outsideCurve', pose: 'FU', color: '#ef6461' }, // red — crests the wall onto its top
-  { cell: [0, 3, 3], type: 'straight', pose: 'UB', color: '#ffd166' }, // on the roof, heading back towards the viewer
-  // Four left curves click into the free-standing donut ring from the product
-  // photos: displacements sum to zero and the 2×2 footprints tile a 4×4 square.
-  { cell: [4, 0, 0], type: 'leftCurve', pose: 'UF', color: '#6bbf59' },
-  { cell: [2, 0, 1], type: 'leftCurve', pose: 'UL', color: '#6bbf59' },
-  { cell: [1, 0, -1], type: 'leftCurve', pose: 'UB', color: '#6bbf59' },
-  { cell: [3, 0, -2], type: 'leftCurve', pose: 'UR', color: '#6bbf59' },
-  { cell: [-2, 0, 3], type: 'rightCurve', pose: 'UF', color: '#5b8def' }, // blue — standalone
-  { cell: [-2, 0, 0], type: 'insideCurve', pose: 'UF', color: '#f2933a' }, // orange — valley turn, ground to wall
-];
-
-export const demo = {
-  id: 'demo',
-  title: 'A tour of the poses',
-  blurb: 'Not a legal track — loose pieces, shown to explain the pose system. A ground run '
-    + 'into a crossing, a wall climb, a crest onto the roof, the free-standing ring four left '
-    + 'curves click into, and a blue and an orange curve on their own.',
-  pieces: demoPieces,
-  drive: false,
-  camera: { zoom: 2.8, target: '20,30,25' },
-};
-
-// ---- The solved layouts ---------------------------------------------------
-
-/** How each layout is introduced. One line each — the prose comes later. */
-export const solvedLayouts = Object.entries(LAYOUTS).map(([name, layout]) => {
-  const pieces = paint(chainTrack(routeOf(layout.shape)));
-  const cubes = cubesIn(pieces);
-  const held = Object.values(layout.set).reduce((a, b) => a + b, 0);
-  return {
-    id: `solved:${name}`,
-    name,
-    title: layout.note,
-    shape: layout.shape,
-    cubes,
-    held,
-    steps: layout.shape.length,
-    score: scoreOf(pieces),
-    box: layout.box,
-    proved: layout.proved,
-    pieces,
-    drive: true,
-    camera: frame(pieces),
-  };
-});
 
 // ---- The 24-pose gallery --------------------------------------------------
 
@@ -182,5 +95,3 @@ export function singlePiece(type) {
     camera: { target, zoom: 30 / diagonal, 'rot-x': 62, 'rot-y': 45 },
   };
 }
-
-export const scenes = { loop, inversion, demo };

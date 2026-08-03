@@ -25,10 +25,21 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 | `src/enumerate.js` | brute-force DFS. The oracle the solver is checked against |
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |
 
-The showcase site is `site/` — SvelteKit, prerendered to static files, deployed to GitHub
-Pages by `.github/workflows/pages.yml`. It has its own `package.json`, and it imports the
-model from `src/` by relative path rather than copying it, so both installs are needed
-before it builds. `npm run site` from the root starts it.
+`site/` is the SvelteKit app the blog post will be written in — currently a blank page — plus
+the components it will draw with, developed in Storybook (`.storybook/`, `npm run storybook`).
+Nothing is deployed: the post is the artefact, so the GitHub Pages workflow is gone. The four
+showcase pages that used to live here (overview, pieces, layouts, a live `/solve`) are gone
+with it; what survived is the renderer, two thin components over it, and fourteen stories —
+one per piece, one per piece's 24-pose gallery, and a `Layout` story whose `shape` control
+takes any shape string, which is what the old `/view?shape=` page did.
+
+**One `package.json`, at the repo root**, covering the model, the app and Storybook. The app
+imports the model by relative path (`../../../src/track.js`) and they share one
+`node_modules`, so one `npm install` does everything. The app's *source* stays in `site/`
+while its config lives at the root — `svelte.config.js` remaps `kit.files` at `site/src/…`
+and `outDir` to `site/.svelte-kit`, because SvelteKit and Storybook both take their project
+root from the cwd. Every `files` entry is set explicitly, including the ones with no file
+yet, so nothing defaults to a path inside `src/` — which here is the model, not an app.
 
 **The step budget is always an upper bound.** `steps` is the most pieces a loop may have;
 the used ones are a contiguous prefix and the tail is switched off. So the model is
@@ -113,8 +124,8 @@ there is nothing to switch between. That makes `INFEASIBLE` here mean something 
 from the JS model's steps-are-an-upper-bound reading above: it legitimately means *this
 inventory cannot be fully spent in this box*, not "box too small or a bug". Full spend also
 means every solution ties on score (see "SCORES is inert" above), so there is no
-`model.maximize` — the model is satisfiability-only and the score is computed arithmetically
-for reporting. This is faster, not just simpler: the 18-cube `SET` goes from proving optimal
+`model.maximize` by default — the model is satisfiability-only and the score is computed
+arithmetically for reporting. (`--random` is the exception, below.) This is faster, not just simpler: the 18-cube `SET` goes from proving optimal
 in ~21 s cold (~7 s hinted) down to ~3 s feasible, because there is no search over shorter
 loops and no improvement phase to prove past. If fill-always ever needs an
 arrangement-reading objective back (consecutive-piece penalties etc.), that is a separate
@@ -142,6 +153,46 @@ first, or accept that the Python has become the untested duplicate again.
 (Its first run reproduced the witness: `RSIILOOLRRSROOLIIL`, a third distinct 34-point
 18-cube layout.)
 
+**`--random` is how you get a different layout each run.** It maximises a random weight per
+*(step, piece type)* — the arrangement-reading term "SCORES is inert" above says is the only
+thing that can break the full-spend tie, since every such loop holds the same multiset of
+pieces and only their order differs. `--seed` reproduces a run and is printed when not
+given; `--rounds N` re-randomises and re-solves N times, reporting how many of the N came
+back distinct. Two things measured rather than assumed:
+
+- **It does not need the optimum proved, which is what makes it usable.** Every round times
+  out at `feasible` — 60 s was not enough to prove a random optimum on the 18-cube `SET` —
+  and yet the weights steer the very first dive, so 6 rounds at **5 s each** gave 6 distinct
+  layouts, and 4 rounds at 30 s gave 4 distinct on a 28-cube inventory. Set `--time` low;
+  the round line prints the status so a degraded round stays visible.
+- **`--random` and `--symmetry` are mutually exclusive**, and the script errors on the pair:
+  the mirror break fixes which handedness appears first, cutting away exactly the mirrored
+  layouts randomising is there to find.
+
+Distinctness is by shape string, so it counts rotations and mirrors as different layouts.
+
+**Long sweeps are recorded and resumable.** `--out FILE` appends one JSON Lines record per
+round — master seed, round seed, shape, score, span, wall time, status, and the config
+fingerprint — flushed before the next round starts, so a killed sweep loses only the round
+in flight and the file needs no repair. `--rounds 0` runs until stopped, and Ctrl-C prints
+the summary instead of a traceback. `--resume` carries on: it takes the master seed from the
+file, replays the seed stream past the rounds already recorded, and continues, so nothing is
+re-trodden. Four things that keep the file honest:
+
+- **`--rounds` is a total for the file, not an increment**, so `--rounds 6 --resume` on a
+  3-round file does rounds 4-6 rather than 3 more.
+- **Resume refuses on a changed question.** The config fingerprint (inventory, box, floor,
+  exclusions, start pose) is on every line and must match, because one file holding two
+  inventories is a file of incomparable layouts. Use a new `--out`.
+- **`--resume` with `--seed` is an error**, not a silent restart of the stream.
+- **`--out` with `--no-verify` is an error** — records claim to be verified layouts.
+
+Each round is a fresh `build_model`, so a long sweep re-pays model construction every round;
+that is the cost of new weights. `--random` does not exclude what it has already found, so
+long runs do re-discover layouts (the round line marks each `new` or `seen`). Feeding the
+recorded shapes back as no-good cuts would make a long sweep strictly productive, and is
+follow-up work rather than something this does.
+
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 
 `IntVar.notEquals` builds a constraint that is silently a no-op — two variables pinned to the same value still solve. `src/solver/index.js` uses a `differ` helper (a reified pair of strict inequalities) instead. `tests/library.test.js` asserts the bug still exists, so fixing the port will fail that test and point at the workaround to delete. `addAllDifferent` and `onlyEnforceIf` are fine, as are `addHint` and `onSolution`.
@@ -154,44 +205,37 @@ Track layouts and the train are rendered with [PolyCSS](https://polycss.com) (`@
 (measurements), `vec.js` (the project → PolyCSS axis map and pose rotations), `pieces.js`
 (one geometry generator per piece type), `rail.js` (where the rail runs, plus the
 `assertRailMouths` check that runs at import), `train.js` (the lofted body) and `viewer.js`
-(the imperative PolyCSS binding). `site/src/lib/scenes.js` is the scene catalogue that the
-old `?scene=` query parameters used to select. The 945-line `spikes/track-piece/index.html`
-this was extracted from is gone; `spikes/polycss/index.html` stays as the minimal
-working example.
+(the imperative PolyCSS binding). The 945-line `spikes/track-piece/index.html` this was
+extracted from is gone; `spikes/polycss/index.html` stays as the minimal working example.
 
-Run it with `npm run site` from the repo root (or `npm --prefix site run dev`). The site
-imports the model by relative path — `../../../src/track.js` — so `site/vite.config.js`
-sets `server.fs.allow` to reach outside its own root, and it still needs
-`optimizeDeps.exclude: ['cpsat-js']` and deliberately still sets no COOP/COEP; both
-comments moved there from the deleted root `vite.config.js`. It also sets
-`worker.format: 'es'`, because the solve worker's bundle code-splits on cpsat-js's glue
-and Rollup cannot code-split into Vite's default `iife` worker format.
+`site/src/lib/scenes.js` is the layer above: the factories that turn a thing into
+`{ pieces, drive, camera }`, which is all `TrackViewer` takes. `sceneFromRoute` for a route,
+`singlePiece(type)` and `poseGallery(type)` for the catalogue views, `frame` for the
+auto-framing, `paint`/`cubesIn`/`scoreOf` for the colours and the counts. Three components
+sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts PolyCSS, owns the
+rAF loop and the intersection/resize observers), `PieceViewer.svelte` (a piece type, alone
+or in all 24 poses) and `LayoutViewer.svelte` (a shape string). The stories are plain JS CSF
+files beside them.
 
-The `/solve` page is the live one, but not an optimising one: it enumerates rather than
-maximises. `site/src/lib/solve-worker.js` runs `allSolutions: true, maxSolutions`
-against a 16-cube curves-only inventory (4 of every curve, no straights), with `fill`
-forcing every solution to spend the whole thing — so a fresh, legal, full layout appears
-roughly every 2-3 s, and every one of them ties on score (`CLAUDE.md`, above, on why a
-full-inventory loop's score is constant). That inventory choice is deliberate and
-measured, not the model's own 18-cube `SET`: the same live-enumerate approach against
-`SET` took 16-70 s *per* layout, because dropping in the two straights turns "find one
-more way to spend the inventory" back into a search almost as hard as finding the
-optimum. `enumerateAllSolutions` (streaming one uncapped search) was tried first and
-rejected — cpsat-js's `onSolution` return value is ignored, so nothing can stop that
-search by count, only by `maxTimeInSeconds`. `allSolutions` + `maxSolutions` (re-solving
-with a no-good cut per round) is the one that can actually be capped at a number.
+**A shape string is always re-derived through `chainTrack`**, in `LayoutViewer` as it was on
+the old `/view` page: the chain throws unless the route closes and nothing collides, so an
+illegal string gets the model's own objection rendered as text rather than a drawing of
+nonsense. `Layout/Not a legal track` is that path under test by eye.
 
-**What "pause" can honestly mean on that page.** `solve()` blocks its thread for a whole
-round and cpsat-js ignores `onSolution`'s return value, so a running sweep cannot be
-paused. The page therefore separates two things and says so in the copy: *pause* stops the
-canvas advancing onto each new layout while the search carries on filling the list, and
-*stop* ends the sweep. Every layout found stays in the list and can be clicked back to,
-which costs nothing because only the shape string ever crosses the worker boundary.
+The root `vite.config.js` is now bare — `plugins: [sveltekit()]` and nothing else. Three
+workarounds the old `site/vite.config.js` carried are all gone with the solve page, and
+should not come back without a reason: `server.fs.allow` (the Vite root is the repo root
+now, so the model is inside it), and `optimizeDeps.exclude: ['cpsat-js']` +
+`worker.format: 'es'` (both existed for the solve worker; nothing the app imports reaches
+`cpsat-js` — `src/track.js` has no imports at all and `src/layouts.js` imports only
+`src/track.js`). Anything that solves in the browser again needs all three back, plus the
+deliberate absence of COOP/COEP headers, which is what keeps the browser on the
+single-worker build whose solution callbacks can actually reach JS mid-search.
 
 **Camera zoom is scaled by viewer size.** Every camera in `scenes.js` — auto-framed and
 hand-tuned alike — is calibrated against the old spike's fixed 900×700 canvas, so
 `viewer.js` scales `zoom` by the element's actual fit against that reference. Without it
-every layout is cropped on anything smaller, which is every card on the site.
+every layout is cropped on anything smaller.
 
 ## Solver: cpsat-js
 

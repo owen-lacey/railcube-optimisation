@@ -17,40 +17,36 @@ left over.
 | `src/routes.js`, `src/layouts.js` | known-good routes, and the layouts the solver found |
 | `src/enumerate.js` | brute-force DFS — the oracle the solver is checked against |
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |
-| `site/` | the SvelteKit showcase site |
+| `site/` | the SvelteKit app the blog post will be written in, and the components it draws with |
+| `.storybook/` | the Storybook those components are developed in |
 | `docs/` | the coordinate system and the physical piece reference |
 | `scripts/` | benchmarks, and `build-sheet` — a layout printed as a click-together order |
 
 ## Running it
 
+One `package.json` at the root covers the model, the app and Storybook, so one install does
+everything — the app imports the model from `src/` by relative path, and they share a
+`node_modules`.
+
 ```sh
-npm install          # the model's dependencies (cpsat-js)
+npm install          # the model, the app and Storybook
 npm test             # the fast tier, ~73 s. SLOW=1 npm test adds the exhaustive searches
 npm run build-sheet -- owen    # print a layout as build instructions
 
-npm --prefix site install
-npm run site         # the showcase site, on http://localhost:5173
-npm run site:build   # a static build, into site/build
+npm run storybook    # the components, on http://localhost:6006
+npm run dev          # the app, on http://localhost:5173
+npm run build        # a static build, into build/
 ```
 
-The site imports the model from `src/` by relative path rather than copying it, so both
-installs are needed before it will build.
-
-## Deployment
-
-`.github/workflows/pages.yml` builds the site and publishes it to GitHub Pages on every push
-to `main`. It turns Pages on itself the first time it runs (`configure-pages` with
-`enablement: true`), so there is nothing to set up by hand. If that ever fails — an org
-policy can forbid it — the manual equivalent is **Settings → Pages → Source: GitHub
-Actions**.
+Nothing is deployed: the blog post is the published artefact.
 
 ## The solver
 
 Optimisation uses [cpsat-js](https://github.com/owen-lacey/cpsat-js), a WebAssembly port of
-Google OR-Tools' CP-SAT that runs in the browser with no native dependencies. The site's
-`/solve` page runs a real search in a Web Worker in front of you — which is also why the
-browser gets the single-threaded build: the threaded one is five to ten times faster but
-cannot report progress mid-search, so the page would sit blank until the end.
+Google OR-Tools' CP-SAT that runs in the browser with no native dependencies. Nothing in the
+app solves — the layouts it draws are shape strings the solver has already found — but the
+port reports improving solutions through `onSolution`, so a search can be animated if the
+post ever wants one.
 
 See `CLAUDE.md` for the working notes, the measured results, and the mistakes worth not
 repeating.
