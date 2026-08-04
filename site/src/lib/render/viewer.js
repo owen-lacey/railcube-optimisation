@@ -8,8 +8,12 @@
 import { GEOMETRY } from './pieces.js';
 import { trainBody } from './train.js';
 import { trackPath } from './rail.js';
-import { SPEED } from './dimensions.js';
+import { SPEED, BODY_Z, TRAIN_H } from './dimensions.js';
 import { rotate, translate, toWorld, poseRotation, cross, sub, len, unit } from './vec.js';
+
+// The height of the body's centre above the rail — the point whose motion the
+// eye reads as the train's speed. Matches where `trainBody` puts the shell.
+const BODY_REF = BODY_Z + TRAIN_H / 2;
 
 /** PolyCSS's `add` takes a loader result; hand-built geometry fakes one. */
 const meshLike = polygons => ({ polygons, objectUrls: [], warnings: [], dispose: () => {} });
@@ -60,7 +64,16 @@ export function createViewer(cameraEl, sceneEl) {
       };
     }
     path = trackPath(pieces);
-    gaps = path.map((p, i) => len(sub(path[(i + 1) % path.length].pos, p.pos)));
+    // Pace the train by the body, not by the wheels. A rail sample is the point
+    // where the wheels touch the strip, and the body rides BODY_REF above it, so
+    // on a curve the body sweeps a different radius from the rail: 1.59× on the
+    // outside curve, whose rail hugs the cube's rounded edge at radius 11, and
+    // 0.70× on the inside curve. Holding the contact point at a constant speed
+    // therefore makes the visible train lurch through the red pieces and dawdle
+    // through the orange ones. Measuring the gaps on the body's own path instead
+    // holds the thing you can actually see at SPEED, and lets the wheels vary.
+    const ref = p => p.pos.map((v, i) => v + p.up[i] * BODY_REF);
+    gaps = path.map((p, i) => len(sub(ref(path[(i + 1) % path.length]), ref(p))));
     lap = gaps.reduce((a, b) => a + b, 0);
     k = 0; travelled = 0; // the cursor indexed the old path; it means nothing now
   }
