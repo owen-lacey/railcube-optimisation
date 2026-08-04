@@ -10,6 +10,7 @@ import { trainBody } from './train.js';
 import { trackPath } from './rail.js';
 import { SPEED, BODY_Z, TRAIN_H } from './dimensions.js';
 import { rotate, translate, toWorld, poseRotation, cross, sub, len, unit } from './vec.js';
+import { createCamera } from './camera.js';
 
 // The height of the body's centre above the rail — the point whose motion the
 // eye reads as the train's speed. Matches where `trainBody` puts the shell.
@@ -24,6 +25,7 @@ const meshLike = polygons => ({ polygons, objectUrls: [], warnings: [], dispose:
  */
 export function createViewer(cameraEl, sceneEl) {
   const scene = sceneEl.getScene();
+  const { frameTo, applyCamera } = createCamera(cameraEl);
 
   // Cubes only. A crossed cross is in the route twice — the train drives over it
   // both times — but there is one cube there, so the second pass must not mesh a
@@ -110,41 +112,6 @@ export function createViewer(cameraEl, sceneEl) {
     if (frame === null) return;
     cancelAnimationFrame(frame);
     frame = null;
-  }
-
-  // Every camera in the scene catalogue — the auto-framed ones and the
-  // hand-tuned ones alike — was calibrated against the old spike's fixed
-  // 900px-wide canvas. Here a viewer might be a 320px card or a full-width
-  // hero, so the zoom has to be scaled by how wide it actually is, or a layout
-  // framed to fit is cropped on every card.
-  const REFERENCE_WIDTH = 900;
-  const REFERENCE_HEIGHT = 700;
-  // A little slack so a layout framed to exactly fill the box does not touch
-  // the edges — the framing measures cubes, and a train riding on the outside
-  // of the top ones sits proud of that.
-  const MARGIN = 0.88;
-  let described = {};
-
-  /** Apply a camera description — only the attributes it names. */
-  function frameTo(camera) {
-    described = camera ?? {};
-    applyCamera();
-  }
-
-  /** (Re-)apply the current description at the element's current size. */
-  function applyCamera() {
-    const width = cameraEl.clientWidth || REFERENCE_WIDTH;
-    const height = cameraEl.clientHeight || REFERENCE_HEIGHT;
-    // Whichever dimension runs out first is the one that decides the fit, so a
-    // tall narrow card and a wide short one are both framed by their tighter
-    // side rather than always by width.
-    const fit = Math.min(width, height * (REFERENCE_WIDTH / REFERENCE_HEIGHT));
-    for (const [attr, value] of Object.entries(described)) {
-      const scaled = attr === 'zoom'
-        ? Number(value) * (fit / REFERENCE_WIDTH) * MARGIN
-        : value;
-      cameraEl.setAttribute(attr, String(scaled));
-    }
   }
 
   function destroy() {
