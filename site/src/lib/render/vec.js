@@ -37,12 +37,76 @@ export function poseRotation(pose) {
   return [cross(heading, face), heading, face]; // images of local X, Y (forwards), Z (up)
 }
 
+/**
+ * A turn of `degrees` about `axis`, as a rotation basis. Rodrigues' formula,
+ * written out columnwise because that is the form `rotate` and `compose` take:
+ * column c is the image of local axis c.
+ *
+ * The poses are all made of quarter- and half-turns, so this is not what puts a
+ * piece in its place — it is for turns that are not: the tilt a piece carries
+ * while it flies into position, and the arbitrary orientations the rotation test
+ * checks `polyRotation` against.
+ */
+export function axisAngle(axis, degrees) {
+  const [x, y, z] = unit(axis);
+  const t = degrees * Math.PI / 180;
+  const c = Math.cos(t), s = Math.sin(t), d = 1 - c;
+  return [
+    [c + x * x * d, x * y * d + z * s, x * z * d - y * s],
+    [x * y * d - z * s, c + y * y * d, y * z * d + x * s],
+    [x * z * d + y * s, y * z * d - x * s, c + z * z * d],
+  ];
+}
+
 /** The basis of A·B, from the bases of A and B. */
 export const compose = (a, b) =>
   [0, 1, 2].map(c => [0, 1, 2].map(r => [0, 1, 2].reduce((sum, k) => sum + a[k][r] * b[c][k], 0)));
 
 /** The basis of the inverse rotation, which for a rotation is the transpose. */
 export const transpose = basis => [0, 1, 2].map(c => [0, 1, 2].map(r => basis[r][c]));
+
+/**
+ * Part-way from one orientation to another, along the shortest arc: `t` of 0 is
+ * `from`, 1 is `to`, and the turn between them is spent at a constant rate.
+ *
+ * `axisAngle` covers a turn whose axis is *known* — the tilt a piece carries as
+ * it slides into place is about its own right, and that is written down. This
+ * covers the case where it is not: a cube being picked up off the floor starts
+ * at whatever orientation it fell into, so the axis has to be read back out of
+ * the difference between the two.
+ *
+ * Every rotation is a turn about some axis (Euler), and for a basis that axis is
+ * the eigenvector with eigenvalue 1. Reading it off the antisymmetric part is
+ * the cheap way to get it, and it is exactly the way that fails at a half-turn,
+ * where the antisymmetric part vanishes — so that gets the symmetric branch
+ * below rather than a fudge. Same care as `polyRotation`'s clamped `asin`, and
+ * for the same reason: the poses here are made of quarter- and half-turns, so
+ * the awkward cases are the common ones and not edge cases at all.
+ */
+export function turnToward(from, to, t) {
+  const d = compose(to, transpose(from));   // the turn still to be made, in world terms
+  const trace = d[0][0] + d[1][1] + d[2][2];
+  const cos = Math.max(-1, Math.min(1, (trace - 1) / 2));
+  const angle = Math.acos(cos);
+  if (angle < 1e-9) return from;            // nothing to turn, and so no axis to turn about
+  // basis[c][r] is row r of column c, so d[1][2] is row 2 of column 1 — i.e. the
+  // matrix entry m(2,1). The antisymmetric part is 2·sin(angle) times the axis.
+  const skew = [d[1][2] - d[2][1], d[2][0] - d[0][2], d[0][1] - d[1][0]];
+  const axis = len(skew) > 1e-6
+    ? unit(skew)
+    // A half-turn: the antisymmetric part is zero and the axis has to come from
+    // the symmetric part instead. d + I is 2·(axis ⊗ axis) there, so its largest
+    // column is the axis, up to a sign — and at exactly a half-turn the sign is
+    // genuinely undetermined: turning either way is the same shortest arc and
+    // ends in the same place, but goes round the other side on the way. The
+    // largest column is picked because it is the best conditioned, so the choice
+    // is arbitrary but stable rather than arbitrary and jumpy.
+    : unit([0, 1, 2].reduce((best, c) => {
+      const col = [0, 1, 2].map(r => d[c][r] + (c === r ? 1 : 0));
+      return len(col) > len(best) ? col : best;
+    }, [0, 0, 0]));
+  return compose(axisAngle(axis, angle * t * 180 / Math.PI), from);
+}
 
 /**
  * A rotation basis as PolyCSS's `rotation` transform: three Euler angles in

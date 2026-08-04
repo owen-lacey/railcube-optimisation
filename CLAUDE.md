@@ -204,23 +204,321 @@ Track layouts and the train are rendered with [PolyCSS](https://polycss.com) (`@
 **The renderer lives in the site now** — `site/src/lib/render/`, split into `dimensions.js`
 (measurements), `vec.js` (the project → PolyCSS axis map and pose rotations), `pieces.js`
 (one geometry generator per piece type), `rail.js` (where the rail runs, plus the
-`assertRailMouths` check that runs at import), `train.js` (the lofted body) and `viewer.js`
-(the imperative PolyCSS binding). The 945-line `spikes/track-piece/index.html` this was
-extracted from is gone; `spikes/polycss/index.html` stays as the minimal working example.
+`assertRailMouths` check that runs at import) and `train.js` (the lofted body). The 945-line
+`spikes/track-piece/index.html` this was extracted from is gone; `spikes/polycss/index.html`
+stays as the minimal working example.
+
+Four shared bindings sit on those: `camera.js` (the zoom calibration below), `meshes.js`
+(one mesh per piece, and the two ways to write an orientation onto it), `loop.js` (an rAF
+loop with its own clock) and `drive.js` (the train's motion along a route).
+
+**`stage.js` sits on all four, and everything that draws goes through it.** It owns the
+scene, *one* camera binding, *one* loop, and the cubes — keyed by piece ID, so the same
+mesh can outlive the animation that put it there. That last part is the reason it exists;
+see "the same cubes, rearranged" below. An animation is therefore not a viewer but a
+**phase**: an `advance(delta, elapsed)` over cubes it was handed, returning `false` when
+finished, plus an optional `dispose` for anything it owns that the cubes do not. The stage
+runs a queue of them, giving each a clock of its own. `tumble.js` exports `tumblePhase`
+(a track collapsing) and `build.js` exports `buildPhase` (a track assembling) and
+`trackPhase` (a finished track, drawn at once and driven).
+
+There used to be a `viewer.js` for that last one and it is gone: `trackPhase` does the same
+job, so keeping both would be two ways to draw one thing. Anything wanting a static track
+runs a one-phase queue.
 
 `site/src/lib/scenes.js` is the layer above: the factories that turn a thing into
 `{ pieces, drive, camera }`, which is all `TrackViewer` takes. `sceneFromRoute` for a route,
+`tumbleScene` for a fall, `sequenceScene` for the union frame a rearrangement needs,
 `singlePiece(type)` and `poseGallery(type)` for the catalogue views, `frame` for the
-auto-framing, `paint`/`cubesIn`/`scoreOf` for the colours and the counts. Three components
-sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts PolyCSS, owns the
-rAF loop and the intersection/resize observers), `PieceViewer.svelte` (a piece type, alone
-or in all 24 poses) and `LayoutViewer.svelte` (a shape string). The stories are plain JS CSF
-files beside them.
+auto-framing, `paint`/`cubesIn`/`scoreOf` for the colours and the counts. There is
+deliberately no `buildScene`: the builder frames the *finished* loop, which is what
+`sceneFromRoute` already returns, so a factory there would only have renamed one.
+Five components sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts
+PolyCSS, owns the stage and the intersection/resize observers), `PieceViewer.svelte` (a piece
+type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `TumbleViewer.svelte`
+and `BuildViewer.svelte`. The stories are plain JS CSF files beside them.
+
+`TrackViewer` takes a `sequence` flag, and it is the only difference between the static
+viewer and the animated one — everything else about mounting PolyCSS is identical, which is
+why `LayoutViewer` stays a thin wrapper rather than becoming a fourth copy of the plumbing.
+With it off, new pieces are a redraw off an emptied stage. With it on, they are a
+rearrangement. It also decides whether `tumble.js` is imported at all: that module reaches
+`cannon-es`, so it is loaded dynamically on mount and only when sequencing, which keeps a
+physics engine out of a page of static piece cards.
+
+**Whether the layout changed cannot be answered by identity, and getting that wrong is not
+a wasted redraw.** `TrackViewer` keys on `type`+`pose`+`cell` per piece (`keyOf`). The mount
+draws once and the `$effect` then fires with the very same pieces, and a `$derived` upstream
+is free to hand over an equal-but-new array — either of which, compared by reference, reads
+as a shape change. In sequencing mode that means the track knocking itself down for no
+reason, which is exactly what the first render did until it was caught in a browser.
 
 **A shape string is always re-derived through `chainTrack`**, in `LayoutViewer` as it was on
-the old `/view` page: the chain throws unless the route closes and nothing collides, so an
-illegal string gets the model's own objection rendered as text rather than a drawing of
-nonsense. `Layout/Not a legal track` is that path under test by eye.
+the old `/view` page, and in `TumbleViewer` and `BuildViewer` after it: the chain throws
+unless the route closes and nothing collides, so an illegal string gets the model's own
+objection rendered as text rather than a drawing of nonsense. `Layout/Not a legal track` is
+that path under test by eye.
+
+**Never call `setPolygons` per frame.** It rebuilds a `matrix3d` per polygon, and a track
+piece is ~110 polygons, so eighteen of them is ~2,000 matrices a frame and the frame rate
+visibly collapses — measured, having first shipped the tumbler that way. `meshes.js` is the
+whole of the rule: `movingMesh(...).bake` puts an orientation in the *vertices* and is for
+orientations that will be held; `.place` puts it on the container with one `setTransform` and
+is for orientations that change. The train is the one deliberate exception, and `drive.js`
+says why — fifty polygons, and it is the thing being looked at.
+
+**What `place` costs is lighting, and the two animations pay differently.** PolyCSS shades
+each polygon from its normal and a CSS rotation cannot recompute a normal, so a `place`d
+piece carries the lighting of its baked pose. The tumbler cannot know a resting orientation
+in advance, so it lives with that mid-air and re-bakes each body as it falls asleep. The
+builder *can* — the resting pose is the one the solver chose — so it bakes at the final pose
+the moment a piece sets off and the container carries only what is still to be lost. That
+delta reaches nothing exactly as the piece lands, so a built track is lit identically to the
+same shape drawn statically — verified by rendering one shape both ways under a pinned
+camera and comparing the pixels, not merely reasoned about — and nothing is baked twice.
+
+The one place that had to be *made* true: the tumbler's `settle()` re-lights everything still
+in the air when a fall ends, which is a `setPolygons` per cube **in a single frame**. Doing
+that for eighteen cubes the build is about to re-bake one at a time put a two-thousand-matrix
+spike at exactly the handover. So `tumblePhase` takes a `keep` set of IDs something after it
+will re-light anyway, and skips those. Leftovers are not in the set, and are re-lit.
+
+**A build animation is a tween, not the tumbler backwards.** A rigid-body simulation is not
+reversible — a pile does not know which of the many tracks that collapse into it was the one
+— so `build.js` touches neither cannon nor `physics.js`. What it borrows is `meshes.js`.
+Pieces arrive one at a time in route order (`chainTrack`'s order is the order they click
+together); the arc is easings on legs of the offset rather than any control points; the train
+sets off once the loop closes, which with two kinds of arrival is the *last* landing rather
+than simply the last piece.
+
+**Geometry is authored about the piece's keyed cell, always** — every mesh in the project
+agrees on that, and PolyCSS rotates about the geometry origin (`autoCenter` defaults to
+`false` and nothing here sets it). Anything wanting to move a piece about its **centre of
+mass** converts instead: `originAt(type, basis, com)` and `comAt` in `site/src/lib/shapes.js`.
+Two things need to. The physics, because cannon treats a body's position as its centre of
+mass. And a pick-up, because an arc's cell is a whole cube outside its own material, so
+turning about that origin flings the piece round rather than turning it. (This corrects what
+this file used to say — the centroid is no longer a physics concern only.)
+
+`shapes.js` is that split: the collision boxes, `CENTROID`, `MASS` and `assertFootprints`,
+with no dependency on cannon. `physics.js` keeps the world and the quaternion conversions.
+The renderer wants the centroid and does not want a physics engine in the bundle to get it.
+
+**An arrival is a pure axial slide, described in the piece's own frame.** Three wrong answers
+were shipped before this one, and the interesting thing is that each was wrong for a different
+reason:
+
+1. **An offset fixed in the world.** Every piece then drops from above, and one joining onto
+   track that faces downwards descends *through* the layout to reach its own underside. Fixed
+   by reading the offset off the pose's basis, so it turns with the piece.
+2. **Approaching along the rail *face*.** Defensible-looking — that direction is the one thing
+   the model guarantees is clear, since `MOVES` books the whole cell on a piece's rail-face
+   side as *train* and `assertNoCollisions` forbids a cell being both material and train — but
+   it is the wrong axis. **The joint is at the ends of the rail, not on the face.** The cubes
+   click male-to-female along the direction of travel, so a piece cannot be pressed onto the
+   track from outside at all. Pressing onto the face is how a Brio set goes together.
+3. **A face-normal lift plus an axial close.** Correct at the joint, but the lift was along the
+   piece's own local *up* — the canonical pose puts the rail on top — so every piece, whatever
+   its pose, set off from the same place relative to itself and read as being lowered onto
+   itself. Uniformity in the piece's own frame is still uniformity.
+
+So the arrival *ends* as one straight line down the connector axis and nothing else:
+`STANDOFF` back along the piece's own heading, sliding forward onto the previous piece's male
+end with the entry mouth leading. Because the direction is the heading alone, it is whatever
+the route is doing: over the 18-cube set the eight compass points on screen come out
+4 / 4 / 3 / 3 / 2 / 2, with only eight of eighteen arriving from above.
+
+**Two kinds of arrival, and which one a piece gets is not a setting.** It is whether that cube
+is already on the stage.
+
+- A **mint** is a piece that is not there: it appears at the standoff and slides on, carrying
+  a `TILT` about its own right that `turnEase` spends by 60% of the flight so it is square for
+  the close — not nearly square.
+- A **pick-up** is a cube lying on the floor where the last layout's collapse left it. That
+  cannot be one straight line, because it has to get across the scene first. So it is *two
+  legs*: a free-form lift from where it lies to the standoff behind its slot, turning into its
+  final pose as it goes, and then the identical axial slide. `liftTurnEase` finishes the turn
+  by 80% of the lift, so the slide is a pure translation with nothing left to spend. That is
+  the point of splitting it: the doctrine above survives however the piece got there.
+
+The lift interpolates the centre of mass along a straight line with a `sin(πt)` rise added, so
+a cube goes over the track rather than through it, and `turnToward` in `vec.js` takes the
+orientation along the shortest arc.
+
+**`speed` is one tempo over all four durations.** `timingFor` divides pace, lift, flight and
+hold by it, so a faster build is the same build run faster rather than a differently-shaped one,
+and the easings stay tuned against proportions that have not moved. `pace` stays separate
+because it is the one duration worth setting alone — stretching only the gap between pieces is
+how you watch a single arrival, which is what `Build/One arrival, slowly` does.
+
+Speeding the tween up was tried *first*, as the answer to a shape change feeling slow, and Owen's
+answer was that it did not address it: what made it feel slow was never the build's own duration
+but the wait in front of it, which is `handover` above. Worth remembering before reaching for
+this knob again.
+
+The defaults across the four dials are Owen's, set by eye against the sliders: `pace` 0.04,
+`speed` 1.2, `handover` 0.5, `drop` 2.
+
+`STANDOFF` is a cube and a bit because that is as far as the axial lane can be relied on, and
+the residue is worth knowing rather than hiding. Measured over all eight layouts in
+`src/layouts.js`, 188 pieces: a one-cube lane is free for all but six, and those six are
+irreducible rather than unlucky. Four are the piece that *closes* a loop, which has both of its
+ends mated and therefore no free axis to arrive on at all — you cannot slide the last piece of
+a closed track in, you have to flex it. The other two slide onto an already-placed cross, where
+the route revisits track it laid earlier. At two cubes the blocked count rises to 13, which is
+what set the number.
+
+### Changing a shape rearranges the cubes, it does not replace them
+
+Typing a new shape into `Layout` tumbles the layout that is there and builds the new one out
+of the pieces that fall. Not new meshes that look like them — the *same* cubes, picked up off
+the floor and carried to new slots. That is the point of the sequence: it shows a set of
+pieces being rearranged, which is what the whole project is about, rather than one track
+deleted and another drawn. It is also the reason `stage.js` exists, since a mesh belonging to
+either animation could not survive the handover.
+
+**Which cube goes where is decided by piece ID, and that is a modelling idea rather than a
+renderer detail.** `identify(placed)` in `src/layouts.js` names each cube by its type and its
+ordinal in route order: `LLLL` is `1L 2L 3L 4L`, and the second left curve of any shape is the
+same physical cube as the second left curve of any other. Revisits are skipped, so a crossed
+cross holds one ID. `tests/layouts.test.js` checks every layout's IDs are unique and are its
+inventory restated. Two consequences worth knowing: identity is relative to where the route
+starts, so a rotation of a shape renumbers its pieces; and matching by ID makes flights cross
+each other, which was Owen's call over anything that minimises travel.
+
+Two shapes need not hold the same pieces, and nothing checks that they do. A slot with no cube
+of its ID on the floor is **minted** from off-frame — the same path a cold build uses — and a
+cube nothing claims is simply left lying where it fell. Both fall out of the design rather
+than being handled, which is why there is no mismatch detection anywhere. Leftovers on the
+floor are also honest about the inventory: they are the pieces the layout did not spend.
+
+**The collapse and the build overlap, and that is what removes the dwell.** They ran in
+sequence first, handing over when the collapse finished. The trouble is that a pile is *busy*
+for far longer than it is interesting: measured at drop 1, an 18-cube collapse peaks at 18
+cubes/s around 0.4 s and is visually over by about 0.8 s, but it is still rolling and settling
+at 4–10 cubes/s until roughly 2.5 s. So waiting for it left well over a second of nothing
+happening, which is exactly what Owen saw.
+
+Handing over *earlier* does not work on its own, and the reason is worth keeping: the physics
+stops with the phase, so every piece the build has not reached yet freezes in mid-air. Hence
+`together(...)` in `stage.js` — the queue is otherwise strictly sequential — and:
+
+- `buildPhase` takes a `delay`, so the two start on the same clock and the build joins in at
+  `handover` (default **0.5 s**);
+- and an `onPickUp`, wired to the collapse's `release(id)`, which takes that body **out of the
+  cannon world** so the rest of the pile stops resting on a piece that has been lifted away,
+  and stops the collapse writing to a cube the build now owns. Two things writing one cube every
+  frame is the bug that arrangement exists to prevent.
+
+So pieces are plucked out of a pile that is still falling, which is both what a hand does and
+what lets the build start while there is something to watch. Measured end to end on the 18-cube
+set: a whole shape change takes 3.59 s at `handover` 0.4, 3.89 s at 0.7, and 5.69 s at 2.5 —
+that last being the old wait-for-it-to-settle behaviour.
+
+`SETTLE_LIMIT` in `tumble.js` is still 10 simulated seconds and still the right answer when the
+collapse is the *subject* — an 18-cube pile gets 16 of 18 bodies asleep in about four seconds
+and never gets the last two. In a sequence it is only a backstop, at 2.5 s, for whatever the
+build never picks up: the phase now also ends the moment every cube has been lifted out, which
+in a same-inventory rearrangement is all of them. One consequence, and an improvement: leftovers
+are no longer frozen by the deadline part-way through their fall — they finish falling and
+settle.
+
+**The camera never moves, and the frame is not derived from what is being shown.** That is
+`fixedFrame` in `scenes.js`: a box reaching `REACH` = 6 cells around the start cell, from the
+ground up. `TrackViewer` applies it once at mount and nothing touches it again — the framing
+effect deliberately reads neither `pieces` nor `camera` in sequencing mode, so a shape change
+has nothing to reframe. Verified in the browser: **zero** camera writes over 852 frames
+spanning two shape changes.
+
+Six is the **solver's own box constraint** rather than a number picked to look right — every
+layout in `src/layouts.js` was solved at box 3, 4, 5 or 6, and the worst reach over all eight
+is exactly 6. `tests/stage.test.js` checks that, so a bigger layout added later fails loudly
+instead of being silently cropped. A shape typed into the control that reaches further *will*
+be cropped; that is the deal a fixed frame makes.
+
+Two earlier attempts, both rejected by Owen on sight, and worth not repeating:
+
+1. **Framing each layout.** A camera that moves every time you type. It has to: over the four
+   known 18-cube layouts of the model set the extents run 6×7×9, 8×5×7, 8×5×6 and 9×5×4 and
+   the centres move by whole cubes.
+2. **A box that only ever grows**, reserved from the first render. Better — it converges and
+   then holds — but it still moves on the change that grows it, which is exactly what he could
+   see. A `panPhase` (a 0.4 s smoothstep, queued ahead of the collapse) was written to smooth
+   that and is **deleted**; do not reintroduce a moving camera without being asked for one.
+
+The cost is real and was accepted with the picture in front of him: ±6 is 13×7×13 cells where
+an 18-cube layout needs about 8×7×9, so a track is drawn smaller than a tight frame would draw
+it *and* sits off-centre, because layouts occupy the box asymmetrically. (The tempting middle
+option — have a viewer declare which shapes it will ever show and frame their union up front,
+which is both tight and fixed — was offered and turned down. One constant beats a prop.) This
+is also why `sequence` is opt-in: a static figure leaves it off and gets the tight per-layout
+frame.
+
+**Nothing is drawn for the floor.** cannon's floor is an infinite plane and needs no mesh; a
+chamfered slab used to be drawn to stand for it, and it was a hundred-odd polygons that appeared
+out of nowhere the moment a shape was typed and then sat behind everything as a dark square. The
+pieces stop where they stop either way. `floorSlab`, `FLOOR_MARGIN` and the stage's `setFloor`
+all went with it.
+
+`drop` is 2 cubes here rather than the tumbler's 3, since every extra cube of fall is scale
+taken off everything. `SPREAD` is 2 cubes of sideways room, and that is knowingly *not*
+enough for the worst case: measured at the 2.5 s deadline, a pile sticks out 1.9–3.7 cubes for
+the 18-cube set and up to 5.9 for the 32-cube one, so a big collapse does drift out of shot.
+Sizing for that would cost far more scale than the pile is worth — it is on screen for two
+seconds and the track is what is being looked at.
+
+An illegal shape blanks the viewer as it always did, and the `{#if}` takes the stage with it,
+so the cubes go too and the next legal shape is a fresh first render. A first render is never
+animated: there is nothing on the floor to pick up.
+
+### The animations are under test
+
+`tests/stage.test.js` drives the real modules against a fake PolyCSS scene — `scene.add`
+returning handles that record `setPolygons`/`setTransform`/`dispose` — and a hand-cranked
+`requestAnimationFrame` stepped in 16 ms ticks. No DOM, and both `cannon-es` and
+`@layoutit/polycss` are runtime dependencies, so it is in the fast tier.
+
+It is the promotion of a throwaway script that had been written and deleted twice. Worth
+keeping because *four* of its assertions failed when first written and three of the four were
+the assertion being wrong, not the code — a mint's polygons go in through `scene.add`, so it
+is never `setPolygons`-ed at all, and coarse time snapshots straddle the handover. The fourth
+was real. It asserts, beyond the geometry: that a picked-up cube is the *same handle* it was
+before it fell and was never disposed; that a cube with no slot receives no writes at all;
+that a pick-up is baked exactly once and a mint never; and that no train is ever abandoned.
+A **marker phase** slotted between the two real ones is what makes the ordering assertions
+exact rather than a guess at a time — and being able to slot one in is the sequencing itself
+under test.
+
+Two bugs it did not catch, both found by driving Storybook in a real browser over CDP, which
+is worth doing for anything in this area:
+
+- **The first render tumbled itself.** `onMount` draws, then the `$effect` fires with the same
+  pieces; a truthiness check on "is there something to knock down" saw a shape change. Fixed
+  by `keyOf` above. Unreachable from the fake scene, because it is Svelte's effect graph.
+- **Every replaced phase abandoned its train**, leaving it hanging in mid-air over the
+  wreckage. Phases now have `dispose`, and the stage calls it on a phase it drops. *This* one
+  is now under test.
+
+**`polyRotation` is under test now** — `tests/rotation.test.js`, against the string
+`buildPolyMeshTransform` actually emits rather than against the reasoning in `vec.js`. It was
+verified once by a scratch script that no longer exists, and it is the one piece of the
+renderer where a wrong sign yields a thoroughly plausible wrong animation. The test also pins
+the two facts about PolyCSS the conversion depends on: the emitted order is `rotateY rotateX
+rotateZ`, and the CSS frame is the world frame with right and forwards swapped. Worst error
+over the 24 poses and 20,000 random orientations is 2.2e-14. Two useful things it turned up:
+a zero angle is left out of the emitted string altogether, and a transform with nothing in it
+comes back `undefined` — which is why a landed piece costs nothing.
+
+`turnToward` is in there with it, for the same reason: the pick-up's lift needs the shortest
+arc from however a cube fell to the pose it is going to, so it reads a turn's axis back *out*
+of a rotation rather than being handed it. Both singular branches are the common cases here
+rather than edge cases — coincident orientations have no axis, and half-turns have none in the
+antisymmetric part — so it is checked over all 576 pose pairs as well as random orientations.
+At exactly 180° the direction of travel is genuinely undetermined (both ways are the same
+shortest arc), and the test asserts only that the choice is stable. One thing it turned up:
+`acos` is ill-conditioned near ±1, so *any* angle measured near 0° or 180° carries about 1e-6°
+of noise however exact the rotation is — which is what `ANGLE_SLACK` is, and it is why the
+first version of the constant-rate assertion failed.
 
 The root `vite.config.js` is now bare — `plugins: [sveltekit()]` and nothing else. Three
 workarounds the old `site/vite.config.js` carried are all gone with the solve page, and
@@ -234,8 +532,29 @@ single-worker build whose solution callbacks can actually reach JS mid-search.
 
 **Camera zoom is scaled by viewer size.** Every camera in `scenes.js` — auto-framed and
 hand-tuned alike — is calibrated against the old spike's fixed 900×700 canvas, so
-`viewer.js` scales `zoom` by the element's actual fit against that reference. Without it
+`camera.js` scales `zoom` by the element's actual fit against that reference. Without it
 every layout is cropped on anything smaller.
+
+**A viewer only animates while it is on screen.** `TrackViewer` and `BuildViewer` both gate
+their loop on an `IntersectionObserver` plus `visibilitychange`, because a blog post is
+several of these on one page and each running a permanent rAF loop is the one thing that
+would make it unusable on a phone. Both honour `prefers-reduced-motion` by running
+`trackPhase` instead — a finished, driven track and no animation at all, which for `Layout`
+means a shape change is an instant swap off an emptied stage.
+
+Headless Chrome's `--virtual-time-budget` is close to useless for screenshotting these, which
+is worth knowing before trying: `loop.js` caps a single delta at 0.1 s on purpose, and virtual
+time advances in large jumps, so the animation moves 0.1 s per callback however big the budget
+is. Early frames screenshot fine; later ones need a real clock.
+
+What *does* work, and found two bugs the unit tests could not: run `npm run storybook` and
+drive it over the DevTools Protocol on a real clock. `ws` is available transitively, so a
+throwaway script can connect, `Page.navigate` to
+`iframe.html?id=layout--default&viewMode=story`, change the shape the way the control does
+(`__STORYBOOK_ADDONS_CHANNEL__.emit('updateStoryArgs', …)`), and screenshot at intervals while
+collecting `Runtime.exceptionThrown`. Counting `[class*=polycss-mesh]` elements is how the
+abandoned trains were found — and pinning the camera by hand before two shots is how "lit
+identically" was checked as pixels rather than asserted.
 
 ## Solver: cpsat-js
 

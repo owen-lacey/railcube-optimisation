@@ -30,6 +30,31 @@ export const routeOf = shape => [...shape].map(l => {
 /** A route as its shape string. */
 export const shapeOf = route => route.map(t => LETTER_OF[t]).join('');
 
+/**
+ * Which physical cube each placed piece is — `1L` is the first left curve, `2L`
+ * the second, and so on per type.
+ *
+ * The model has no notion of one cube rather than another: an inventory is a
+ * count, and any left curve will do. This names them anyway, because a viewer
+ * showing one layout being rearranged into another has to know that the left
+ * curve arriving here is the one that was over there. Given two shapes built
+ * from the same set, matching IDs matches cubes.
+ *
+ * Revisits are skipped, as everywhere else: a crossed cross is two steps of the
+ * route and one cube out of the box, so it holds one ID.
+ *
+ * Identity is relative to where the route starts, since that is what fixes the
+ * counting order — a rotation of a shape renumbers its pieces. That is inherent
+ * in naming them by position and not a thing to work around.
+ */
+export function identify(placed) {
+  const seen = {};
+  return placed.filter(p => !p.revisit).map(({ type }) => {
+    seen[type] = (seen[type] ?? 0) + 1;
+    return `${seen[type]}${LETTER_OF[type]}`;
+  });
+}
+
 if (Object.keys(LETTER_OF).length !== PIECE_TYPES.length) {
   throw new Error('the letter table has drifted from the piece catalogue');
 }

@@ -1,9 +1,10 @@
 // Applying a camera description to a mounted `<poly-camera>`.
 //
-// Split out of `viewer.js` because there is more than one viewer now: the track
-// viewer and the tumbler both mount a camera and both need the zoom scaling
-// below, and two copies of the calibration constants would be two copies to get
-// wrong.
+// Split out of the one viewer there used to be, because there is more than one
+// now and they all need the zoom scaling below — two copies of the calibration
+// constants would be two copies to get wrong. It is `stage.js` that binds it
+// these days, exactly once per element: a second binding on the same camera
+// would clobber the first on every resize.
 
 // Every camera in the scene catalogue — the auto-framed ones and the hand-tuned
 // ones alike — was calibrated against the old spike's fixed 900px-wide canvas.

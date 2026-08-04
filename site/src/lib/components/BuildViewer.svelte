@@ -1,25 +1,31 @@
 <script>
   import { onMount } from 'svelte';
   import { createStage } from '../render/stage.js';
-  import { tumblePhase } from '../render/tumble.js';
-  import { tumbleScene, cubesIn } from '$lib/scenes.js';
+  import { buildPhase, trackPhase } from '../render/build.js';
+  import { sceneFromRoute, cubesIn } from '$lib/scenes.js';
   import { routeOf } from '../../../../src/layouts.js';
 
   let {
     shape = '',
-    drop = 3,
+    pace = 0.1,
+    speed = 1,
     aspect = '16 / 10',
     interactive = true,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
 
-  // Same contract as LayoutViewer: the shape goes back through `chainTrack`, so
-  // an illegal string gets the model's objection instead of a pile of nonsense.
+  // Same contract as LayoutViewer and TumbleViewer: the shape goes back through
+  // `chainTrack`, so an illegal string gets the model's own objection rendered as
+  // text rather than a drawing of nonsense.
+  //
+  // The scene is the plain track scene — the camera Owen wants here is the one
+  // that frames the finished loop, which is exactly what `sceneFromRoute` returns.
+  // Pieces therefore fly in from off the edge of the frame, which is the deal.
   const result = $derived.by(() => {
     if (!letters) return { state: 'empty' };
     try {
-      return { state: 'ok', scene: tumbleScene(routeOf(letters), { drop: Number(drop) }) };
+      return { state: 'ok', scene: sceneFromRoute(routeOf(letters)) };
     } catch (error) {
       return { state: 'invalid', message: error.message };
     }
@@ -31,21 +37,34 @@
   let stage = null;
   let ready = $state(false);
   let failed = $state('');
-  let released = $state(false);
+  let built = $state(false);
+  let reduced = false;
 
-  /** Stand the track back up and let go of it again. */
-  function release() {
+  /**
+   * Empty the scene and click the whole thing together again.
+   *
+   * Emptying first is what makes this story about a build rather than a
+   * rearrangement: with nothing on the stage every piece is a *mint* and comes in
+   * from off the edge of the frame. `Layout` is where pieces get picked up off the
+   * floor instead.
+   */
+  function replay() {
     if (!stage || result.state !== 'ok') return;
-    const { pieces, camera, drop: height } = result.scene;
+    const { pieces, camera } = result.scene;
     stage.clear();
     stage.frameTo(camera);
-    stage.run([tumblePhase(stage, pieces, { drop: height })]);
+    stage.run([reduced
+      ? trackPhase(stage, pieces)
+      : buildPhase(stage, pieces, { pace: Number(pace), speed: Number(speed) })]);
     stage.start();
-    released = true;
+    built = true;
   }
 
   onMount(() => {
     let live = true;
+    let stopObserving = () => {};
+
+    reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     (async () => {
       try {
@@ -53,7 +72,25 @@
         await customElements.whenDefined('poly-scene');
         if (!live) return;
         stage = createStage(cameraEl, sceneEl);
-        ready = true;   // the effect below does the first drop
+        ready = true;   // the effect below does the first build
+
+        // Animate only what is on screen. A blog post is several of these on one
+        // page, and each running its own rAF loop for ever is the one thing that
+        // would make it unusable on a phone.
+        const io = new IntersectionObserver(([entry]) => {
+          if (entry.isIntersecting && !document.hidden) stage?.start();
+          else stage?.stop();
+        }, { rootMargin: '100px' });
+        io.observe(host);
+
+        const onVisibility = () => {
+          if (document.hidden) stage?.stop();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        stopObserving = () => {
+          io.disconnect();
+          document.removeEventListener('visibilitychange', onVisibility);
+        };
       } catch (error) {
         failed = error.message;
       }
@@ -72,16 +109,18 @@
 
     return () => {
       live = false;
+      stopObserving();
       ro.disconnect();
       stage?.clear();
       stage = null;
     };
   });
 
-  // A new shape or a new drop height is a new `result`, and a new result is a new
-  // fall. This is also what does the first drop, once PolyCSS is up.
+  // A new shape or a new pace is a new build — `pace` is read inside `replay`, so
+  // it is a dependency of this effect too. This is also what does the first build,
+  // once PolyCSS is up.
   $effect(() => {
-    if (ready && result.state === 'ok') release();
+    if (ready && result.state === 'ok') replay();
   });
 </script>
 
@@ -104,17 +143,17 @@
   {:else if result.state === 'invalid'}
     <p class="failed">Not a legal track: {result.message}.</p>
   {:else if result.state === 'empty'}
-    <p class="failed">Nothing to drop yet — give it a shape string.</p>
+    <p class="failed">Nothing to build yet — give it a shape string.</p>
   {/if}
 </div>
 
 <p class="caption">
-  <button type="button" onclick={release} disabled={!ready || result.state !== 'ok'}>
-    {released ? 'Drop it again' : 'Drop it'}
+  <button type="button" onclick={replay} disabled={!ready || result.state !== 'ok'}>
+    {built ? 'Build it again' : 'Build it'}
   </button>
   {#if result.state === 'ok'}
     <span class="shape">{letters}</span>
-    <span class="muted">{cubesIn(result.scene.pieces)} cubes · falling {drop} cubes</span>
+    <span class="muted">{cubesIn(result.scene.pieces)} cubes</span>
   {/if}
 </p>
 
