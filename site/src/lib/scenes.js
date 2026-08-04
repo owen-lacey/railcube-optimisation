@@ -47,6 +47,27 @@ export const sceneFromRoute = (route, extra = {}) => {
   return { pieces, drive: true, camera: frame(pieces), ...extra };
 };
 
+/**
+ * A layout about to fall over. The pieces are the same ones a track scene draws
+ * — the physics reads them straight out of `chainTrack` — but the shot is not:
+ * what has to fit in frame is the pile, which lands `drop` cubes below the
+ * track and spreads sideways getting there.
+ */
+export function tumbleScene(route, { drop = 3 } = {}) {
+  const pieces = paint(chainTrack(route));
+  const cells = pieces.flatMap(p => p.material);
+  const bound = pick => [0, 1, 2].map(a => pick(...cells.map(c => c[a])));
+  const [lo, hi] = [bound(Math.min), bound(Math.max)];
+  const spread = 2;   // cubes of room either side for the pile to sprawl into
+  // `frame` reads a piece's `material`, and nothing else, so the extra corners
+  // go in as one piece made of nothing but the two of them.
+  const room = { material: [
+    [lo[0] - spread, lo[1] - drop, lo[2] - spread],
+    [hi[0] + spread, hi[1], hi[2] + spread],
+  ] };
+  return { pieces, drop, camera: frame([...pieces, room]) };
+}
+
 // ---- The 24-pose gallery --------------------------------------------------
 
 const FACES = ['U', 'D', 'F', 'B', 'L', 'R'];

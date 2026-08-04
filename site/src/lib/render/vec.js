@@ -37,6 +37,52 @@ export function poseRotation(pose) {
   return [cross(heading, face), heading, face]; // images of local X, Y (forwards), Z (up)
 }
 
+/** The basis of A·B, from the bases of A and B. */
+export const compose = (a, b) =>
+  [0, 1, 2].map(c => [0, 1, 2].map(r => [0, 1, 2].reduce((sum, k) => sum + a[k][r] * b[c][k], 0)));
+
+/** The basis of the inverse rotation, which for a rotation is the transpose. */
+export const transpose = basis => [0, 1, 2].map(c => [0, 1, 2].map(r => basis[r][c]));
+
+/**
+ * A rotation basis as PolyCSS's `rotation` transform: three Euler angles in
+ * degrees, which is the only shape `setTransform` accepts.
+ *
+ * Two conversions are stacked here, and both are facts about PolyCSS rather than
+ * choices. First, `translate3d(y, x, z)` — the CSS frame is the world frame with
+ * right and forwards swapped, so a world rotation appears there conjugated by
+ * that swap. Second, the transform PolyCSS emits is
+ * `rotateY(−r₀) rotateX(−r₁) rotateZ(−r₂)`, applied in that order, so the
+ * decomposition has to be Y-X-Z and the angles come back negated. Both were read
+ * off `buildPolyMeshTransform`, which the package exports, and the result is
+ * checked against the string it emits rather than against this reasoning.
+ *
+ * In world terms the three angles turn out to be about right, about forwards and
+ * about up, in that order.
+ */
+export function polyRotation(basis) {
+  // basis[c][r] is row r of column c, so this is the same matrix with rows and
+  // columns 0 and 1 exchanged — the conjugation by the swap.
+  const swap = i => (i === 0 ? 1 : i === 1 ? 0 : 2);
+  const m = (r, c) => basis[swap(c)][swap(r)];
+  const deg = 180 / Math.PI;
+  const sine = -m(1, 2);
+  // Clamped because a rotation that is exactly square on can come out of the
+  // physics as 1.0000000000000002, and `asin` of that is NaN — which would put
+  // the piece nowhere at all rather than merely in the wrong place.
+  const pitch = Math.asin(Math.max(-1, Math.min(1, sine))) * deg;
+  // Square on, the first and third turns are about the same axis and only their
+  // sum is determined, so all of it is given to the first.
+  if (Math.abs(sine) > 1 - 1e-9) {
+    return [-Math.atan2(-m(2, 0), m(0, 0)) * deg, -pitch, 0];
+  }
+  return [
+    -Math.atan2(m(0, 2), m(2, 2)) * deg,
+    -pitch,
+    -Math.atan2(m(1, 0), m(1, 1)) * deg,
+  ];
+}
+
 export const rotate = (polys, [mx, my, mz]) =>
   polys.map(p => ({ ...p, vertices: p.vertices.map(([x, y, z]) =>
     [x * mx[0] + y * my[0] + z * mz[0], x * mx[1] + y * my[1] + z * mz[1], x * mx[2] + y * my[2] + z * mz[2]]) }));
