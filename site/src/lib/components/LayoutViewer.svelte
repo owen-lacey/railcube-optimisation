@@ -8,6 +8,10 @@
     aspect = '16 / 10',
     drive = true,
     interactive = true,
+    pace = 0.04,
+    speed = 1.2,
+    handover = 0.5,
+    drop = 2,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -15,6 +19,11 @@
   // The shape is re-derived through `chainTrack`, which throws unless the route
   // closes and nothing collides — so an illegal string gets the model's own
   // objection, not a drawing of nonsense.
+  //
+  // An illegal shape unmounts the viewer below, which destroys the stage and the
+  // cubes on it. So the next legal shape has nothing to knock down and is drawn
+  // finished, exactly as the first one was. That is deliberate: the alternative is
+  // machinery for keeping a track alive behind an error message.
   const result = $derived.by(() => {
     if (!letters) return { state: 'empty' };
     try {
@@ -29,6 +38,11 @@
   <TrackViewer
     pieces={result.scene.pieces}
     camera={result.scene.camera}
+    sequence
+    {pace}
+    {speed}
+    {handover}
+    {drop}
     {drive}
     {aspect}
     {interactive}

@@ -240,19 +240,21 @@ export function outsideCurve(color) {
 
 // ---- Arc pieces: quarter-donut bodies built by profile sweep -------------
 // The cross-section perpendicular to travel — a chamfered square with the
-// channel notch cut into the w = +h side — is placed at SEGMENTS+1 stations
-// along a quarter arc and neighbouring stations are stitched with quads.
+// channel notch cut into the w = +h side — is placed at stations along a
+// quarter arc and neighbouring stations are stitched with quads.
 // u = transverse (canonical right), w = the side the channel faces.
 // Traversal order is chosen so swept quads wind outward; the channel-floor
 // edge is the metal strip.
 const SEGMENTS = 8;
 export const ARC_R = 1.5 * CUBE; // centreline radius; body spans CUBE..2·CUBE
-// Two pieces that click together have to look like two pieces. A cube's
-// chamfered edges leave a groove 2·BEVEL wide at every join; a swept body has
-// no such edge, so it stops BEVEL short of each mouth to leave the same groove.
-// The metal strip still runs the full arc, bridging the groove exactly as it
-// runs straight across a cube-to-cube join, so the wheels never cross a gap.
-const SEAM = BEVEL / ARC_R; // the arc angle worth BEVEL of travel
+// Two pieces that click together have to look like two pieces, and a swept body
+// gets its half of that groove the same way a cube does: the cross-section at
+// travel-distance d from a mouth is the profile clamped to a square of half
+// extent min(i + d, h), so the last BEVEL of the piece chamfers in to the same
+// inset mouth face a cube presents. The channel notch (wc, floor) lies inside
+// the inset, so it — and the metal strip that floors it — run the full arc
+// untouched, bridging the groove exactly as the strip runs straight across a
+// cube-to-cube join, and the wheels never cross a gap.
 const PROFILE = (() => {
   const h = CUBE / 2, i = h - BEVEL, wc = CHANNEL_W / 2, floor = h - CHANNEL_D;
   return {
@@ -272,27 +274,45 @@ const PROFILE = (() => {
   };
 })();
 
+// The mouth cross-section: the profile pulled in to the inset square the
+// chamfered cubes present at every face. The channel notch is inside it, so
+// only the outer boundary moves, and the profile's two 45° corner points
+// collapse onto one — which is what makes the corner triangles.
+const INSET = CUBE / 2 - BEVEL;
+const clamped = ([u, w]) => [u, w].map(v => Math.max(-INSET, Math.min(INSET, v)));
+const same = (a, b) => a.every((v, k) => Math.abs(v - b[k]) < 1e-9);
+const dedupe = vs => vs.filter((v, k) => !same(v, vs[(k + 1) % vs.length]));
+
 // Sweep the profile along a quarter arc. `map(u, w, θ)` places a profile
 // point at station θ ∈ [0, π/2]; the piece's centreline — the future train
-// path — is map(0, floor, θ). Entry/exit caps face along entryDir/exitDir.
-function sweepPiece(map, color, entryDir, exitDir) {
+// path — is map(0, floor, θ). `radius(u, w)` is that point's arc radius, which
+// converts BEVEL of travel into an angle — one angle per point, since travel
+// per radian grows with radius. Entry/exit caps face along entryDir/exitDir.
+function sweepPiece(map, radius, color, entryDir, exitDir) {
   const polys = [];
-  const body = j => SEAM + (j / SEGMENTS) * (Math.PI / 2 - 2 * SEAM);
-  const strip = j => (j / SEGMENTS) * Math.PI / 2;
-  for (let j = 0; j < SEGMENTS; j++) {
-    PROFILE.pts.forEach(([u0, w0], k) => {
-      const [u1, w1] = PROFILE.pts[(k + 1) % PROFILE.pts.length];
-      const metal = k === PROFILE.metalEdge;
-      const [t0, t1] = metal ? [strip(j), strip(j + 1)] : [body(j), body(j + 1)];
-      polys.push({
-        vertices: [map(u0, w0, t0), map(u1, w1, t0), map(u1, w1, t1), map(u0, w0, t1)],
-        color: metal ? METAL : color,
-      });
+  const inner = Array.from({ length: SEGMENTS - 1 }, (_, j) => ((j + 1) / SEGMENTS) * Math.PI / 2);
+  // Stations for each profile point: mouth, chamfer end, interior…, and back.
+  const stations = PROFILE.pts.map(([u, w]) => {
+    const a = Math.asin(BEVEL / radius(u, w)); // exactly BEVEL of travel in
+    return [0, a, ...inner, Math.PI / 2 - a, Math.PI / 2];
+  });
+  const last = stations[0].length - 1;
+  // At the two mouth stations the point is pulled in; everywhere else it is full size.
+  const at = (k, s) => map(...(s === 0 || s === last ? clamped(PROFILE.pts[k]) : PROFILE.pts[k]),
+    stations[k][s]);
+
+  for (let s = 0; s < last; s++) {
+    PROFILE.pts.forEach((_, k) => {
+      const k1 = (k + 1) % PROFILE.pts.length;
+      const quad = dedupe([at(k, s), at(k1, s), at(k1, s + 1), at(k, s + 1)]);
+      if (quad.length < 3) return;  // the chamfer band's corner quads are triangles
+      polys.push({ vertices: quad, color: k === PROFILE.metalEdge ? METAL : color });
     });
   }
-  for (const [t, dir] of [[body(0), entryDir], [body(SEGMENTS), exitDir]]) {
+  for (const [t, dir] of [[0, entryDir], [Math.PI / 2, exitDir]]) {
     for (const cap of PROFILE.caps) {
-      polys.push({ vertices: windToward(cap.map(([u, w]) => map(u, w, t)), dir), color });
+      const vs = dedupe(cap.map(p => map(...clamped(p), t)));
+      polys.push({ vertices: windToward(vs, dir), color });
     }
   }
   return polys;
@@ -310,7 +330,7 @@ export const ARC_MAP = {
 };
 
 export function leftCurve(color) {
-  return sweepPiece(ARC_MAP.leftCurve, color, [0, -1, 0], [-1, 0, 0]);
+  return sweepPiece(ARC_MAP.leftCurve, (u) => ARC_R + u, color, [0, -1, 0], [-1, 0, 0]);
 }
 // Right curve: the left curve mirrored (reversing winding to keep normals out).
 const mirrorX = polys => polys.map(p => ({
@@ -321,7 +341,7 @@ export const rightCurve = color => mirrorX(leftCurve(color));
 // Inside curve: the same quarter donut stood in the vertical plane, channel
 // on the concave face (w → towards the arc centre, up-and-over the valley).
 export function insideCurve(color) {
-  return sweepPiece(ARC_MAP.insideCurve, color, [0, -1, 0], [0, 0, 1]);
+  return sweepPiece(ARC_MAP.insideCurve, (u, w) => ARC_R - w, color, [0, -1, 0], [0, 0, 1]);
 }
 
 /** Geometry generator per piece type, all authored in the canonical UF pose. */

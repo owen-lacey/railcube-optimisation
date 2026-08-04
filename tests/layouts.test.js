@@ -12,8 +12,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LAYOUTS, routeOf, shapeOf } from '../src/layouts.js';
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { LAYOUTS, routeOf, shapeOf, identify } from '../src/layouts.js';
+import { chainTrack, countPieces, POOLS, POOL_OF } from '../src/track.js';
 
 const entries = Object.entries(LAYOUTS);
 
@@ -44,6 +44,30 @@ for (const [name, layout] of entries) {
     for (const pool of POOLS) {
       assert.equal(typeof layout.set[pool], 'number', `${name} has no ${pool} count`);
     }
+  });
+
+  // Piece IDs are what lets one layout be rearranged into another: `2L` in this
+  // shape has to be the same cube as `2L` in the next one. So an ID has to name
+  // exactly one cube, and the set of IDs has to be the inventory restated.
+  test(`${name} names each of its cubes exactly once`, () => {
+    const placed = chainTrack(routeOf(layout.shape));
+    const ids = identify(placed);
+    assert.equal(new Set(ids).size, ids.length, `${name} reuses an ID: ${ids}`);
+    assert.equal(ids.length, placed.filter(p => !p.revisit).length, 'one ID per cube');
+
+    // The IDs are the inventory written out, so counting the letters back has to
+    // give what countPieces gives — which is what makes matching by ID the same
+    // thing as matching cube for cube.
+    const spent = countPieces(placed);
+    for (const pool of POOLS) {
+      const letter = shapeOf([pool]);
+      const named = ids.filter(id => id.endsWith(letter));
+      assert.equal(named.length, spent[pool], `${name} has ${named.length} ${pool} IDs`);
+      assert.deepEqual(named.map(id => Number(id.slice(0, -1))).sort((a, b) => a - b),
+        Array.from({ length: spent[pool] }, (_, i) => i + 1),
+        `${name}'s ${pool} IDs are not 1..n`);
+    }
+    assert.equal(Object.keys(POOL_OF).length, POOLS.length, 'a pool holds more than one type');
   });
 
   test(`${name} fits the box it claims`, () => {

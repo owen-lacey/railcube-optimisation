@@ -47,6 +47,75 @@ export const sceneFromRoute = (route, extra = {}) => {
   return { pieces, drive: true, camera: frame(pieces), ...extra };
 };
 
+/**
+ * A layout about to fall over. The pieces are the same ones a track scene draws
+ * — the physics reads them straight out of `chainTrack` — but the shot is not:
+ * what has to fit in frame is the pile, which lands `drop` cubes below the
+ * track and spreads sideways getting there.
+ */
+export function tumbleScene(route, { drop = 3 } = {}) {
+  const pieces = paint(chainTrack(route));
+  return { pieces, drop, camera: frameBox(boundsOf(pieces), { drop }) };
+}
+
+// ---- Boxes, and the one frame a rearrangement is watched from ---------------
+
+/** The box of cells a set of pieces occupies. */
+export const boundsOf = pieces => {
+  const cells = pieces.flatMap(p => p.material ?? [p.cell]);
+  const bound = pick => [0, 1, 2].map(a => pick(...cells.map(c => c[a])));
+  return { lo: bound(Math.min), hi: bound(Math.max) };
+};
+
+const SPREAD = 2;   // cubes of room either side for a pile to sprawl into
+
+/**
+ * A camera for a box, with `drop` cubes of headroom below it to fall through and
+ * room either side for the pile that lands.
+ *
+ * `frame` reads a piece's `material` and nothing else, so the box goes in as one
+ * piece made of nothing but its two extreme corners.
+ */
+export const frameBox = ({ lo, hi }, { drop = 0 } = {}) => frame([{ material: [
+  [lo[0] - SPREAD, lo[1] - drop, lo[2] - SPREAD],
+  [hi[0] + SPREAD, hi[1], hi[2] + SPREAD],
+] }]);
+
+/**
+ * How far from the start cell the frame reaches, in cells — and therefore the
+ * largest layout `Layout` can show without cropping.
+ *
+ * It is the **solver's own box constraint**, not a number picked to look right:
+ * `solveTrack` is told no material cell may sit further than `box` from the
+ * origin, and every layout in `src/layouts.js` was solved at 3, 4, 5 or 6. Checked
+ * rather than assumed — the worst reach over all eight of them is exactly 6, so
+ * this holds every answer the project has produced, and the check is in
+ * `tests/stage.test.js` so a bigger layout added later fails loudly.
+ */
+const REACH = 6;
+
+/**
+ * The one frame a rearrangement is watched from — fixed, and the same whatever is
+ * being shown.
+ *
+ * Framing per layout means a camera that moves every time you type, because the
+ * layouts are neither the same size nor in the same place: over the four known
+ * 18-cube layouts of the model set the extents run 6x7x9, 8x5x7, 8x5x6 and 9x5x4,
+ * and their centres move by whole cubes. Growing a box to take each new layout in
+ * is better but still moves, on the change that grows it. So the box is not derived
+ * from the layouts at all. Every route starts at the origin and none may dig below
+ * the ground, so a box reaching REACH cells around that start cell holds any of
+ * them, and the camera has nothing to respond to.
+ *
+ * It is not the expensive option it sounds like: zoom 1.90, against 1.96 for the
+ * union of just two 18-cube layouts. Almost all of the cost of framing a
+ * rearrangement is the room to fall, which any of these has to reserve.
+ */
+export const fixedFrame = ({ drop = 1 } = {}) =>
+  frameBox({ lo: [-REACH, 0, -REACH], hi: [REACH, REACH, REACH] }, { drop });
+
+export { REACH };
+
 // ---- The 24-pose gallery --------------------------------------------------
 
 const FACES = ['U', 'D', 'F', 'B', 'L', 'R'];
