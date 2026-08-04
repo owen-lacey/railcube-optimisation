@@ -146,6 +146,7 @@ const AXIS_OF = { L: 0, R: 0, U: 1, D: 1, F: 2, B: 2 };
  */
 function addCrossings({
   model, rows, selectors, x, y, z, active, reach, crosses, minCrossings,
+  minCrossingGap,
 }) {
   const steps = selectors.length;
   // Two steps to a crossing, and never more crossings than crosses in the box.
@@ -193,6 +194,17 @@ function addCrossings({
 
     // Of two passes over one cube the earlier is the placement, by definition.
     model.add(at[0].lt(at[1])).onlyEnforceIf(on);
+    // How far the train travels between the two passes, which is a statement
+    // about the *shape* of a crossing rather than about its legality. Left free,
+    // the solver closes every crossing the tightest way it can — a gap of 6,
+    // which spells XSLLLSX, the figure eight from tests/cross.test.js. Measured
+    // over a sweep: 32 of 38 layouts were that one motif. The gap is always
+    // even, since the head comes back to the same cell and every piece moves it
+    // an odd number of cells, so 8 is the next value up and demanding it forbids
+    // the tight eight and nothing else.
+    if (minCrossingGap) {
+      model.add(at[1].minus(at[0]).ge(minCrossingGap)).onlyEnforceIf(on);
+    }
     // The rails must actually cross. Said via `differ` because notEquals does not.
     differ(model, axis[0], axis[1], `crossAxis_${c}`);
 
@@ -377,7 +389,7 @@ function addClearance(model, material, train) {
  */
 function buildModel({
   steps, box, minY, exclude, startPose, collisions, checkTrain,
-  inventory, objective, symmetryBreaking, crossings, minCrossings,
+  inventory, objective, symmetryBreaking, crossings, minCrossings, minCrossingGap,
   require: forced, hint, fill,
 }) {
   const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
@@ -452,7 +464,8 @@ function buildModel({
 
   // Crossings first: whether a step is a revisit decides whether it claims.
   const revisit = crossings
-    ? addCrossings({ model, rows, selectors, x, y, z, active, reach, crosses, minCrossings })
+    ? addCrossings({ model, rows, selectors, x, y, z, active, reach, crosses,
+                     minCrossings, minCrossingGap })
     : null;
 
   const g = grid(box);
@@ -547,6 +560,12 @@ const chosenRows = (result, selectors) =>
  *                says whether it arrived during the search or was replayed at the
  *                end — see cpsat-js, which can only enter JS from the search when
  *                there is one worker. Watch-only: the return value is ignored
+ *   minCrossingGap
+ *                the fewest steps between the two passes over a crossed cross.
+ *                Shape, not legality: unconstrained, every crossing closes as
+ *                tightly as it can, which is a gap of 6 and spells XSLLLSX — the
+ *                figure eight. Gaps are always even, so 8 forbids exactly that
+ *                one motif. Needs `crossings`
  *   fill         demand that every step is used, rather than leaving the length to
  *                an objective. With crossings off that is "spend the whole
  *                inventory", so every solution is already as good as a loop can
@@ -576,7 +595,8 @@ const chosenRows = (result, selectors) =>
 export async function solveTrack({
   steps, box = 6, minY = null, exclude = [], startPose = 'UF',
   collisions = true, checkTrain = true, inventory,
-  objective, symmetryBreaking = false, crossings = false, minCrossings, require, hint,
+  objective, symmetryBreaking = false, crossings = false, minCrossings, minCrossingGap,
+  require, hint,
   fill = false, enumerateAllSolutions = false,
   allSolutions = false, maxSolutions, maxTimeInSeconds, numWorkers, onSolution,
 }) {
@@ -594,7 +614,8 @@ export async function solveTrack({
   const solver = await getSolver();
   const { model, rows, selectors, active } = buildModel({
     steps, box, minY, exclude, startPose, collisions, checkTrain,
-    inventory, objective, symmetryBreaking, crossings, minCrossings, require, hint, fill,
+    inventory, objective, symmetryBreaking, crossings, minCrossings, minCrossingGap,
+    require, hint, fill,
   });
   const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);
   // An inactive step is forbidden by its active flag; an active one by its row.

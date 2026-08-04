@@ -338,3 +338,44 @@ test('the two counts differ exactly on crossings', () => {
   assert.equal(countPools(route).cross, 2, 'the route passes a cross twice');
   assert.equal(countPieces(placed).cross, 1, 'but there is one cube on the table');
 });
+
+// ---- How wide a crossing is, as opposed to whether it is legal ------------
+
+// Left free, every crossing closes as tightly as it can: the two passes six
+// steps apart, which spells XSLLLSX — the figure eight above. That is fine as
+// geometry and dull as output, and a sweep of the 35-cube crossing set came back
+// 32 layouts in 38 carrying exactly that motif. `minCrossingGap` is the knob for
+// it, and this pins what it does: keep every loop whose passes are far enough
+// apart, drop the rest, invent nothing.
+//
+// Measured off the chained route rather than off `firstAt`/`secondAt`, because a
+// constraint that silently fails to bind is the failure mode this whole file
+// exists to catch — see the notEquals bug in tests/library.test.js.
+const crossingGap = placed => {
+  const at = placed.flatMap((piece, i) => (piece.type === 'cross' ? [i] : []));
+  return at.length === 2 ? at[1] - at[0] : null;   // one appearance means uncrossed
+};
+
+test('minCrossingGap keeps exactly the crossings wide enough to pass it', async () => {
+  const every = extra => solveTrack({
+    steps: 12, box: 4, minY: 0, inventory: CROSSING_SET, crossings: true,
+    allSolutions: true, ...extra,
+  });
+  const loose = (await every({})).routes;
+  const wide = (await every({ minCrossingGap: 8 })).routes;
+  const gaps = routes => routes.map(route => crossingGap(chainTrack(route)));
+
+  assert.ok(gaps(loose).includes(6), 'unconstrained, the tight figure eight is reachable');
+  assert.deepEqual(gaps(wide).filter(g => g !== null && g < 8), [],
+    'nothing narrower than the demanded gap survives');
+  // Not merely "narrow ones are gone": the wide set is the loose set filtered,
+  // so the constraint has removed loops rather than moved the search somewhere
+  // else. Uncrossed loops are in both — the gap says nothing about them.
+  assert.deepEqual(
+    wide.map(shape).sort(),
+    loose.filter(route => {
+      const g = crossingGap(chainTrack(route));
+      return g === null || g >= 8;
+    }).map(shape).sort(),
+  );
+});
