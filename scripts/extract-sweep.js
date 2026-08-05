@@ -89,7 +89,23 @@ function verify(record) {
     throw new Error(`${record.shape} is ${cubes} cubes, logged as ${record.cubes}`);
   }
 
-  return { shape: record.shape, span };
+  // A crossing is a step that spends no cube, so steps minus cubes counts them.
+  // explore.py has no crossings encoding at all and logs no such field; a sweep
+  // that does claim one has to be right about it.
+  const revisits = placed.length - cubes;
+  if (record.revisits !== undefined && revisits !== record.revisits) {
+    throw new Error(`${record.shape} revisits ${revisits} cells, logged as ${record.revisits}`);
+  }
+
+  // `mirrored` is kept rather than filtered on. A mirror swaps every left curve
+  // for a right one, and the inventories swept here hold four of each, so the
+  // reflection is a genuinely different track you could genuinely build — not a
+  // duplicate. It is also trivially derived from its partner, which a post
+  // counting layouts may well want to say. Recording the flag lets it choose;
+  // dropping the rows would not.
+  return record.mirrored === undefined
+    ? { shape: record.shape, span, revisits }
+    : { shape: record.shape, span, revisits, mirrored: record.mirrored };
 }
 
 // Sorted rather than kept in the order they were found. A resumed sweep replays
@@ -111,15 +127,21 @@ if (scores.size !== 1 || cubes.size !== 1) {
   throw new Error('the rounds disagree on score or cube count');
 }
 
+// Deliberately not "rounds". The two sweeps count a round differently — a
+// crossing sweep logs a layout *and* its mirror per solve, so its line count is
+// twice its rounds — and a field meaning one thing in one file and another in
+// the next is worse than no field. These three are unambiguous in both: lines
+// written, lines carrying a layout, and layouts kept.
 const data = {
   source: input,
   generatedBy: 'scripts/extract-sweep.js',
   question: solved[0].config,
   cubes: [...cubes][0],
   score: [...scores][0],
-  rounds: records.length,
+  records: records.length,
   solved: solved.length,
   distinct: shapes.length,
+  mirrors: shapes.filter(s => s.mirrored).length,
   shapes,
 };
 
@@ -134,6 +156,7 @@ const body = JSON.stringify({ ...data, shapes: [] }, null, 2)
 mkdirSync(dirname(output), { recursive: true });
 writeFileSync(output, `${body}\n`);
 
-console.log(`${input}: ${records.length} rounds, ${solved.length} solved, `
-  + `${shapes.length} distinct — all verified`);
+console.log(`${input}: ${records.length} records, ${solved.length} solved, `
+  + `${shapes.length} distinct${data.mirrors ? ` (${data.mirrors} of them mirrors)` : ''}`
+  + ' — all verified');
 console.log(`wrote ${output}`);
