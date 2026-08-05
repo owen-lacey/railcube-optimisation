@@ -40,3 +40,22 @@ export const COLORS = {
   insideCurve: '#f2933a',   // orange
 };
 export const START_COLOR = '#f8fafc'; // the one white cube the set ships with
+
+// The one light rig, shared by every viewer so there is a single number to tune.
+//
+// PolyCSS shades a face `base × (ambient + directional × max(0, n·L̂)) / π`, in
+// linear space (`Fs`/`nr` in @layoutit/polycss-core). The π is the part worth
+// knowing: a face only reaches its own colour when the bracket reaches π ≈ 3.14,
+// so the obvious-looking `directional 1, ambient 0.5` renders every piece at
+// half its swatch — measured, 0.42–0.66× across a whole layout. That reads as
+// "lit object" on a dark page and as "dark object" on a white one.
+//
+// These are set for a light page: the bracket reaches 2.74 on the faces pointing
+// most nearly at the light and 1.0 on the ones facing away, so a layout lands at
+// roughly 0.6–0.95× its swatch with the shading still visible. Contrast is what
+// the ratio between the two costs, and it is the thing to trade, not the sum.
+export const LIGHT = {
+  direction: '0.5,-0.7,0.6',
+  directional: 2.6,
+  ambient: 1,
+};

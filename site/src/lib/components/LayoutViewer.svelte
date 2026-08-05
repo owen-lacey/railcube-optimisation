@@ -70,26 +70,14 @@
     display: grid;
     place-items: center;
     align-content: center;
-    gap: 0.4rem;
-    border: 1px dashed var(--line);
-    border-radius: 10px;
-    background: #0b1222;
-    padding: 1rem;
     text-align: center;
   }
 
   .empty p {
     margin: 0;
-    color: var(--muted);
-    max-width: 48ch;
-  }
-
-  .empty .failed {
-    color: #fca5a5;
   }
 
   .caption {
-    margin-top: 0.7rem;
     text-align: center;
     display: flex;
     justify-content: center;

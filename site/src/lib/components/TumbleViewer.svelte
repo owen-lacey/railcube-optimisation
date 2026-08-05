@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { createStage } from '../render/stage.js';
   import { tumblePhase } from '../render/tumble.js';
+  import { LIGHT } from '../render/dimensions.js';
   import { tumbleScene, cubesIn } from '$lib/scenes.js';
   import { routeOf } from '../../../../src/layouts.js';
 
@@ -89,9 +90,9 @@
   <poly-camera bind:this={cameraEl} rot-x="65" rot-y="45" zoom="4" target="0,0,0">
     <poly-scene
       bind:this={sceneEl}
-      directional-direction="0.5,-0.7,0.6"
-      directional-intensity="1"
-      ambient-intensity="0.5"
+      directional-direction={LIGHT.direction}
+      directional-intensity={LIGHT.directional}
+      ambient-intensity={LIGHT.ambient}
     >
       {#if interactive}
         <poly-orbit-controls drag wheel></poly-orbit-controls>
@@ -123,9 +124,6 @@
     position: relative;
     width: 100%;
     overflow: hidden;
-    border-radius: 10px;
-    background: radial-gradient(circle at 50% 35%, #1e293b 0%, #0f172a 70%);
-    border: 1px solid var(--line);
     display: grid;
     place-items: center;
   }
@@ -143,14 +141,9 @@
     position: absolute;
     inset: auto 0 0 0;
     margin: 0;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8rem;
-    color: #fca5a5;
-    background: #7f1d1d55;
   }
 
   .caption {
-    margin-top: 0.7rem;
     display: flex;
     align-items: center;
     justify-content: center;
