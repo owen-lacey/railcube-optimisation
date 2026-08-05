@@ -72,16 +72,16 @@ const workers = Number(arg('workers', 6));
 // four each. It halves the search by fixing which handedness appears first; the
 // mirror pass puts the other half back without solving for it.
 const symmetry = !process.argv.includes('--no-symmetry');
-// The fewest steps between the two passes over the cross. Left off, every
-// crossing closes the tightest way it can: a gap of 6, which spells XSLLLSX —
-// the figure eight, and 32 of the first 38 layouts found were exactly that.
-// Gaps are even, so 8 is the next rung up and rules out only the tight one.
-const gap = Number(arg('gap', 0));
+// Whether a crossing may be the tightest one there is — six steps out and back,
+// which spells XSLLLSX. Allowed, it is almost all you get: 32 of the first 38
+// layouts swept were that single motif. There is no width to choose here, only
+// whether the tightest is in or out.
+const tight = !process.argv.includes('--no-tight');
 
 // A sweep file holds one question. The fingerprint goes on every line so a file
 // of two inventories — a file of incomparable layouts — is caught on sight.
 const config = { inventory: INVENTORY, steps: STEPS, box: BOX, minY: 0,
-                 startPose: 'UF', minCrossingGap: gap };
+                 startPose: 'UF', tightCrossings: tight };
 const fingerprint = JSON.stringify(config);
 
 const already = existsSync(out)
@@ -97,7 +97,7 @@ if (already.length) console.log(`${out} holds ${already.length} layout(s); appen
 
 console.log(`${CUBES} cubes over ${STEPS} steps  box ${BOX}  ${perSolve}s a solve`
   + `  ${workers} workers  max ${max === Infinity ? 'unbounded' : max}`
-  + `  crossing gap ${gap ? `>= ${gap}` : 'free'}`);
+  + `  ${tight ? 'tight crossings allowed' : 'no tight crossings'}`);
 
 const shapes = new Set(already.map(r => r.shape));
 const started = Date.now();
@@ -154,22 +154,21 @@ const record = s => {
 // and cannot change what is feasible; and `allSolutions` calls `model.clearHints()`
 // after the first cut, since from then on the hint points at a forbidden solution.
 // Two witnesses, because a hint has to satisfy the constraints or it is worse
-// than none. The first is the tight figure eight — gap 6, so it is not a legal
-// starting point once a wider gap is demanded. The second came out of the
-// unconstrained sweep with its passes twelve steps apart, which clears any gap
-// up to 12. Both open on a left curve after mirroring, which is what the
-// symmetry break requires.
+// than none. The first is the tight figure eight itself, so it is not a legal
+// starting point once tight crossings are off. The second came out of the
+// unconstrained sweep with its passes twelve steps apart. Both open on a left
+// curve after mirroring, which is what the symmetry break requires.
 const WITNESS = {
   tight: 'RIISROLXSLLLSXSRIOSISIRSISSSOOSIISSS',   // gap 6
   wide: 'RLRXSLIOOLLOOISXIRIISSSISSSSISSSSSRI',    // gap 12
 };
-const HINT = arg('hint', gap > 6 ? WITNESS.wide : WITNESS.tight);
+const HINT = arg('hint', tight ? WITNESS.tight : WITNESS.wide);
 
 try {
   const result = await solveTrack({
     steps: STEPS, box: BOX, minY: 0, inventory: INVENTORY,
     crossings: true, minCrossings: 1, fill: true,
-    minCrossingGap: gap,
+    tightCrossings: tight,
     symmetryBreaking: symmetry,
     // The symmetry break allows a right curve only after a left one, so the
     // known layout — which opens on a right curve — is not a legal hint under it.

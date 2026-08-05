@@ -144,9 +144,19 @@ const AXIS_OF = { L: 0, R: 0, U: 1, D: 1, F: 2, B: 2 };
  * three), that a placement is never itself a revisit, and that a step is not both
  * passes over itself.
  */
+/**
+ * The fewest steps a crossing can span: out of the cross and back through it on
+ * the other rail. Not a tuned threshold — it is the tightest crossing there is.
+ * The gap is always even, because the head returns to the cell it left and every
+ * piece moves it an odd number of cells, and enumerating every crossing loop the
+ * DFS oracle can build turns up 6 and nothing narrower. Spelled out, it is
+ * XSLLLSX: the figure eight of tests/cross.test.js.
+ */
+const TIGHT_CROSSING = 6;
+
 function addCrossings({
   model, rows, selectors, x, y, z, active, reach, crosses, minCrossings,
-  minCrossingGap,
+  tightCrossings,
 }) {
   const steps = selectors.length;
   // Two steps to a crossing, and never more crossings than crosses in the box.
@@ -194,16 +204,13 @@ function addCrossings({
 
     // Of two passes over one cube the earlier is the placement, by definition.
     model.add(at[0].lt(at[1])).onlyEnforceIf(on);
-    // How far the train travels between the two passes, which is a statement
-    // about the *shape* of a crossing rather than about its legality. Left free,
-    // the solver closes every crossing the tightest way it can — a gap of 6,
-    // which spells XSLLLSX, the figure eight from tests/cross.test.js. Measured
-    // over a sweep: 32 of 38 layouts were that one motif. The gap is always
-    // even, since the head comes back to the same cell and every piece moves it
-    // an odd number of cells, so 8 is the next value up and demanding it forbids
-    // the tight eight and nothing else.
-    if (minCrossingGap) {
-      model.add(at[1].minus(at[0]).ge(minCrossingGap)).onlyEnforceIf(on);
+    // Shape rather than legality: a tight crossing is perfectly legal, and left
+    // to itself the solver closes almost every one that way — 32 of the first 38
+    // layouts of a 35-cube sweep were the same figure eight. Switching them off
+    // says only "not the tightest one", which is why there is no width to choose
+    // here: anything wider is whatever the route happens to do.
+    if (!tightCrossings) {
+      model.add(at[1].minus(at[0]).gt(TIGHT_CROSSING)).onlyEnforceIf(on);
     }
     // The rails must actually cross. Said via `differ` because notEquals does not.
     differ(model, axis[0], axis[1], `crossAxis_${c}`);
@@ -389,7 +396,7 @@ function addClearance(model, material, train) {
  */
 function buildModel({
   steps, box, minY, exclude, startPose, collisions, checkTrain,
-  inventory, objective, symmetryBreaking, crossings, minCrossings, minCrossingGap,
+  inventory, objective, symmetryBreaking, crossings, minCrossings, tightCrossings,
   require: forced, hint, fill,
 }) {
   const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
@@ -465,7 +472,7 @@ function buildModel({
   // Crossings first: whether a step is a revisit decides whether it claims.
   const revisit = crossings
     ? addCrossings({ model, rows, selectors, x, y, z, active, reach, crosses,
-                     minCrossings, minCrossingGap })
+                     minCrossings, tightCrossings })
     : null;
 
   const g = grid(box);
@@ -560,12 +567,13 @@ const chosenRows = (result, selectors) =>
  *                says whether it arrived during the search or was replayed at the
  *                end — see cpsat-js, which can only enter JS from the search when
  *                there is one worker. Watch-only: the return value is ignored
- *   minCrossingGap
- *                the fewest steps between the two passes over a crossed cross.
- *                Shape, not legality: unconstrained, every crossing closes as
- *                tightly as it can, which is a gap of 6 and spells XSLLLSX — the
- *                figure eight. Gaps are always even, so 8 forbids exactly that
- *                one motif. Needs `crossings`
+ *   tightCrossings
+ *                whether a crossing may close the tightest way it can, six steps
+ *                out and back — the figure eight, XSLLLSX. On by default because
+ *                it is legal track; turn it off when a sweep keeps returning the
+ *                same motif, which it will. Not a width to tune: off means only
+ *                "wider than the tightest", and how much wider is the route's
+ *                business. Needs `crossings`
  *   fill         demand that every step is used, rather than leaving the length to
  *                an objective. With crossings off that is "spend the whole
  *                inventory", so every solution is already as good as a loop can
@@ -595,8 +603,8 @@ const chosenRows = (result, selectors) =>
 export async function solveTrack({
   steps, box = 6, minY = null, exclude = [], startPose = 'UF',
   collisions = true, checkTrain = true, inventory,
-  objective, symmetryBreaking = false, crossings = false, minCrossings, minCrossingGap,
-  require, hint,
+  objective, symmetryBreaking = false, crossings = false, minCrossings,
+  tightCrossings = true, require, hint,
   fill = false, enumerateAllSolutions = false,
   allSolutions = false, maxSolutions, maxTimeInSeconds, numWorkers, onSolution,
 }) {
@@ -614,7 +622,7 @@ export async function solveTrack({
   const solver = await getSolver();
   const { model, rows, selectors, active } = buildModel({
     steps, box, minY, exclude, startPose, collisions, checkTrain,
-    inventory, objective, symmetryBreaking, crossings, minCrossings, minCrossingGap,
+    inventory, objective, symmetryBreaking, crossings, minCrossings, tightCrossings,
     require, hint, fill,
   });
   const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);

@@ -339,14 +339,13 @@ test('the two counts differ exactly on crossings', () => {
   assert.equal(countPieces(placed).cross, 1, 'but there is one cube on the table');
 });
 
-// ---- How wide a crossing is, as opposed to whether it is legal ------------
+// ---- Whether a crossing may be the tightest one --------------------------
 
-// Left free, every crossing closes as tightly as it can: the two passes six
-// steps apart, which spells XSLLLSX — the figure eight above. That is fine as
-// geometry and dull as output, and a sweep of the 35-cube crossing set came back
-// 32 layouts in 38 carrying exactly that motif. `minCrossingGap` is the knob for
-// it, and this pins what it does: keep every loop whose passes are far enough
-// apart, drop the rest, invent nothing.
+// Left to itself the solver closes almost every crossing the tightest way there
+// is: the two passes six steps apart, which spells XSLLLSX — the figure eight at
+// the top of this file. Legal, and dull in bulk: 32 of the first 38 layouts of a
+// 35-cube sweep were that one motif. `tightCrossings: false` says "not that one",
+// and this pins that it removes those loops rather than inventing others.
 //
 // Measured off the chained route rather than off `firstAt`/`secondAt`, because a
 // constraint that silently fails to bind is the failure mode this whole file
@@ -356,26 +355,33 @@ const crossingGap = placed => {
   return at.length === 2 ? at[1] - at[0] : null;   // one appearance means uncrossed
 };
 
-test('minCrossingGap keeps exactly the crossings wide enough to pass it', async () => {
+// Six is the tightest crossing there is, not a threshold: enumerating every
+// crossing loop of this set turns up 6 and nothing narrower. If a later change
+// ever makes a narrower one reachable, the constraint's meaning has moved and
+// this is the test that should say so.
+test('six is the tightest a crossing can be', () => {
+  const gaps = new Set(enumerateLoops({ inventory: CROSSING_SET, maxPieces: 12, box: 6, minY: 0 })
+    .map(route => crossingGap(chainTrack(route)))
+    .filter(g => g !== null));
+  assert.deepEqual([...gaps].sort((a, b) => a - b), [6]);
+});
+
+test('tightCrossings off keeps every loop except the tightest', async () => {
   const every = extra => solveTrack({
     steps: 12, box: 4, minY: 0, inventory: CROSSING_SET, crossings: true,
     allSolutions: true, ...extra,
   });
   const loose = (await every({})).routes;
-  const wide = (await every({ minCrossingGap: 8 })).routes;
+  const wide = (await every({ tightCrossings: false })).routes;
   const gaps = routes => routes.map(route => crossingGap(chainTrack(route)));
 
   assert.ok(gaps(loose).includes(6), 'unconstrained, the tight figure eight is reachable');
-  assert.deepEqual(gaps(wide).filter(g => g !== null && g < 8), [],
-    'nothing narrower than the demanded gap survives');
-  // Not merely "narrow ones are gone": the wide set is the loose set filtered,
-  // so the constraint has removed loops rather than moved the search somewhere
-  // else. Uncrossed loops are in both — the gap says nothing about them.
+  assert.deepEqual(gaps(wide).filter(g => g === 6), [], 'no tight crossing survives');
+  // Not merely "the tight ones are gone": what is left is the rest of the loose
+  // set, so the constraint has removed loops rather than moved the search
+  // elsewhere. Uncrossed loops are in both — this says nothing about them.
   assert.deepEqual(
     wide.map(shape).sort(),
-    loose.filter(route => {
-      const g = crossingGap(chainTrack(route));
-      return g === null || g >= 8;
-    }).map(shape).sort(),
+    loose.filter(route => crossingGap(chainTrack(route)) !== 6).map(shape).sort(),
   );
 });
