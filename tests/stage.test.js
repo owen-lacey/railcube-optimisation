@@ -22,8 +22,9 @@ import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
 import { createStage, together } from '../site/src/lib/render/stage.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
-import { buildPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, fixedFrame, REACH } from '../site/src/lib/scenes.js';
+import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
+import { paint, boundsOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
+import { ALARM, ALARM_FLASH, ALARM_PERIOD } from '../site/src/lib/render/dimensions.js';
 import { toWorld, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { CUBE } from '../site/src/lib/render/dimensions.js';
@@ -405,6 +406,21 @@ test('the frame is the same whatever is being shown', () => {
   assert.equal(Object.keys(shot).sort().join(','), 'target,zoom');
 });
 
+test('reach widens the frame, and unset means the solver box', () => {
+  // The sweeps were solved in bigger boxes than src/layouts.js was — the crossed
+  // one at 8 against REACH's 6 — so the front page passes the sweep's own
+  // `question.box` as `reach`. Everything the fixed frame promises still holds at
+  // any one reach: the frame is a constant, so a shape change cannot move it.
+  const shot = fixedFrame({ drop: 1 });
+  assert.deepEqual(fixedFrame({ drop: 1, reach: REACH }), shot,
+    'reach at the solver box should be the default frame');
+  assert.deepEqual(fixedFrame({ drop: 1, reach: undefined }), shot,
+    'an unset reach should be the default frame');
+  const wide = fixedFrame({ drop: 1, reach: 8 });
+  assert.ok(wide.zoom < shot.zoom, 'a wider reach should zoom out');
+  assert.deepEqual(fixedFrame({ drop: 1, reach: 8 }), wide, 'the wide frame is not constant');
+});
+
 test('speed scales the whole build, and only its duration', () => {
   // One tempo over all four durations, so a faster build is the *same* build run
   // faster rather than a differently-shaped one. Two things to hold: it really is
@@ -524,4 +540,198 @@ test('a pick-up carries a cube by its centre of mass, not by a corner', () => {
   // a rotation about the wrong point looks like the moment the piece turns.
   assert.ok(Math.max(...steps) < CUBE,
     `the centre of mass jumped ${Math.max(...steps).toFixed(1)} units in one frame`);
+});
+
+// ---- Growing: a track being typed -----------------------------------------
+//
+// The other two animations replace what is on the stage. This one *extends* it, and
+// the whole of the difference is what happens to a cube that is already there: the
+// build picks it up off the floor and carries it, this leaves it alone. A piece
+// already down must not so much as twitch when the next letter is typed, and
+// "leaves it alone" is a claim about writes rather than about pixels — which is
+// exactly what the fake scene can settle.
+
+/** Type a shape onto a stage, one growth at a time, and run each out. */
+function typing(shapes, { pace = 0.1 } = {}) {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  let shown = [];
+
+  const type = shape => {
+    const view = openScene(shape);
+    // What the viewer does before running the phase: every cube past the point the
+    // two layouts stop agreeing comes off.
+    let prefix = 0;
+    const key = p => `${p.type}${p.pose}${p.cell}`;
+    while (prefix < shown.length && prefix < view.pieces.length
+      && key(shown[prefix]) === key(view.pieces[prefix])) prefix += 1;
+    for (const id of cubeIds(shown).slice(prefix)) if (id) stage.drop(id);
+
+    stage.run([growPhase(stage, view.pieces, {
+      pace, drive: view.closed, alarm: view.offender?.id ?? null,
+    })]);
+    stage.start();
+    shown = view.pieces;
+    return view;
+  };
+
+  return { handles, stage, clock, type, alive: () => handles.filter(h => !h.disposed).length };
+}
+
+test('growing a track does not touch a single piece already standing', () => {
+  const { handles, clock, type } = typing(['LIRIROSOL']);
+
+  type('LIRIROSOL');
+  clock.run(4);
+  assert.equal(handles.length, 9, 'nine cubes went down');
+
+  // Exactly what has been written to each of them, before the next letter.
+  const writes = handles.map(h => h.transforms.length);
+  const bakes = handles.map(h => h.bakes);
+
+  type('LIRIROSOLO');
+  clock.run(4);
+  assert.equal(handles.length, 10, 'the tenth cube arrived');
+
+  for (const [i, handle] of handles.slice(0, 9).entries()) {
+    assert.equal(handle.transforms.length, writes[i], `cube ${i} was moved by the next letter`);
+    assert.equal(handle.bakes, bakes[i], `cube ${i} was re-lit by the next letter`);
+    assert.equal(handle.disposed, false, `cube ${i} was thrown away and remade`);
+  }
+});
+
+test('a new piece is minted in flight and never baked', () => {
+  const { handles, stage, clock, type } = typing([]);
+
+  type('LI');
+  clock.run(4);
+  const arrival = handles.at(-1);
+  // A mint's polygons go in through `scene.add`, in the pose it will land in, so
+  // `setPolygons` is never called on it at all. This is the assertion that was
+  // wrong the first three times it was written.
+  assert.equal(arrival.bakes, 0, 'a mint was baked');
+  assert.ok(arrival.transforms.length > 1, 'a mint did not fly');
+  assert.deepEqual(stage.cubes.get('1I').position, restingPlace(openScene('LI').pieces[1]));
+});
+
+test('backspace takes one cube off and leaves the rest standing', () => {
+  const { handles, stage, clock, type, alive } = typing([]);
+
+  type('LIRI');
+  clock.run(4);
+  assert.equal(alive(), 4);
+  const kept = ['1L', '1I', '1R'].map(id => stage.cubes.get(id).mesh.handle);
+
+  type('LIR');
+  clock.run(4);
+
+  assert.equal(alive(), 3, 'exactly one cube came off');
+  assert.equal(stage.cubes.has('2I'), false, 'the deleted piece is off the stage');
+  for (const [i, handle] of kept.entries()) {
+    assert.equal(handle.disposed, false, `cube ${i} was disposed by a backspace`);
+    assert.ok(handles.includes(handle), `cube ${i} is not the same mesh it was`);
+  }
+});
+
+test('there is no train until the loop closes, and then there is one', () => {
+  const { clock, type, alive } = typing([]);
+
+  type('LLL');
+  clock.run(4);
+  assert.equal(alive(), 3, 'three cubes and no train: an open track is not a loop');
+
+  const closed = type('LLLL');
+  assert.equal(closed.closed, true);
+  clock.run(4);
+  assert.equal(alive(), 5, 'four cubes and exactly one train');
+});
+
+test('a piece with nowhere to go is drawn there, and pulses', () => {
+  const { stage, clock, type } = typing([]);
+
+  // Four left curves close a ring, so a fifth is asked to go where the first is.
+  const view = type('LLLLL');
+  assert.equal(view.offender.id, '5L', 'the fifth left curve is the one at fault');
+  assert.equal(view.pieces.length, 5, 'it is drawn, not dropped');
+  assert.equal(view.closed, false);
+
+  clock.run(1);
+  const offender = stage.cubes.get('5L').mesh.handle;
+  const others = ['1L', '2L', '3L', '4L'].map(id => stage.cubes.get(id).mesh.handle);
+
+  // It lands in ALARM — `openScene` paints it — so the first repaint due is the
+  // pale one, half a period after it lands, and they alternate from there.
+  const before = offender.bakes;
+  clock.run(ALARM_PERIOD * 2);
+  const flashes = offender.bakes - before;
+  assert.ok(flashes >= 3 && flashes <= 5, `${flashes} repaints over two periods`);
+
+  // One mesh, about twice a second. Nothing else is repainted at all — a track
+  // being re-lit every frame is the thing this whole file exists to catch.
+  for (const [i, handle] of others.entries()) {
+    assert.equal(handle.bakes, 0, `cube ${i} was repainted by the alarm`);
+  }
+
+  // And it really is drawn on top of the first curve rather than off to one side.
+  assert.deepEqual(stage.cubes.get('5L').position, stage.cubes.get('1L').position);
+});
+
+test('a stuck track keeps asking for frames, and an unstuck one stops', () => {
+  const { clock, type } = typing([]);
+
+  type('LLLLL');
+  clock.run(3);
+  assert.equal(clock.running(), true, 'the alarm stopped pulsing');
+
+  type('LLLL');       // backspace: closed, so the train keeps the loop running
+  clock.run(3);
+  assert.equal(clock.running(), true);
+
+  type('LLL');        // open, nothing arriving, nothing at fault: nothing to draw
+  clock.run(3);
+  assert.equal(clock.running(), false, 'a settled open track is still asking for frames');
+});
+
+// ---- The camera that grows ------------------------------------------------
+
+test('the frame only ever grows, and eases rather than snapping', () => {
+  const { cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+
+  // The first shot is not a move: there is nothing to pan from.
+  stage.panTo({ zoom: 4, target: '0,0,0' });
+  assert.equal(Number(cameraEl.attributes.zoom).toFixed(3), (4 * 0.88).toFixed(3));
+
+  stage.run([{ advance: () => undefined }]);
+  stage.start();
+  stage.panTo({ zoom: 2, target: '20,0,0' }, 0.4);
+
+  const zooms = [];
+  clock.run(0.6, () => zooms.push(Number(cameraEl.attributes.zoom)));
+
+  // It arrives, and it gets there by moving rather than by jumping.
+  assert.equal(zooms.at(-1).toFixed(3), (2 * 0.88).toFixed(3));
+  assert.ok(zooms.length > 10, 'the pan took no time at all');
+  assert.ok(Math.max(...zooms.slice(1).map((z, i) => Math.abs(z - zooms[i]))) < 0.2,
+    'the camera jumped rather than eased');
+});
+
+test('a pan outlives the phase that asked for it', () => {
+  // The loop stops when the queue empties, and the pan is not in the queue — so a
+  // keystroke that adds nothing but reaches new ground would otherwise leave the
+  // camera stranded part-way there.
+  const { cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+
+  stage.frameTo({ zoom: 4, target: '0,0,0' });
+  stage.run([{ advance: () => false }]);        // finished on its first frame
+  stage.panTo({ zoom: 2, target: '0,0,0' }, 0.4);
+  stage.start();
+  clock.run(1);
+
+  assert.equal(Number(cameraEl.attributes.zoom).toFixed(3), (2 * 0.88).toFixed(3));
+  assert.equal(clock.running(), false, 'the loop ran on after the pan finished');
 });

@@ -34,7 +34,7 @@
 // nothing precisely as the piece lands, so the finished track is lit identically
 // to a static one and nothing is baked twice.
 
-import { CUBE } from './dimensions.js';
+import { CUBE, ALARM, ALARM_FLASH, ALARM_PERIOD } from './dimensions.js';
 import { toWorld, poseRotation, axisAngle, compose, turnToward, add } from './vec.js';
 import { createDriver } from './drive.js';
 import { originAt, comAt } from '../shapes.js';
@@ -163,6 +163,40 @@ function finish(stage, slot) {
 }
 
 /**
+ * Off the floor and up to the standoff, turning into the pose on the way.
+ *
+ * The turn is over by 80% of the leg, so the piece is square before the slide
+ * starts. The arc is a straight line between the two points with a rise added to
+ * the middle of it — enough that a cube lifts clear of the track rather than
+ * dragging along the floor to get where it is going.
+ *
+ * Only a pick-up has one of these, so only `buildPhase` calls it.
+ */
+function lift(slot, s) {
+  const basis = turnToward(slot.from.basis, slot.basis, liftTurnEase(s));
+  const com = lerp(slot.from.com, slot.to, smooth(s));
+  const risen = add(com, scale(UP, Math.sin(Math.PI * clamp(s)) * LIFT_HEIGHT * CUBE));
+  slot.cube.place(basis, originAt(slot.type, basis, risen));
+}
+
+/**
+ * The axial slide onto the joint: one straight line and nothing else.
+ *
+ * Every arrival in the project ends with this, however the piece got to the
+ * standoff, which is why it sits out here rather than inside one phase.
+ */
+function slide(slot, s) {
+  const back = 1 - smooth(s);
+  const position = add(slot.position, scale(slot.standoff, back));
+  // A mint still has its tilt to lose; a pick-up spent its turn on the lift and
+  // comes down the lane square, so its slide is a pure translation.
+  const basis = slot.pickUp
+    ? slot.basis
+    : compose(axisAngle(slot.spin, TILT * (1 - turnEase(s))), slot.basis);
+  slot.cube.place(basis, position);
+}
+
+/**
  * A finished track, drawn all at once and driven — no assembly at all.
  *
  * What a reader who has asked for reduced motion gets instead of a build, what a
@@ -181,6 +215,102 @@ export function trackPhase(stage, pieces, { drive = true } = {}) {
     // The train is the one thing here the stage does not own, so it is the one
     // thing this has to take away with it.
     dispose: driver.dispose,
+  };
+}
+
+/**
+ * A track being *extended*: whatever is already standing stays exactly where it
+ * is, and only the pieces that are new arrive.
+ *
+ * This is the one a track being typed needs, and the difference from `buildPhase`
+ * is the whole of it. There, a cube already on the stage is a cube lying on the
+ * floor after a collapse, so it is picked up and carried. Here it is a cube that is
+ * already *in the right place* — the viewer takes off every cube that no longer
+ * belongs before running this — so the right thing to do with it is nothing at all:
+ * no bake, no transform, not a single write. A piece already down must not so much
+ * as twitch when the next letter is typed.
+ *
+ * `alarm` is the ID of a cube the model has rejected — a piece that has been asked
+ * to go somewhere it cannot. It pulses between two reds from the moment it lands
+ * and does not stop, so the phase never finishes while one is showing. It is done
+ * here rather than in a phase of its own because a cube must only ever have one
+ * thing writing to it in a frame.
+ */
+export function growPhase(stage, pieces, {
+  pace = PACE, speed = 1, drive = false, alarm = null, instant = false,
+} = {}) {
+  const timing = timingFor(pace, speed, 0);
+  const slots = slotsFor(stage, pieces, timing);
+  // `pickUp` here means "already standing", and the arrivals are the rest, re-timed
+  // to set off one after another from the moment this phase starts.
+  const arriving = slots.filter(slot => !slot.pickUp);
+  arriving.forEach((slot, i) => {
+    slot.at = i * timing.beat;
+    slot.lands = slot.at + timing.flight;
+  });
+
+  const alarmed = alarm ? slots.find(slot => slot.id === alarm) : null;
+  // It is minted in ALARM already — `openScene` paints it — so the first repaint
+  // due is the pale one, half a period after it lands.
+  let lit = ALARM;
+  const alarmFrom = alarmed && (alarmed.pickUp ? 0 : alarmed.lands);
+
+  const driver = drive ? createDriver(stage.scene) : null;
+  const closes = arriving.reduce((last, s) => Math.max(last, s.lands), 0) + timing.hold;
+
+  let next = 0;
+  let flying = [];
+  let closedAt = null;
+
+  function pulse(elapsed) {
+    if (elapsed < alarmFrom) return;
+    const half = ALARM_PERIOD / 2;
+    const want = Math.floor((elapsed - alarmFrom) / half) % 2 === 0 ? ALARM : ALARM_FLASH;
+    if (want === lit) return;
+    stage.cube(alarmed.id, alarmed).recolour(want);
+    lit = want;
+  }
+
+  if (instant) {
+    for (const slot of arriving) stage.cube(slot.id, slot).place(slot.basis, slot.position);
+  }
+
+  return {
+    advance(_, elapsed) {
+      if (!instant) {
+        while (next < arriving.length && elapsed >= arriving[next].at) {
+          const slot = arriving[next++];
+          slot.cube = stage.cube(slot.id, slot);
+          flying.push(slot);
+        }
+        flying = flying.filter(slot => {
+          if (elapsed >= slot.lands) {
+            slot.cube.place(slot.basis, slot.position);   // the delta is now nothing
+            return false;
+          }
+          slide(slot, (elapsed - slot.at) / timing.flight);
+          return true;
+        });
+      }
+
+      // A piece that cannot go down keeps saying so. Not under `instant`, which is
+      // what a reader who has asked for reduced motion gets: it stays the flat red
+      // it was minted in, because a pulsing element is the whole of what that
+      // preference is about.
+      if (alarmed && !instant) {
+        pulse(elapsed);
+        return undefined;
+      }
+      if (!driver) {
+        return instant || (next === arriving.length && !flying.length) ? false : undefined;
+      }
+      if (closedAt === null && elapsed >= (instant ? 0 : closes)) {
+        closedAt = elapsed;
+        driver.setRoute(pieces);
+      }
+      driver.at(elapsed - closedAt);
+    },
+    dispose() { driver?.dispose(); },
   };
 }
 
@@ -225,33 +355,6 @@ export function buildPhase(stage, pieces, {
     }
     slot.cube = cube;
     flying.push(slot);
-  }
-
-  /**
-   * Off the floor and up to the standoff, turning into the pose on the way.
-   *
-   * The turn is over by 80% of the leg, so the piece is square before the slide
-   * starts. The arc is a straight line between the two points with a rise added
-   * to the middle of it — enough that a cube lifts clear of the track rather than
-   * dragging along the floor to get where it is going.
-   */
-  function lift(slot, s) {
-    const basis = turnToward(slot.from.basis, slot.basis, liftTurnEase(s));
-    const com = lerp(slot.from.com, slot.to, smooth(s));
-    const risen = add(com, scale(UP, Math.sin(Math.PI * clamp(s)) * LIFT_HEIGHT * CUBE));
-    slot.cube.place(basis, originAt(slot.type, basis, risen));
-  }
-
-  /** The axial slide onto the joint: one straight line and nothing else. */
-  function slide(slot, s) {
-    const back = 1 - smooth(s);
-    const position = add(slot.position, scale(slot.standoff, back));
-    // A mint still has its tilt to lose; a pick-up spent its turn on the lift and
-    // comes down the lane square, so its slide is a pure translation.
-    const basis = slot.pickUp
-      ? slot.basis
-      : compose(axisAngle(slot.spin, TILT * (1 - turnEase(s))), slot.basis);
-    slot.cube.place(basis, position);
   }
 
   // Everything here is a function of how long the phase has been running, which

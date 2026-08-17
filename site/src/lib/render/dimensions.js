@@ -41,6 +41,17 @@ export const COLORS = {
 };
 export const START_COLOR = '#f8fafc'; // the one white cube the set ships with
 
+// A piece that cannot go where it has been asked to go, pulsing between these two
+// until it is taken away again.
+//
+// It has to leave its own colour entirely rather than being tinted, because one of
+// the six *is* a red — an outside curve shifted from #ef6461 to another red would
+// read as nothing at all. Alternating a dark red with a pale one is unmistakable on
+// all six, and is not a colour any legal piece can be.
+export const ALARM = '#dc2626';
+export const ALARM_FLASH = '#fca5a5';
+export const ALARM_PERIOD = 0.9;  // seconds for a full dark-pale-dark cycle
+
 // The one light rig, shared by every viewer so there is a single number to tune.
 //
 // PolyCSS shades a face `base × (ambient + directional × max(0, n·L̂)) / π`, in

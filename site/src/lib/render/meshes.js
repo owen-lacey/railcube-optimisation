@@ -34,15 +34,28 @@ export const meshLike = polygons => ({ polygons, objectUrls: [], warnings: [], d
  * costs one `setPolygons` to appear rather than two.
  */
 export function movingMesh(scene, canonical, basis, position) {
-  const handle = scene.add(meshLike(rotate(canonical, basis)), {});
+  let source = canonical;
+  const handle = scene.add(meshLike(rotate(source, basis)), {});
   handle.setTransform({ position, rotation: [0, 0, 0] });
   let inverse = transpose(basis);
 
   /** Write an orientation into the vertices. Expensive; re-lights the piece. */
   function bake(next, at) {
-    handle.setPolygons(rotate(canonical, next), { stableDom: true });
+    handle.setPolygons(rotate(source, next), { stableDom: true });
     handle.setTransform({ position: at, rotation: [0, 0, 0] });
     inverse = transpose(next);
+  }
+
+  /**
+   * Swap the polygons for a differently-coloured set of the same shape, at the
+   * orientation and position the piece is already sitting in.
+   *
+   * It costs exactly what `bake` costs, which is why the only thing that uses it
+   * blinks *one* piece about twice a second rather than tinting a track.
+   */
+  function recolour(next, basisNow, at) {
+    source = next;
+    bake(basisNow, at);
   }
 
   /** Write an orientation onto the container, as a delta from the baked one. */
@@ -53,5 +66,5 @@ export function movingMesh(scene, canonical, basis, position) {
   // `handle` is exposed for the tests, which assert on what was actually drawn —
   // how many times a piece was baked, and that a picked-up cube is the same object
   // it was before it fell. Nothing in the renderer reaches for it.
-  return { bake, place, handle, dispose: () => handle.dispose() };
+  return { bake, place, recolour, handle, dispose: () => handle.dispose() };
 }

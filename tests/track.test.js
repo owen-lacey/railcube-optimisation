@@ -7,9 +7,10 @@ import assert from 'node:assert/strict';
 import {
   POSES, FACES, OPPOSITE, PIECE_TYPES, POOLS, POOL_OF,
   isValidPose, poseLetters, cellsFor, step,
-  assertNoCollisions, chainTrack, countPieces, overflowingPool, overflowingPoolByType,
+  assertNoCollisions, chainTrack, chainOpen, countPieces, overflowingPool, overflowingPoolByType,
   SET, SCORES,
 } from '../src/track.js';
+import { routeOf } from '../src/layouts.js';
 import { loopRoute, inversionRoute } from '../src/routes.js';
 
 const sorted = cells => cells.map(c => c.join(',')).sort();
@@ -282,6 +283,64 @@ test('the six-face inversion route is a legal track', () => {
   // Its whole point: the rail sits on all six faces of a cube at some point.
   assert.equal(new Set(placed.map(p => p.pose[0])).size, 6);
 });
+
+// ---- Chaining without the closure requirement -----------------------------
+//
+// `chainTrack` asks "is this a track?" and refuses to answer anything else, which
+// is right for the solver's output and no use for a track being built by hand: one
+// of those is open at every keystroke but the last. `chainOpen` is the same walk
+// with closure reported rather than required.
+
+test('an open route places every piece and says it is open', () => {
+  const half = routeOf('LIRIROSOL');
+  const { placed, closed, faults } = chainOpen(half);
+
+  assert.equal(placed.length, 9, 'every piece is laid down');
+  assert.equal(closed, false);
+  assert.deepEqual(faults, [], 'an unfinished track is not a broken one');
+});
+
+test('the head is where the next piece would go', () => {
+  // One straight from the origin along the canonical pose: the head moves one cell
+  // forwards and keeps its pose, which is what makes a straight a straight.
+  const { head } = chainOpen(['straight']);
+  assert.deepEqual(head.cell, [0, 0, 1]);
+  assert.equal(head.pose, 'UF');
+});
+
+// The refactor's own regression net: chainTrack is this plus three throws, so the
+// two must place identical pieces on anything that is a track at all.
+test('on a closed route it places exactly what chainTrack does', () => {
+  for (const route of [loopRoute, inversionRoute, routeOf('LLLL')]) {
+    const { placed, closed, faults } = chainOpen(route);
+    assert.equal(closed, true);
+    assert.deepEqual(faults, []);
+    assert.deepEqual(placed, chainTrack(route));
+  }
+});
+
+test('a collision is reported against the piece that causes it', () => {
+  // Four left curves close a ring, so a fifth is asked for the cell the first is in.
+  const { placed, faults } = chainOpen(routeOf('LLLLL'));
+
+  assert.equal(faults.length, 1);
+  assert.equal(faults[0].index, 4, 'the fifth piece is the one that cannot go down');
+  assert.equal(faults[0].kind, 'collision');
+  // The message is the one assertNoCollisions would have thrown, because it is the
+  // same rule and not a second reading of it.
+  assert.throws(() => assertNoCollisions(placed), new RegExp(escape(faults[0].message)));
+});
+
+// A route that is wrong in two ways reports the piece that goes wrong *first*,
+// which is the only one a builder can act on: everything after it is downstream of
+// a track that already could not be built.
+test('the first fault is the one reported', () => {
+  const { faults } = chainOpen([...routeOf('LLLLL'), ...routeOf('LLLLL')]);
+  assert.equal(faults.length, 1);
+  assert.equal(faults[0].index, 4);
+});
+
+const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // ---- The set -------------------------------------------------------------
 

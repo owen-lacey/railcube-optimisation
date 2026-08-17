@@ -4,8 +4,9 @@
 // `drive` marks the scenes that are a real route, and so can have a train run
 // on them: a single piece and the pose gallery are catalogues, not tracks.
 
-import { chainTrack, cellsFor, SCORES } from '../../../src/track.js';
-import { COLORS, START_COLOR } from './render/dimensions.js';
+import { chainTrack, chainOpen, cellsFor, SCORES } from '../../../src/track.js';
+import { routeOf, identify } from '../../../src/layouts.js';
+import { COLORS, START_COLOR, ALARM } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
@@ -48,6 +49,67 @@ export const sceneFromRoute = (route, extra = {}) => {
 };
 
 /**
+ * A track as far as it has been built, which is what a track being *typed* is.
+ *
+ * `sceneFromRoute` goes through `chainTrack` and so refuses anything that is not
+ * already a finished loop. That is right for showing an answer and no use at all
+ * for reaching one by hand, where the route is open at every keystroke but the
+ * last. So this goes through `chainOpen` instead and reports rather than refuses:
+ *
+ *   pieces    everything the letters lay down, painted
+ *   closed    whether it is a track yet
+ *   offender  the piece the model will not accept, or null
+ *
+ * The route is cut off *at* the offender rather than before it: Owen's call is that
+ * a piece with nowhere to go is drawn where it was asked to go, overlapping whatever
+ * it runs into, and flashes red there. Anything after it is dropped, since the
+ * viewer stops taking letters at that point anyway.
+ *
+ * An over-crossed cross is the one fault that places no cube of its own — the third
+ * traversal is a revisit — so what flashes is the cross already sitting in that cell.
+ */
+/**
+ * Which cube each *step* of a route is, lined up with the placed list rather than
+ * squeezed down to one entry per cube.
+ *
+ * `identify` skips revisits, which is right — a crossed cross is one cube — but it
+ * means its answers no longer line up with the pieces they name. Anything matching
+ * cubes to positions in a route needs them lined up, so a revisit gets a `null`.
+ */
+export function cubeIds(placed) {
+  const ids = identify(placed);
+  let k = 0;
+  return placed.map(piece => (piece.revisit ? null : ids[k++]));
+}
+
+export function openScene(letters) {
+  const { placed, closed, faults } = chainOpen(routeOf(letters));
+  const fault = faults[0] ?? null;
+  const kept = fault ? placed.slice(0, fault.index + 1) : placed;
+  // Which *step* is at fault is not always which *cube* is: the third traversal of
+  // a cross places nothing, so what flashes is the cross already in that cell.
+  //
+  // Whether that is reachable is open. Every over-crossing route the project knows
+  // collides first — including `THRICE` in tests/cross.test.js, which reports the
+  // collision at step 13 and the third traversal at 14 — and a search over 4.6
+  // million fault-free prefixes beginning with a cross, out to fourteen pieces,
+  // turned up none where the crossing is the first fault. It stays because without
+  // it that case silently flashes nothing at all: the revisit has no cube, so the
+  // ID would be null and the alarm would go nowhere.
+  const at = fault === null ? -1 : fault.index;
+  const blamed = at >= 0 && kept[at].revisit
+    ? kept.findIndex(p => !p.revisit && p.cell.join(',') === kept[at].cell.join(','))
+    : at;
+
+  const pieces = paint(kept).map((piece, i) => (i === blamed ? { ...piece, color: ALARM } : piece));
+  return {
+    pieces,
+    closed: closed && !fault,
+    offender: fault && { ...fault, id: cubeIds(kept)[blamed] },
+  };
+}
+
+/**
  * A layout about to fall over. The pieces are the same ones a track scene draws
  * — the physics reads them straight out of `chainTrack` — but the shot is not:
  * what has to fit in frame is the pile, which lands `drop` cubes below the
@@ -82,6 +144,38 @@ export const frameBox = ({ lo, hi }, { drop = 0 } = {}) => frame([{ material: [
 ] }]);
 
 /**
+ * The box a track being typed is framed in, given the box it was framed in before.
+ *
+ * It only ever **grows**. A track under construction is not a shape that changes,
+ * it is a shape that extends, so a frame derived afresh each keystroke would shrink
+ * and re-centre on a backspace — the camera chasing the content, which is the thing
+ * `fixedFrame` below exists to avoid. Growing only means the camera settles: it
+ * moves while the track is reaching new ground and then stops, and nothing ever
+ * gets smaller.
+ *
+ * The floor is what stops a two-piece sketch being drawn at arm's length.
+ */
+const SKETCH_FLOOR = { lo: [-1, 0, -1], hi: [1, 1, 1] };
+
+export function growBox(pieces, box = SKETCH_FLOOR) {
+  const { lo, hi } = pieces.length ? boundsOf(pieces) : SKETCH_FLOOR;
+  return {
+    lo: box.lo.map((v, a) => Math.min(v, lo[a])),
+    hi: box.hi.map((v, a) => Math.max(v, hi[a])),
+  };
+}
+
+/**
+ * A camera for a box, tight — no allowance for anything to fall or sprawl into.
+ *
+ * `frameBox` is the other one, and its `SPREAD` is room for a *pile*: two cubes
+ * either side of the track, which is most of a small layout's width again. Nothing
+ * falls in a sketch, so paying for that would draw a four-piece ring at half the
+ * size it could be. Same trick as `frameBox` — one piece made of two corners.
+ */
+export const frameTight = ({ lo, hi }) => frame([{ material: [lo, hi] }]);
+
+/**
  * How far from the start cell the frame reaches, in cells — and therefore the
  * largest layout `Layout` can show without cropping.
  *
@@ -110,9 +204,14 @@ const REACH = 6;
  * It is not the expensive option it sounds like: zoom 1.90, against 1.96 for the
  * union of just two 18-cube layouts. Almost all of the cost of framing a
  * rearrangement is the room to fall, which any of these has to reserve.
+ *
+ * `reach` is still the solver's box constraint, just not always *this* model's:
+ * the sweeps were solved at 8 and 6, so a viewer showing one passes the sweep's
+ * own `question.box` and gets the same never-moving frame, sized to hold every
+ * answer that sweep contains.
  */
-export const fixedFrame = ({ drop = 1 } = {}) =>
-  frameBox({ lo: [-REACH, 0, -REACH], hi: [REACH, REACH, REACH] }, { drop });
+export const fixedFrame = ({ drop = 1, reach = REACH } = {}) =>
+  frameBox({ lo: [-reach, 0, -reach], hi: [reach, reach, reach] }, { drop });
 
 export { REACH };
 

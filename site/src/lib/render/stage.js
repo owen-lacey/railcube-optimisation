@@ -66,7 +66,7 @@ export function together(...phases) {
  */
 export function createStage(cameraEl, sceneEl) {
   const scene = sceneEl.getScene();
-  const { frameTo, applyCamera } = createCamera(cameraEl);
+  const { frameTo: applyDescription, applyCamera } = createCamera(cameraEl);
 
   // The cubes, by piece ID (`1L` is the first left curve — see `identify` in
   // src/layouts.js). This is the registry object constancy is made of: a phase
@@ -76,6 +76,8 @@ export function createStage(cameraEl, sceneEl) {
 
   let queue = [];        // phases still to run, head first
   let phaseAt = 0;       // loop time the head phase started, so its clock is its own
+  let framed = null;     // the camera description in force, or being panned away from
+  let pan = null;        // { to, seconds, spent }, null when the camera is still
 
   /**
    * The cube with this ID, mounted if it is not on the stage yet.
@@ -100,6 +102,9 @@ export function createStage(cameraEl, sceneEl) {
       position,
       bake(next, at) { mesh.bake(next, at); made.basis = next; made.position = at; },
       place(next, at) { mesh.place(next, at); made.basis = next; made.position = at; },
+      // Repaint where it stands. Costs a bake, so it is for a piece being pointed
+      // at rather than for a track being themed.
+      recolour(next) { mesh.recolour(GEOMETRY[type](next), made.basis, made.position); },
       dispose() { mesh.dispose(); cubes.delete(id); },
       mesh,
     };
@@ -109,6 +114,59 @@ export function createStage(cameraEl, sceneEl) {
 
   /** Is this cube already on the stage — i.e. is it there to be picked up? */
   const held = id => cubes.has(id);
+
+  /** Take one cube off the stage, leaving every other one where it is. */
+  function drop(id) {
+    cubes.get(id)?.dispose();
+  }
+
+  // ---- The camera ---------------------------------------------------------
+  //
+  // A phase never touches this — see the header. The stage owns it because the one
+  // viewer whose camera moves (`Sketch`, where the track grows as it is typed) needs
+  // the movement to overlap whatever is being animated rather than to be queued
+  // behind it, and because a pan has to outlive the phase that asked for one.
+
+  const PAN = 0.35;      // seconds; long enough to read as a move, short enough not to wait
+  const smooth = t => t * t * (3 - 2 * t);
+  const numbers = target => String(target).split(',').map(Number);
+
+  /** A camera description part-way between two, at `t` in 0..1. */
+  const between = (from, to, t) => ({
+    ...to,
+    zoom: Number(from.zoom) + (Number(to.zoom) - Number(from.zoom)) * t,
+    target: numbers(from.target)
+      .map((v, k) => v + (numbers(to.target)[k] - v) * t)
+      .join(','),
+  });
+
+  /** Apply a camera description at once, cancelling any pan under way. */
+  function frameTo(camera) {
+    pan = null;
+    framed = camera ?? {};
+    applyDescription(framed);
+  }
+
+  /**
+   * Ease to a new camera description over `seconds`.
+   *
+   * Panning from nothing is just framing: a viewer's first shot is not a move.
+   */
+  function panTo(camera, seconds = PAN) {
+    if (!framed || framed.zoom === undefined) return frameTo(camera);
+    pan = { from: framed, to: camera ?? {}, seconds, spent: 0 };
+  }
+
+  /** Advance a pan, and say whether one is still running. */
+  function stepPan(delta) {
+    if (!pan) return false;
+    pan.spent += delta;
+    const t = Math.min(1, pan.spent / pan.seconds);
+    framed = t === 1 ? pan.to : between(pan.from, pan.to, smooth(t));
+    applyDescription(framed);
+    if (t === 1) pan = null;
+    return true;
+  }
 
   /**
    * Advance the head phase, and move on when it says it is finished.
@@ -120,11 +178,14 @@ export function createStage(cameraEl, sceneEl) {
    * predecessor.
    */
   const loop = createLoop((delta, elapsed) => {
-    if (!queue.length) return false;
+    // The camera is stepped first and independently: a pan outlives the phase that
+    // asked for it, so the loop must not stop while one is still running.
+    const panning = stepPan(delta);
+    if (!queue.length) return panning ? undefined : false;
     if (queue[0].advance(delta, elapsed - phaseAt) === false) {
       queue.shift().dispose?.();
       phaseAt = elapsed;
-      if (!queue.length) return false;
+      if (!queue.length) return panning ? undefined : false;
     }
   });
 
@@ -152,6 +213,7 @@ export function createStage(cameraEl, sceneEl) {
     for (const phase of queue) phase.dispose?.();
     queue = [];
     phaseAt = 0;
+    pan = null;
     for (const item of [...cubes.values()]) item.dispose();
     cubes.clear();
   }
@@ -161,7 +223,9 @@ export function createStage(cameraEl, sceneEl) {
     cubes,
     cube,
     held,
+    drop,
     frameTo,
+    panTo,
     applyCamera,
     run,
     start: loop.start,

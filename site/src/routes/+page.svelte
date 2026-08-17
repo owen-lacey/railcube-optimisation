@@ -1,136 +1,155 @@
 <script>
-  // The prose is a straight transcription of notes.md — the wording is Owen's
-  // first draft and is not to be edited here. Every visualisation the draft
-  // calls for is an empty Placeholder until it is built.
-  import Placeholder from '$lib/components/Placeholder.svelte';
+  // The front page: pick a configuration, shuffle, watch a solve. Each sweep is
+  // every distinct full-spend layout its solve run found (see lib/sweeps.js), so a
+  // shuffle is a draw from the whole answer set, not a sample of highlights.
+  import { MediaQuery } from 'svelte/reactivity';
+  import LayoutViewer from '$lib/components/LayoutViewer.svelte';
+  import { SWEEP_28, SWEEP_CROSSED } from '$lib/sweeps.js';
+
+  // On a phone the rearrangement is not worth what it costs in scale: its fixed
+  // frame must hold every layout in the sweep at once (the union of the crossed
+  // sweep's bounds is the full ±8 box — measured, not assumed), which draws the
+  // track at about half the size a tight frame would. So narrow screens get an
+  // instant redraw framed tight on each layout, and a taller viewer — the zoom
+  // fit is height-bound at 16/10 (see camera.js), so 4/3 alone is worth ~20%.
+  const narrow = new MediaQuery('(max-width: 640px)', false);
+
+  const CONFIGS = [
+    { key: 'crossed', label: '35 cubes, one cross', sweep: SWEEP_CROSSED },
+    { key: '28', label: '28 cubes', sweep: SWEEP_28 },
+  ];
+
+  // The key rather than the config itself: `$state` proxies an object, so the
+  // proxy never compares equal to the CONFIGS entry it wraps.
+  let selected = $state(CONFIGS[0].key);
+  // The first shape in the file, not a random one: the page is prerendered, and
+  // the server and the browser must agree on what the HTML says. Randomness is
+  // the button's job.
+  let shape = $state(CONFIGS[0].sweep.shapes[0].shape);
+
+  const config = $derived(CONFIGS.find(c => c.key === selected));
+
+  function select(next) {
+    if (next.key === selected) return;
+    selected = next.key;
+    shape = next.sweep.shapes[0].shape;
+  }
+
+  function shuffle() {
+    const { shapes } = config.sweep;
+    const pick = () => shapes[Math.floor(Math.random() * shapes.length)].shape;
+    // One re-roll if the draw lands on what is already showing — a shuffle that
+    // visibly does nothing reads as a broken button.
+    const next = pick();
+    shape = next === shape ? pick() : next;
+  }
 </script>
 
-<h1>Rail Cube</h1>
+<svelte:head>
+  <title>Rail Cube solves</title>
+</svelte:head>
 
-<p>
-  My eldest has finally got to the age where I can be quite tactical about what gifts he receives
-  so I can enjoy them too
+<h1>Rail Cube solves</h1>
+<p class="intro">
+  Closed loops that spend every piece in the box. Pick a set of pieces, then
+  shuffle for another way to build it.
 </p>
 
-<p>
-  My son got a railcube for Christmas. It's like if Duplo did rollercoasters, it's freaking
-  awesome.
-</p>
+<div class="controls">
+  <div class="configs" role="group" aria-label="Piece set">
+    {#each CONFIGS as c (c.key)}
+      <button class:active={c.key === selected} onclick={() => select(c)}>
+        {c.label}
+        <span class="count">{c.sweep.shapes.length.toLocaleString('en-GB')} solves</span>
+      </button>
+    {/each}
+  </div>
+  <button class="shuffle" onclick={shuffle}>Shuffle</button>
+</div>
 
-<p>
-  On Christmas day, I obsessively played with this trying to build a track. I've always enjoyed
-  completeness: if I go for a walk, it needs to be a circle, none of this "there and back". If I
-  have a plate of food, I do everything I can to finish it. When I build a railcube, I need to use
-  every piece.
-</p>
-
-<Placeholder />
-
-<p>
-  Doing this on Christmas day way a harder task than I thought, and my son soon lost interest.
-  Keeping track of all the variables was impossible for my brain to do. But not for a computer to
-  do!!
-</p>
-
-<p>
-  8 months later, I finally got round to putting this to the test, and boy did it deliver
-  (screenshot).
-</p>
-
-<Placeholder />
-
-<p>I'm gonna break down how I did this, and how you can do it yourself.</p>
-
-<h2>modelling the problem</h2>
-
-<p>
-  Tracks can only move orthogonally; that is, up, down, left, right, forwards &amp; backwards - 6
-  total.
-</p>
-
-<p>
-  A straight track represents a move forwards relative to its current position, a left turn is 1
-  step forward and two steps left, etc
-</p>
-
-<Placeholder />
-
-<p>
-  Similarly, the train could change orientation, it could climb up a wall, or down vertically. It
-  can assume any position on the 6-faced cube, facing in any of the 4 directions - 24 total
-</p>
-
-<Placeholder />
-
-<p>Let's combine this with our positions to show how we represent adding a piece to the track</p>
-
-<Placeholder />
-
-<p>
-  Once we have our initial position, the position of the track at any point in time simply becomes
-  the combinations of all of the track pieces before it.
-</p>
-
-<p>
-  Therefore, to enforce a closed loop, we need to tell the programme that the position of the last
-  track piece equals the starting piece.
-</p>
-
-<Placeholder caption="Here's the animation" />
-
-<h2>adding costs</h2>
-
-<p>Two approaches here:</p>
-
-<ul>
-  <li>under no circumstances should we drop a piece</li>
-  <li>try not to drop a piece</li>
-</ul>
-
-<p>Pick either based on what you want the output to be. One is a suggestion, one is a command.</p>
-
-<p>I opted for the former</p>
-
-<p>Many ways we can optimise this:</p>
-
-<ul>
-  <li>score "cool" parts at cool inversions</li>
-  <li>score % of time not flat</li>
-  <li>penalise consecutive pieces of the same type</li>
-</ul>
-
-<Placeholder caption="Show examples of a track being build and their score" />
-
-<Placeholder caption="Show final optimal route (maybe irl as well)" />
+<!-- Keyed on the configuration: the two sweeps hold different inventories, and a
+     rearrangement across them would strand the difference on the floor. Within a
+     configuration the viewer stays mounted, so a shuffle is the collapse-and-
+     rebuild. `reach` is the box the sweep was solved in — the crossed sweep's 8
+     outreaches the default frame. -->
+{#key config.key}
+  <LayoutViewer
+    {shape}
+    reach={config.sweep.question.box}
+    sequence={!narrow.current}
+    aspect={narrow.current ? '4 / 3' : '16 / 10'}
+  />
+{/key}
 
 <style>
   h1 {
-    font-size: 2.25rem;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    margin: 0 0 2.5rem;
+    margin: 0 0 0.5rem;
+    font-size: 1.6rem;
+    letter-spacing: -0.01em;
   }
 
-  h2 {
-    font-size: 1.4rem;
-    line-height: 1.2;
-    margin: 3.5rem 0 1.25rem;
+  .intro {
+    margin: 0 0 2rem;
+    color: var(--muted);
   }
 
-  p {
-    font-size: 1.0625rem;
-    line-height: 1.65;
-    margin: 0 0 1.25rem;
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
   }
 
-  ul {
-    font-size: 1.0625rem;
-    line-height: 1.65;
-    margin: 0 0 1.25rem;
-    padding-left: 1.25rem;
+  .configs {
+    display: flex;
+    border: 1px solid var(--rule);
+    border-radius: 0.5rem;
+    overflow: hidden;
   }
 
-  li {
-    margin-bottom: 0.375rem;
+  button {
+    font: inherit;
+    color: var(--ink);
+    background: var(--wash);
+    border: none;
+    padding: 0.5rem 0.9rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+  }
+
+  .configs button + button {
+    border-left: 1px solid var(--rule);
+  }
+
+  .configs button.active {
+    background: var(--ink);
+    color: var(--wash);
+  }
+
+  .count {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .configs button.active .count {
+    color: var(--rule);
+  }
+
+  .shuffle {
+    border: 1px solid var(--rule);
+    border-radius: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1.4rem;
+  }
+
+  .shuffle:hover,
+  .configs button:not(.active):hover {
+    background: color-mix(in srgb, var(--wash), var(--ink) 6%);
   }
 </style>

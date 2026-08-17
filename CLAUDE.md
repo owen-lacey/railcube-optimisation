@@ -25,11 +25,17 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 | `src/enumerate.js` | brute-force DFS. The oracle the solver is checked against |
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |
 
-`site/` is the SvelteKit app the blog post will be written in — currently a blank page — plus
-the components it will draw with, developed in Storybook (`.storybook/`, `npm run storybook`).
-Nothing is deployed: the post is the artefact, so the GitHub Pages workflow is gone. The four
-showcase pages that used to live here (overview, pieces, layouts, a live `/solve`) are gone
-with it; what survived is the renderer, two thin components over it, and fourteen stories —
+`site/` is the SvelteKit app, plus the components it draws with, developed in Storybook
+(`.storybook/`, `npm run storybook`). Two routes: the front page is a solve viewer — pick one
+of the two swept configurations (`site/src/lib/sweeps.js`), shuffle for a random layout — and
+the draft blog post lives at `/post`, deliberately unlinked from it. On narrow screens the
+front page turns `sequence` off and gets the tight per-layout frame: the fixed frame must hold
+the whole sweep (the crossed union is the full ±8 box — measured), which draws a track at
+about half tight size, and a phone cannot afford that where a desktop can. Deployed to GitHub Pages
+by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath URL;
+`kit.paths.base` reads it and stays empty locally. The four
+showcase pages that used to live here (overview, pieces, layouts, a live `/solve`) are gone;
+what survived is the renderer, two thin components over it, and fourteen stories —
 one per piece, one per piece's 24-pose gallery, and a `Layout` story whose `shape` control
 takes any shape string, which is what the old `/view?shape=` page did.
 
@@ -40,6 +46,24 @@ while its config lives at the root — `svelte.config.js` remaps `kit.files` at 
 and `outDir` to `site/.svelte-kit`, because SvelteKit and Storybook both take their project
 root from the cwd. Every `files` entry is set explicitly, including the ones with no file
 yet, so nothing defaults to a path inside `src/` — which here is the model, not an app.
+
+**Closure is a question `chainOpen` answers and `chainTrack` insists on.** `chainTrack`
+throws unless the route closes, which is right for a solver's output and useless for one
+being built by hand — a track being typed is open at every keystroke but the last. So the
+walk lives in `chainOpen(route)` → `{ placed, head, closed, faults }`, which places every
+piece and *reports* rather than refuses; `chainTrack` is that plus three throws. Two things
+about it that were learned rather than designed:
+
+- **`chainTrack`'s order of complaint is not the route's order**, and the tests pin it. An
+  over-crossed cross outranks everything (the route in `tests/cross.test.js` proving that
+  rule also fails to close *and* collides first), then closure, then collisions — because a
+  collision used to be looked for only once the whole route was down. `faults` is in route
+  order and `faults[0]` is the first piece that cannot go down, which is the one a *builder*
+  has to be shown. The two disagree deliberately.
+- **`createClaims()` is the collision rule, accumulated one piece at a time.**
+  `assertNoCollisions` is it plus a throw. It exists because two whole-list passes can say
+  *that* a route collides but not *which piece* introduced it, and an index is exactly what
+  a typing UI needs. Every pair is still checked once.
 
 **The step budget is always an upper bound.** `steps` is the most pieces a loop may have;
 the used ones are a contiguous prefix and the tail is switched off. So the model is
@@ -219,8 +243,15 @@ see "the same cubes, rearranged" below. An animation is therefore not a viewer b
 **phase**: an `advance(delta, elapsed)` over cubes it was handed, returning `false` when
 finished, plus an optional `dispose` for anything it owns that the cubes do not. The stage
 runs a queue of them, giving each a clock of its own. `tumble.js` exports `tumblePhase`
-(a track collapsing) and `build.js` exports `buildPhase` (a track assembling) and
-`trackPhase` (a finished track, drawn at once and driven).
+(a track collapsing) and `build.js` exports `buildPhase` (a track assembling),
+`growPhase` (a track being *extended*) and `trackPhase` (a finished track, drawn at once
+and driven).
+
+**The camera is the stage's, never a phase's**, which is why `panTo` lives there. The one
+viewer whose camera moves is `Sketch`, and its movement has to *overlap* whatever is
+animating rather than be queued behind it — this is not the deleted `panPhase` coming
+back. Two consequences: the loop does not stop while a pan is in flight, even with an
+empty queue, and `frameTo` cancels a pan rather than fighting it.
 
 There used to be a `viewer.js` for that last one and it is gone: `trackPhase` does the same
 job, so keeping both would be two ways to draw one thing. Anything wanting a static track
@@ -229,22 +260,26 @@ runs a one-phase queue.
 `site/src/lib/scenes.js` is the layer above: the factories that turn a thing into
 `{ pieces, drive, camera }`, which is all `TrackViewer` takes. `sceneFromRoute` for a route,
 `tumbleScene` for a fall, `sequenceScene` for the union frame a rearrangement needs,
-`singlePiece(type)` and `poseGallery(type)` for the catalogue views, `frame` for the
-auto-framing, `paint`/`cubesIn`/`scoreOf` for the colours and the counts. There is
-deliberately no `buildScene`: the builder frames the *finished* loop, which is what
-`sceneFromRoute` already returns, so a factory there would only have renamed one.
-Five components sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts
+`singlePiece(type)` and `poseGallery(type)` for the catalogue views, `openScene` for a
+track part-way through being built, `frame` for the auto-framing, `paint`/`cubesIn`/
+`scoreOf` for the colours and the counts. There is deliberately no `buildScene`: the builder
+frames the *finished* loop, which is what `sceneFromRoute` already returns, so a factory
+there would only have renamed one.
+Six components sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts
 PolyCSS, owns the stage and the intersection/resize observers), `PieceViewer.svelte` (a piece
-type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `TumbleViewer.svelte`
-and `BuildViewer.svelte`. The stories are plain JS CSF files beside them.
+type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `SketchViewer.svelte`
+(a text box the track is typed into), `TumbleViewer.svelte` and `BuildViewer.svelte`. The
+stories are plain JS CSF files beside them.
 
-`TrackViewer` takes a `sequence` flag, and it is the only difference between the static
-viewer and the animated one — everything else about mounting PolyCSS is identical, which is
-why `LayoutViewer` stays a thin wrapper rather than becoming a fourth copy of the plumbing.
-With it off, new pieces are a redraw off an emptied stage. With it on, they are a
-rearrangement. It also decides whether `tumble.js` is imported at all: that module reaches
+`TrackViewer` mounts PolyCSS one way and shows a layout three, chosen by two flags, which is
+why the wrappers stay thin rather than becoming copies of the plumbing. Plain: new pieces
+are a redraw off an emptied stage. `sequence`: they are a rearrangement — the old layout
+collapses and the new one is built out of what falls. `grow`: they are an *extension* —
+whatever the two layouts have in common is left standing, untouched, and only the rest
+arrives. `sequence` also decides whether `tumble.js` is imported at all: that module reaches
 `cannon-es`, so it is loaded dynamically on mount and only when sequencing, which keeps a
-physics engine out of a page of static piece cards.
+physics engine out of a page of static piece cards — and out of `Sketch`, which never drops
+anything.
 
 **Whether the layout changed cannot be answered by identity, and getting that wrong is not
 a wasted redraw.** `TrackViewer` keys on `type`+`pose`+`cell` per piece (`keyOf`). The mount
@@ -252,6 +287,50 @@ draws once and the `$effect` then fires with the very same pieces, and a `$deriv
 is free to hand over an equal-but-new array — either of which, compared by reference, reads
 as a shape change. In sequencing mode that means the track knocking itself down for no
 reason, which is exactly what the first render did until it was caught in a browser.
+
+### Typing a track: `Sketch`
+
+`SketchViewer` is a text box the track is built in front of you, letter by letter. It is
+the one viewer that shows an *unfinished* track, and everything below follows from that.
+
+**It goes through `chainOpen`, not `chainTrack`** — see the model section above. The
+component's `clean()` is the whole of the input rule: anything that is not one of the six
+letters is not a piece and is dropped as it is typed, and the string **stops at the first
+piece the model rejects**. Truncating rather than refusing is what makes a keystroke and a
+paste the same operation — a letter added to a stuck track truncates straight back to the
+stuck track, so the key does nothing, while pasting a *different* shape over it still works.
+
+**A piece with nowhere to go is drawn where it was asked to go**, overlapping whatever it
+ran into, pulsing between `ALARM` and `ALARM_FLASH`. Owen's call, over blanking the viewer
+or drawing the legal prefix: the overlap is the explanation. Three things about it:
+
+- The pulse is a `setPolygons` on **one** mesh about twice a second, which is nowhere near
+  the "never `setPolygons` per frame" rule (that is ~2,000 matrices a frame across a whole
+  layout). A CSS class on the `.polycss-mesh` container was rejected: polygon colour can
+  come from a baked texture atlas, and `filter`/`opacity` on a `preserve-3d` subtree
+  flattens the 3D.
+- It lives inside `growPhase` rather than in a phase of its own, so that exactly one thing
+  ever writes to a cube in a frame — the same rule `onPickUp` exists to protect.
+- **Which step is at fault is not always which cube is.** A cross traversed a third time
+  places nothing, so what flashes is the cross already in that cell. `openScene` handles
+  that; `cubeIds` is `identify` with revisits kept as `null` so the two line up.
+
+**The camera grows, and only grows.** This is a knowing exception to the doctrine below,
+and the reason the two differ is that they are different motions: `Layout` changes the
+whole shape at once, so a frame read off it moves every time you type, while a sketch only
+ever *extends* — so `growBox` takes the union with what came before and the camera settles
+once the track stops reaching new ground. It never shrinks or re-centres on a backspace.
+`frameTight` rather than `frameBox`, because `frameBox`'s `SPREAD` is room for a *pile* to
+sprawl into and nothing falls here; paying for it drew a four-piece ring at half the size.
+Verified in the browser: over 371 camera writes typing out the 18-cube set, zero went the
+wrong way and the largest single step was 0.009.
+
+**No train until the loop closes**, because there is no loop to run one on. It appears on
+the keystroke that closes and drives from there.
+
+Under `prefers-reduced-motion` the arrivals are instant, the camera snaps instead of
+panning, and the rejected piece is a flat red rather than a pulsing one — a pulsing element
+is precisely what that preference is about.
 
 **A shape string is always re-derived through `chainTrack`**, in `LayoutViewer` as it was on
 the old `/view` page, and in `TumbleViewer` and `BuildViewer` after it: the chain throws
@@ -423,7 +502,14 @@ in a same-inventory rearrangement is all of them. One consequence, and an improv
 are no longer frozen by the deadline part-way through their fall — they finish falling and
 settle.
 
-**The camera never moves, and the frame is not derived from what is being shown.** That is
+**The camera never moves, and the frame is not derived from what is being shown** — *in a
+rearrangement*. `Sketch` is the one exception and it is Owen's, asked for by name; the
+scope of everything below is `sequence` mode, and the difference is what is happening on
+screen. A rearrangement replaces the whole shape at once, so a derived frame moves every
+time you type and moves *while eighteen cubes are collapsing*. A sketch only ever extends,
+so a grow-only box converges and then holds. Attempt 2 below was rejected for `Layout` and
+is right for `Sketch`; that is not a contradiction, and do not "fix" either to match the
+other. That is
 `fixedFrame` in `scenes.js`: a box reaching `REACH` = 6 cells around the start cell, from the
 ground up. `TrackViewer` applies it once at mount and nothing touches it again — the framing
 effect deliberately reads neither `pieces` nor `camera` in sequencing mode, so a shape change
@@ -434,7 +520,11 @@ Six is the **solver's own box constraint** rather than a number picked to look r
 layout in `src/layouts.js` was solved at box 3, 4, 5 or 6, and the worst reach over all eight
 is exactly 6. `tests/stage.test.js` checks that, so a bigger layout added later fails loudly
 instead of being silently cropped. A shape typed into the control that reaches further *will*
-be cropped; that is the deal a fixed frame makes.
+be cropped; that is the deal a fixed frame makes. The sweeps were solved in bigger boxes — 8
+for the crossed one — so `fixedFrame` takes a `reach` (plumbed through `TrackViewer` and
+`LayoutViewer`), still a solver box constraint, just that sweep's: the front page passes its
+sweep's `question.box`, and `tests/sweeps.test.js` checks every swept shape fits its own box.
+Unset, it is `REACH`, and nothing existing changes.
 
 Two earlier attempts, both rejected by Owen on sight, and worth not repeating:
 
@@ -444,7 +534,10 @@ Two earlier attempts, both rejected by Owen on sight, and worth not repeating:
 2. **A box that only ever grows**, reserved from the first render. Better — it converges and
    then holds — but it still moves on the change that grows it, which is exactly what he could
    see. A `panPhase` (a 0.4 s smoothstep, queued ahead of the collapse) was written to smooth
-   that and is **deleted**; do not reintroduce a moving camera without being asked for one.
+   that and is **deleted**; do not reintroduce a moving camera *here* without being asked for
+   one. It is what `Sketch` does, where it was asked for: a track that only extends grows its
+   box a little at a time and then stops, and `stage.panTo` eases it rather than a phase doing
+   so — which is the part `panPhase` got wrong, since a queued pan delays what it precedes.
 
 The cost is real and was accepted with the picture in front of him: ±6 is 13×7×13 cells where
 an 18-cube layout needs about 8×7×9, so a track is drawn smaller than a tight frame would draw
@@ -489,8 +582,17 @@ A **marker phase** slotted between the two real ones is what makes the ordering 
 exact rather than a guess at a time — and being able to slot one in is the sequencing itself
 under test.
 
-Two bugs it did not catch, both found by driving Storybook in a real browser over CDP, which
-is worth doing for anything in this area:
+The growing viewer is in there too, on the same fake scene, and its first assertion is the
+one that matters: **a cube already standing receives no writes when the next letter is
+typed** — no `setPolygons`, no `setTransform`, not disposed and remade. "It does not
+twitch" is a claim about writes rather than pixels, which is exactly what the fake scene
+can settle and the eye cannot. Beside it: a backspace disposes exactly one cube and leaves
+the others the same handles; there is no train until the route closes and exactly one
+after; the rejected piece is the *only* mesh ever repainted, about twice a second; and a
+stuck track keeps asking for frames while a settled open one stops.
+
+Three bugs the unit tests did not catch, all found by driving Storybook in a real browser
+over CDP, which is worth doing for anything in this area:
 
 - **The first render tumbled itself.** `onMount` draws, then the `$effect` fires with the same
   pieces; a truthiness check on "is there something to knock down" saw a shape change. Fixed
@@ -498,6 +600,11 @@ is worth doing for anything in this area:
 - **Every replaced phase abandoned its train**, leaving it hanging in mid-air over the
   wreckage. Phases now have `dispose`, and the stage calls it on a phase it drops. *This* one
   is now under test.
+- **A paste that replaced rather than lengthened kept letters the track did not have.** The
+  input held `LLLLLSSSSSSSS` while the caption and the scene both stopped at `LLLLL`, so
+  eight backspaces did nothing visible. The truncation rule in `clean()` is the fix, and it
+  is simpler than the guard it replaced. Invisible to the unit tests because it is the
+  component's input handling rather than the renderer.
 
 **`polyRotation` is under test now** — `tests/rotation.test.js`, against the string
 `buildPolyMeshTransform` actually emits rather than against the reasoning in `vec.js`. It was

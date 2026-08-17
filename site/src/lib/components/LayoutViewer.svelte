@@ -6,12 +6,19 @@
   let {
     shape = '',
     aspect = '16 / 10',
+    // Off, a shape change is an instant redraw framed tight on that layout —
+    // the trade the front page makes on a phone, where the fixed frame's empty
+    // room costs more scale than the rearrangement is worth.
+    sequence = true,
     drive = true,
     interactive = true,
     pace = 0.04,
     speed = 1.2,
     handover = 0.5,
     drop = 2,
+    // How far the fixed frame reaches — the box the shapes were solved in. Unset
+    // means the JS solver's own constraint; see `fixedFrame` in scenes.js.
+    reach = undefined,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -38,11 +45,12 @@
   <TrackViewer
     pieces={result.scene.pieces}
     camera={result.scene.camera}
-    sequence
+    {sequence}
     {pace}
     {speed}
     {handover}
     {drop}
+    {reach}
     {drive}
     {aspect}
     {interactive}

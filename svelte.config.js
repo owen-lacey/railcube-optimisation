@@ -4,6 +4,10 @@ import adapter from '@sveltejs/adapter-static';
 export default {
   kit: {
     adapter: adapter(),
+    // GitHub Pages serves the site under /railcube-optimisation; the deploy
+    // workflow sets BASE_PATH to that. Locally it is unset, so dev, preview and
+    // Storybook are untouched.
+    paths: { base: process.env.BASE_PATH || '' },
     // The app's source lives in site/; the repo root's own src/ is the model.
     // Every `files` entry is set, including the ones with no file yet, so
     // nothing quietly defaults to a path inside the model.

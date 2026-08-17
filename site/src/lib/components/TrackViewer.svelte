@@ -2,8 +2,8 @@
   import { onMount } from 'svelte';
   import { createStage, together } from '../render/stage.js';
   import { LIGHT } from '../render/dimensions.js';
-  import { trackPhase, buildPhase } from '../render/build.js';
-  import { fixedFrame } from '$lib/scenes.js';
+  import { trackPhase, buildPhase, growPhase } from '../render/build.js';
+  import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
   import { identify } from '../../../../src/layouts.js';
 
   let {
@@ -17,6 +17,15 @@
     // that fall — see `show`. Off by default: a catalogue card showing one piece
     // has nothing to rearrange.
     sequence = false,
+    // A new layout *extends* the one that is there: whatever the two have in common
+    // is left standing and only the rest arrives. This is what a track being typed
+    // needs, and it is the one mode whose camera moves — see `showGrown`.
+    grow = false,
+    // Grow mode only. A track is not a loop until it closes, so there is nothing
+    // for a train to run on before then; and a piece the model rejects is named
+    // here so the renderer can flash it.
+    closed = false,
+    offender = null,
     pace = 0.04,
     // One tempo over the whole assembly — see `timingFor` in build.js.
     speed = 1.2,
@@ -25,6 +34,10 @@
     // "wait for the pile to finish" — see `show`.
     handover = 0.5,
     drop = 2,
+    // Sequence mode only: how far the fixed frame reaches, in cells. Left unset it
+    // is the JS solver's own box constraint (see `fixedFrame`); a viewer showing a
+    // sweep solved in a bigger box passes that sweep's `question.box` instead.
+    reach = undefined,
   } = $props();
 
   // How long the collapse is simulated for at the outside.
@@ -51,6 +64,9 @@
   // own write would tumble the track it had only just built.
   let shown = null;
   let shownKey = null;
+  // Grow mode's frame, which only ever enlarges. Not `$state` for the same reason
+  // as `shown`: `showGrown` owns it, and the framing effect below must not read it.
+  let box = undefined;
 
   /**
    * What makes two `pieces` arrays the same layout drawn the same way.
@@ -62,50 +78,94 @@
    * not a wasted redraw, it is the track knocking itself down for no reason. Which
    * is what it did.
    */
-  const keyOf = ps => ps.map(p => `${p.type}${p.pose}${p.cell}`).join('|');
+  const pieceKey = p => `${p.type}${p.pose}${p.cell}`;
+  const keyOf = ps => ps.map(pieceKey).join('|');
 
   /**
-   * Show a layout.
-   *
-   * In sequencing mode, and only once there is something to knock down, that means
-   * collapsing what is there and building the new layout out of the pieces that
-   * fall: the same cubes, rearranged.
-   *
-   * Otherwise it is drawn finished and driven, off an emptied stage. That is the
-   * first paint, every paint of a catalogue view, and what a reader who has asked
-   * for reduced motion gets instead of an animation.
+   * Show a layout, by whichever of the three routes this viewer is set to.
    */
   function show(next) {
     const key = keyOf(next);
     if (key === shownKey) return;
 
-    if (sequence && shown && tumblePhase && !reduced) {
-      // The two overlap. The collapse runs from zero and the build joins in at
-      // `handover`, plucking pieces out of a pile that is still falling — which is
-      // what lets the build start while there is something to watch instead of after
-      // the pile has finished fidgeting. Ending the collapse first and *then*
-      // building would freeze every piece the build had not reached yet.
-      const collapse = tumblePhase(stage, shown, {
-        drop: Number(drop),
-        limit: SETTLE,
-        // A cube the build picks up is re-lit when it does; the collapse must not
-        // also re-light it on the way out. Leftovers are not in the set, and are.
-        keep: new Set(identify(next)),
-      });
-      stage.run([together(collapse, buildPhase(stage, next, {
-        pace: Number(pace),
-        speed: Number(speed),
-        delay: Number(handover),
-        onPickUp: collapse.release,
-        drive,
-      }))]);
-    } else {
-      stage.clear();
-      stage.run([trackPhase(stage, next, { drive })]);
-    }
+    if (grow) showGrown(next);
+    else if (sequence && shown && tumblePhase && !reduced) showSequenced(next);
+    else showStatic(next);
+
     shown = next;
     shownKey = key;
     stage.start();
+  }
+
+  /**
+   * Extend what is standing.
+   *
+   * The two layouts are compared piece by piece from the start, and everything they
+   * have in common is simply left alone — not re-baked, not re-transformed, not
+   * touched at all, which is what stops a track twitching when the next letter is
+   * typed. Every cube past that point comes off the stage, and `growPhase` slides
+   * the new tail on.
+   *
+   * The frame grows with it, and only grows: see `growBox`.
+   */
+  function showGrown(next) {
+    const before = shown ?? [];
+    let prefix = 0;
+    while (prefix < before.length && prefix < next.length
+      && pieceKey(before[prefix]) === pieceKey(next[prefix])) prefix += 1;
+
+    // A revisit has no cube of its own, so it has no ID and there is nothing to
+    // take off — the cross it is a second pass over may well be in the prefix.
+    for (const id of cubeIds(before).slice(prefix)) if (id) stage.drop(id);
+
+    stage.run([growPhase(stage, next, {
+      pace: Number(pace),
+      speed: Number(speed),
+      drive: drive && closed,
+      alarm: offender?.id ?? null,
+      instant: reduced,
+    })]);
+
+    // The one camera in the project that moves. It only ever *enlarges* — see
+    // `growBox` — so it settles once the track stops reaching new ground, rather
+    // than chasing every keystroke the way a per-layout frame would. A reader who
+    // has asked for reduced motion gets the same box, arrived at instantly.
+    box = growBox(next, box);
+    const shot = frameTight(box);
+    if (reduced) stage.frameTo(shot);
+    else stage.panTo(shot);
+  }
+
+  /** Draw it finished and drive it, off an emptied stage. */
+  function showStatic(next) {
+    stage.clear();
+    stage.run([trackPhase(stage, next, { drive })]);
+  }
+
+  /**
+   * Collapse what is there and build the new layout out of the pieces that fall:
+   * the same cubes, rearranged.
+   */
+  function showSequenced(next) {
+    // The two overlap. The collapse runs from zero and the build joins in at
+    // `handover`, plucking pieces out of a pile that is still falling — which is
+    // what lets the build start while there is something to watch instead of after
+    // the pile has finished fidgeting. Ending the collapse first and *then*
+    // building would freeze every piece the build had not reached yet.
+    const collapse = tumblePhase(stage, shown, {
+      drop: Number(drop),
+      limit: SETTLE,
+      // A cube the build picks up is re-lit when it does; the collapse must not
+      // also re-light it on the way out. Leftovers are not in the set, and are.
+      keep: new Set(identify(next)),
+    });
+    stage.run([together(collapse, buildPhase(stage, next, {
+      pace: Number(pace),
+      speed: Number(speed),
+      delay: Number(handover),
+      onPickUp: collapse.release,
+      drive,
+    }))]);
   }
 
   // PolyCSS is custom elements and touches `window`, and every page here is
@@ -126,15 +186,16 @@
         ready = true;
         // Framed once, here, and never again in sequencing mode: `fixedFrame` is a
         // box the layouts all fit inside rather than anything read off them, so
-        // there is nothing for a shape change to reframe. See `scenes.js`.
-        stage.frameTo(sequence ? fixedFrame({ drop: Number(drop) }) : camera);
+        // there is nothing for a shape change to reframe. See `scenes.js`. Grow
+        // mode is the exception — its frame is `showGrown`'s, from the first paint.
+        if (!grow) stage.frameTo(sequence ? fixedFrame({ drop: Number(drop), reach }) : camera);
         show(pieces);
 
         // Animate only what is on screen. A page of viewers each running its own
         // rAF loop for ever is the one thing that would make this unusable on a
-        // phone; a still viewer costs nothing. A sequencing viewer needs frames
-        // even with no train on it, since the rearrangement is the animation.
-        if ((drive || sequence) && !reduced) {
+        // phone; a still viewer costs nothing. A sequencing or growing viewer needs
+        // frames with no train on it, since the assembly is the animation.
+        if ((drive || sequence || grow) && !reduced) {
           const io = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting && !document.hidden) stage?.start();
             else stage?.stop();
@@ -186,9 +247,12 @@
   // `camera`: the frame is the fixed box, so a new shape has nothing to reframe and
   // this never fires on one. Only `drop` moves it, which is someone changing the
   // shot on purpose rather than the shot chasing the content.
+  //
+  // In grow mode it does not run at all: the frame is `showGrown`'s, and two things
+  // writing the camera would have it snapping back mid-pan.
   $effect(() => {
-    if (!ready || !stage) return;
-    stage.frameTo(sequence ? fixedFrame({ drop: Number(drop) }) : camera);
+    if (!ready || !stage || grow) return;
+    stage.frameTo(sequence ? fixedFrame({ drop: Number(drop), reach }) : camera);
   });
 </script>
 

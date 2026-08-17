@@ -171,24 +171,60 @@ export function step(cell, pose, type) {
  * what makes the cross legal at all.
  */
 export function assertNoCollisions(placed) {
-  const solid = new Map();
+  const claims = createClaims();
   for (const piece of placed) {
-    for (const cell of piece.material) {
-      const key = cell.join(',');
-      const other = solid.get(key);
-      if (other) throw new Error(`collision at cell ${key}: ${other.type} and ${piece.type}`);
-      solid.set(key, piece);
-    }
+    const fault = claims.add(piece);
+    if (fault) throw new Error(fault);
   }
-  for (const piece of placed) {
-    for (const cell of piece.train) {
-      const other = solid.get(cell.join(','));
-      if (other) {
-        throw new Error(
-          `clearance conflict at cell ${cell.join(',')}: ${other.type} blocks the train on ${piece.type}`);
+}
+
+/**
+ * The same rule, accumulated one piece at a time, reporting rather than throwing.
+ *
+ * It is written this way round because "which piece broke it" is a question a
+ * whole-list check cannot answer, and a track being *typed* has to answer it: the
+ * letter just pressed is either one the toy can take or one it cannot, and the
+ * viewer has to say which. `assertNoCollisions` is this plus a throw, so there is
+ * one implementation of the rule and not two.
+ *
+ * Every pair of pieces is still tested exactly once — a piece is checked against
+ * everything claimed before it, then claims its own cells. Within a piece the
+ * material clash is looked for first, so a route that breaks both rules reports
+ * the material one, as it always did.
+ */
+export function createClaims() {
+  const solid = new Map();    // cell -> the piece whose material fills it
+  const wanted = new Map();   // cell -> a piece whose train has to pass through it
+
+  return {
+    /** Claim this piece's cells, or say why it cannot have them. */
+    add(piece) {
+      for (const cell of piece.material) {
+        const key = cell.join(',');
+        const other = solid.get(key);
+        if (other) return `collision at cell ${key}: ${other.type} and ${piece.type}`;
+        solid.set(key, piece);
       }
-    }
-  }
+      for (const cell of piece.material) {
+        const key = cell.join(',');
+        const other = wanted.get(key);
+        if (other) {
+          return `clearance conflict at cell ${key}: ${piece.type} blocks the train on ${other.type}`;
+        }
+      }
+      for (const cell of piece.train) {
+        const key = cell.join(',');
+        const other = solid.get(key);
+        if (other) {
+          return `clearance conflict at cell ${key}: ${other.type} blocks the train on ${piece.type}`;
+        }
+        // Train cells may freely coincide, so the first claimant is kept and the
+        // rest cost nothing — there is only one train.
+        if (!wanted.has(key)) wanted.set(key, piece);
+      }
+      return null;
+    },
+  };
 }
 
 /**
@@ -233,30 +269,88 @@ export function isRevisit(type, cell, pose, placedAt) {
  * train cannot run it again.
  */
 export function chainTrack(route, startPose = 'UF') {
+  const { placed, head, closed, faults } = chainOpen(route, startPose);
+  // The order is the one this has always had, and it is not the route's order.
+  //
+  // A cross traversed a third time outranks everything, because that rule has to
+  // bite while the route is still being unrolled: the route in tests/cross.test.js
+  // that proves it neither closes nor is collision-free, and the crossing is the
+  // point of it. Closure comes next, and a collision last, because a collision used
+  // to be looked for only once the whole route was down.
+  const overCrossed = faults.find(f => f.kind === 'overCrossed');
+  if (overCrossed) throw new Error(overCrossed.message);
+  if (!closed) {
+    throw new Error(
+      `route does not close: head at ${head.cell.join(',')} pose ${head.pose}, wanted 0,0,0 ${startPose}`);
+  }
+  if (faults.length) throw new Error(faults[0].message);
+  return placed;
+}
+
+/**
+ * The same walk with the closure requirement lifted: what a route *would* build,
+ * legal or not, along with everything wrong with it.
+ *
+ * `chainTrack` asks "is this a track?" and refuses to answer anything else, which
+ * is right for a solver's output and useless for one being built by hand — a track
+ * being typed is open at every keystroke but the last. So closure is a fact this
+ * reports rather than a precondition it enforces:
+ *
+ *   placed   every piece the route lays down, in order
+ *   head     where the route has got to: the next cell and pose
+ *   closed   whether that head is back at the start, cell *and* pose
+ *   faults   what is wrong with it, in route order — empty if nothing is
+ *
+ * A fault is `{ index, kind, message }`, `kind` being 'collision' or 'overCrossed',
+ * and there is at most one of each: the first collision, and the first cross
+ * traversed a third time. `faults[0]` is therefore the first piece that cannot
+ * legally go down, which is the one a builder has to be shown. `chainTrack` picks
+ * differently, and says why.
+ *
+ * Chaining continues past a fault — the geometry of the pieces after a bad one is
+ * still perfectly well defined, and it is the caller's business how much of the
+ * route to keep.
+ */
+export function chainOpen(route, startPose = 'UF') {
   let cell = [0, 0, 0], pose = startPose;
   const placedAt = new Map();
   const crossedAt = new Set();
-  const placed = route.map(type => {
+  const claims = createClaims();
+  let collided = false;
+  const faults = [];
+  const note = (index, kind, message) => faults.push({ index, kind, message });
+
+  const placed = route.map((type, index) => {
     const at = cell.join(',');
     const revisit = isRevisit(type, cell, pose, placedAt);
-    const claims = revisit ? { material: [], train: [] } : cellsFor(type, pose, cell);
-    const piece = { cell, pose, type, revisit, ...claims };
+    const claimed = revisit ? { material: [], train: [] } : cellsFor(type, pose, cell);
+    const piece = { cell, pose, type, revisit, ...claimed };
     if (revisit) {
-      if (crossedAt.has(at)) {
-        throw new Error(`cross at cell ${at} is traversed more than twice: it has two rails, not three`);
+      if (crossedAt.has(at) && !faults.some(f => f.kind === 'overCrossed')) {
+        note(index, 'overCrossed',
+          `cross at cell ${at} is traversed more than twice: it has two rails, not three`);
       }
       crossedAt.add(at);
     } else {
       placedAt.set(at, piece);
+      // Nothing more is claimed once the route has collided: the cells behind a
+      // clash are no longer a description of anything buildable.
+      const clash = collided ? null : claims.add(piece);
+      if (clash) {
+        collided = true;
+        note(index, 'collision', clash);
+      }
     }
     ({ cell, pose } = step(cell, pose, type));
     return piece;
   });
-  if (cell.some(v => v !== 0) || pose !== startPose) {
-    throw new Error(`route does not close: head at ${cell.join(',')} pose ${pose}, wanted 0,0,0 ${startPose}`);
-  }
-  assertNoCollisions(placed);
-  return placed;
+
+  return {
+    placed,
+    head: { cell, pose },
+    closed: cell.every(v => v === 0) && pose === startPose,
+    faults: faults.sort((a, b) => a.index - b.index),
+  };
 }
 
 /**

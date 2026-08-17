@@ -38,7 +38,8 @@ npm run dev          # the app, on http://localhost:5173
 npm run build        # a static build, into build/
 ```
 
-Nothing is deployed: the blog post is the published artefact.
+The site deploys to GitHub Pages on every push to `main` (`.github/workflows/deploy.yml`):
+a solve viewer on the front page, the draft blog post at `/post`.
 
 ## The solver
 
