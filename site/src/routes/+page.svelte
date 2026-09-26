@@ -29,6 +29,27 @@
 
   const config = $derived(CONFIGS.find(c => c.key === selected));
 
+  // Off, a shuffle is an instant redraw framed tight on the new layout — what a
+  // phone always gets. On, it is the collapse-and-rebuild wherever the screen can
+  // afford it.
+  let animate = $state(true);
+  const sequenced = $derived(animate && !narrow.current);
+
+  let autoShuffle = $state(false);
+  // A log slider, so the fast end — flicking through solves — gets as much travel
+  // as the slow end. `notch` 0…100 maps to MIN_MS…MAX_MS geometrically.
+  const MIN_MS = 100;
+  const MAX_MS = 30_000;
+  let notch = $state(60);
+  const every = $derived(Math.round(MIN_MS * (MAX_MS / MIN_MS) ** (notch / 100)));
+  const everyLabel = $derived(every < 1000 ? `${every}ms` : `${(every / 1000).toFixed(1)}s`);
+
+  $effect(() => {
+    if (!autoShuffle) return;
+    const timer = setInterval(shuffle, every);
+    return () => clearInterval(timer);
+  });
+
   function select(next) {
     if (next.key === selected) return;
     selected = next.key;
@@ -64,6 +85,14 @@
       </button>
     {/each}
   </div>
+  <div class="toggles">
+    <label><input type="checkbox" bind:checked={animate} /> Animate</label>
+    <label><input type="checkbox" bind:checked={autoShuffle} /> Auto shuffle</label>
+    <label class="every" class:off={!autoShuffle}>
+      <input type="range" min="0" max="100" step="1" bind:value={notch} disabled={!autoShuffle} />
+      every {everyLabel}
+    </label>
+  </div>
   <button class="shuffle" onclick={shuffle}>Shuffle</button>
 </div>
 
@@ -71,12 +100,13 @@
      rearrangement across them would strand the difference on the floor. Within a
      configuration the viewer stays mounted, so a shuffle is the collapse-and-
      rebuild. `reach` is the box the sweep was solved in — the crossed sweep's 8
-     outreaches the default frame. -->
-{#key config.key}
+     outreaches the default frame. Keyed on `sequenced` too, because TrackViewer
+     reads it once at mount — it decides the frame and whether the physics loads. -->
+{#key `${config.key}:${sequenced}`}
   <LayoutViewer
     {shape}
     reach={config.sweep.question.box}
-    sequence={!narrow.current}
+    sequence={sequenced}
     aspect={narrow.current ? '4 / 3' : '16 / 10'}
   />
 {/key}
@@ -129,6 +159,29 @@
   .configs button.active {
     background: var(--ink);
     color: var(--wash);
+  }
+
+  .toggles {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+  }
+
+  .toggles label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+  }
+
+  .every {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .every.off {
+    color: var(--muted);
   }
 
   .count {
