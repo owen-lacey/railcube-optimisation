@@ -350,9 +350,15 @@ test('the two counts differ exactly on crossings', () => {
 // Measured off the chained route rather than off `firstAt`/`secondAt`, because a
 // constraint that silently fails to bind is the failure mode this whole file
 // exists to catch — see the notEquals bug in tests/library.test.js.
+//
+// The smaller of the two lobes, not the gap in route order: a route that starts
+// inside the tight lobe reads as `length − 6` there, which is how twelve tight
+// crossings got through the first version of the constraint.
 const crossingGap = placed => {
   const at = placed.flatMap((piece, i) => (piece.type === 'cross' ? [i] : []));
-  return at.length === 2 ? at[1] - at[0] : null;   // one appearance means uncrossed
+  if (at.length !== 2) return null;   // one appearance means uncrossed
+  const gap = at[1] - at[0];
+  return Math.min(gap, placed.length - gap);
 };
 
 // Six is the tightest crossing there is, not a threshold: enumerating every
@@ -384,4 +390,27 @@ test('tightCrossings off keeps every loop except the tightest', async () => {
     wide.map(shape).sort(),
     loose.filter(route => crossingGap(chainTrack(route)) !== 6).map(shape).sort(),
   );
+});
+
+// Twelve steps cannot tell the two lobes apart — both are six — so the case above
+// never reached the route that starts inside the tight lobe. Fourteen can: every
+// crossing loop this set makes there has one lobe of six, and half of them put it
+// across the start, where the gap in route order reads eight.
+const WRAP_SET = { straight: 6, leftCurve: 3, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 1 };
+
+test('tightCrossings off catches a tight lobe across the start', async () => {
+  const every = extra => solveTrack({
+    steps: 14, box: 4, minY: 0, inventory: WRAP_SET, crossings: true, fill: true,
+    allSolutions: true, ...extra,
+  });
+  const loose = (await every({})).routes.map(route => chainTrack(route));
+  const wide = (await every({ tightCrossings: false })).routes.map(route => chainTrack(route));
+  const inOrder = placed => {
+    const at = placed.flatMap((piece, i) => (piece.type === 'cross' ? [i] : []));
+    return at[1] - at[0];
+  };
+
+  assert.ok(loose.some(p => crossingGap(p) === 6 && inOrder(p) !== 6),
+    'unconstrained, a tight lobe across the start is reachable');
+  assert.deepEqual(wide.map(crossingGap).filter(g => g === 6), [], 'no tight lobe survives');
 });

@@ -209,8 +209,16 @@ function addCrossings({
     // layouts of a 35-cube sweep were the same figure eight. Switching them off
     // says only "not the tightest one", which is why there is no width to choose
     // here: anything wider is whatever the route happens to do.
+    //
+    // A crossing splits the loop into two lobes, and both are bounded. The gap
+    // in route order is only one of them; the other runs from the second pass
+    // round through the start to the first, so a route that starts inside the
+    // tight lobe reads as a gap of length − 6 and slipped through when only the
+    // first was checked — twelve layouts of that same sweep did.
     if (!tightCrossings) {
-      model.add(at[1].minus(at[0]).gt(TIGHT_CROSSING)).onlyEnforceIf(on);
+      const gap = at[1].minus(at[0]);
+      model.add(gap.gt(TIGHT_CROSSING)).onlyEnforceIf(on);
+      model.add(sum(active).minus(gap).gt(TIGHT_CROSSING)).onlyEnforceIf(on);
     }
     // The rails must actually cross. Said via `differ` because notEquals does not.
     differ(model, axis[0], axis[1], `crossAxis_${c}`);
