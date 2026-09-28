@@ -65,3 +65,29 @@ export function gridLines({ lo, hi }) {
     }));
   });
 }
+
+/**
+ * One cell as a solid box about the origin, `inset` units inside the cell's own
+ * faces on every side. Six faces, each wound outward, so from outside only the
+ * three nearest are drawn and a see-through fill is never doubled.
+ *
+ * The inset is what keeps it off the track: a train cell's floor is exactly the
+ * face of the cube below it, and two coplanar faces flicker between each other.
+ */
+export function cellBox(inset) {
+  const h = 0.5 - inset / CUBE;   // half the box, in cells
+  return [0, 1, 2].flatMap(axis => [1, -1].map(sign => {
+    const [u, v] = [0, 1, 2].filter(k => k !== axis);
+    const corner = (du, dv) => {
+      const p = [0, 0, 0];
+      p[axis] = sign * h;
+      p[u] = du * h;
+      p[v] = dv * h;
+      return toWorld(p);
+    };
+    return {
+      vertices: windToward([corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)],
+        toWorld(along(axis, sign))),
+    };
+  }));
+}

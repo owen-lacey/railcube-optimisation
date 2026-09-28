@@ -334,6 +334,13 @@
     opacity: var(--grid-opacity);
   }
 
+  /* The lattice cell the train is in, filled in exactly the lattice's paint, so the
+     fill and the lines are one blue. */
+  .viewer :global(.train-cell > *) {
+    color: var(--grid-color) !important;
+    opacity: var(--grid-opacity);
+  }
+
   .failed {
     position: absolute;
     inset: auto 0 0 0;

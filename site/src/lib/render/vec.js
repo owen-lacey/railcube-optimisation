@@ -25,6 +25,9 @@ export const unit = a => { const n = len(a); return a.map(v => v / n); };
 /** project cell → PolyCSS position. */
 export const toWorld = ([x, y, z]) => [x * CUBE, z * CUBE, y * CUBE];
 
+/** PolyCSS position → the project cell it falls in. */
+export const toCell = ([x, y, z]) => [x, z, y].map(v => Math.round(v / CUBE));
+
 // Pieces are authored in the canonical pose (rail on top face, heading
 // forwards). The rotation maps local up onto the pose's face direction and
 // local forwards onto its heading; the third axis follows from

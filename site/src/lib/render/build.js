@@ -208,7 +208,7 @@ export function trackPhase(stage, pieces, { drive = true } = {}) {
   for (const slot of slotsFor(stage, pieces)) finish(stage, slot);
   if (!drive) return { advance: () => false };
 
-  const driver = createDriver(stage.scene);
+  const driver = createDriver(stage);
   driver.setRoute(pieces);
   return {
     advance: (_, elapsed) => { driver.at(elapsed); },
@@ -255,7 +255,7 @@ export function growPhase(stage, pieces, {
   let lit = ALARM;
   const alarmFrom = alarmed && (alarmed.pickUp ? 0 : alarmed.lands);
 
-  const driver = drive ? createDriver(stage.scene) : null;
+  const driver = drive ? createDriver(stage) : null;
   const closes = arriving.reduce((last, s) => Math.max(last, s.lands), 0) + timing.hold;
 
   let next = 0;
@@ -323,7 +323,7 @@ export function buildPhase(stage, pieces, {
 } = {}) {
   const timing = timingFor(pace, speed, delay);
   const slots = slotsFor(stage, pieces, timing);
-  const driver = drive ? createDriver(stage.scene) : null;
+  const driver = drive ? createDriver(stage) : null;
   // The train sets off once the loop is closed, which is the *last* landing —
   // and with two kinds of arrival that is no longer simply the last piece.
   const closes = slots.reduce((last, s) => Math.max(last, s.lands), 0) + timing.hold;

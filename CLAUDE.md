@@ -445,6 +445,35 @@ a closed track in, you have to flex it. The other two slide onto an already-plac
 the route revisits track it laid earlier. At two cubes the blocked count rises to 13, which is
 what set the number.
 
+### The cell and the cube the train is in are both marked
+
+**The lattice cell** the train's body is in is filled: `cellBox` in `grid.js`, flat and
+see-through, and painted with the lattice's own `--grid-color` and `--grid-opacity` — Owen's
+call, after a stronger fill of the same colour read as a different blue from the lines. Lines
+crossing the fill still come out darker there, because two see-through layers add. It is inset
+`TRAIN_CELL_INSET` from the cell's faces, because a train cell's floor is exactly the face of
+the cube below it, and coplanar faces flicker. Its near faces sit in front of the train, so the
+train reads tinted while it is inside. Bolder edges were built first and then swapped for the
+fill on Owen's call. The piece highlight below came first of all, from misreading him, and he
+kept it. The stage owns the mark: the driver reports a cell every frame, and the stage draws it
+only while there is a lattice. It is one mesh, moved with `setTransform` on each new cell and
+never redrawn. It follows the body rather than the booked train cells, and
+the two differ in ways worth knowing:
+
+- An inside curve books **no** train cells, because its train runs through the curve's own
+  footprint. So there the mark sits on material.
+- A left or right curve books a 2×2 block, and the arc misses one corner of it.
+
+**The piece** the train is in is also lit. Wherever a train drives, the cube it is inside is drawn `HIGHLIGHT` (0.3) of the way from its
+own colour toward white — Owen's choice over darkening, knowing the white start cube shows no
+change. The driver in `drive.js` owns it, because every phase that drives already goes through
+one. It is a `recolour`, so it happens on *entering* a cube (the old one put back, the new one
+lightened) and never per frame: about two repaints twice a second at `SPEED`. `trackPath` tags
+each sample with its route index, and a crossed cross's second pass lights the cube already in
+its cell. The driver's `dispose` puts the colour back, so a track never collapses with a cube
+still lit. It checks the cube by object, not by ID, because Sketch can drop a cube and mint
+another under the same ID before the old train is disposed.
+
 ### Changing a shape rearranges the cubes, it does not replace them
 
 Typing a new shape into `Layout` tumbles the layout that is there and builds the new one out

@@ -33,9 +33,15 @@ import { GEOMETRY } from './pieces.js';
 import { movingMesh, meshLike } from './meshes.js';
 import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
+import { cellBox } from './grid.js';
+import { TRAIN_CELL_INSET } from './dimensions.js';
+import { toWorld } from './vec.js';
 
 /** The class the lattice's mesh carries, for the stylesheet to find it by. */
 export const GRID_CLASS = 'cell-grid';
+
+/** The class the train's cell carries, for the same reason. */
+export const TRAIN_CELL_CLASS = 'train-cell';
 
 /**
  * Two or more phases as one, advancing together off the same clock and finishing
@@ -101,13 +107,17 @@ export function createStage(cameraEl, sceneEl) {
     const made = {
       id,
       type,
+      color,
       basis,
       position,
       bake(next, at) { mesh.bake(next, at); made.basis = next; made.position = at; },
       place(next, at) { mesh.place(next, at); made.basis = next; made.position = at; },
       // Repaint where it stands. Costs a bake, so it is for a piece being pointed
       // at rather than for a track being themed.
-      recolour(next) { mesh.recolour(GEOMETRY[type](next), made.basis, made.position); },
+      recolour(next) {
+        mesh.recolour(GEOMETRY[type](next), made.basis, made.position);
+        made.color = next;
+      },
       dispose() { mesh.dispose(); cubes.delete(id); },
       mesh,
     };
@@ -238,6 +248,38 @@ export function createStage(cameraEl, sceneEl) {
     grid?.dispose();
     grid = polygons ? scene.add(meshLike(polygons), {}) : null;
     grid?.element.classList.add(GRID_CLASS);
+    showTrainCell();
+  }
+
+  // ---- The lattice cell the train is in -----------------------------------
+  //
+  // Part of the lattice, so it is only drawn while there is one. The driver reports
+  // the cell whatever the viewer shows; the stage decides whether there is anything
+  // to draw it on. One mesh — a see-through box filling one cell, authored about
+  // the origin — mounted once and moved with `setTransform`, so following the train
+  // costs a transform per cell entered and never a `setPolygons`.
+
+  let trainCell = null;   // the cell last reported, or null when there is no train
+  let trainMark = null;
+
+  function showTrainCell() {
+    if (!grid || !trainCell) {
+      trainMark?.dispose();
+      trainMark = null;
+      return;
+    }
+    if (!trainMark) {
+      trainMark = scene.add(meshLike(cellBox(TRAIN_CELL_INSET)), {});
+      trainMark.element.classList.add(TRAIN_CELL_CLASS);
+    }
+    trainMark.setTransform({ position: toWorld(trainCell), rotation: [0, 0, 0] });
+  }
+
+  /** The cell the train is in, or `null` when it has gone. */
+  function markTrainCell(cell) {
+    if (String(cell) === String(trainCell)) return;
+    trainCell = cell;
+    showTrainCell();
   }
 
   return {
@@ -254,5 +296,6 @@ export function createStage(cameraEl, sceneEl) {
     stop: loop.stop,
     clear,
     setGrid,
+    markTrainCell,
   };
 }

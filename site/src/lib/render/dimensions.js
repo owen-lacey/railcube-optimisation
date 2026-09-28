@@ -41,10 +41,19 @@ export const COLORS = {
 };
 export const START_COLOR = '#f8fafc'; // the one white cube the set ships with
 
+// The cube the train is inside is drawn in its own colour this far toward white:
+// enough to follow the train round, not so much that the piece reads as a different
+// type. The white start cube has nowhere lighter to go, so it shows no change.
+export const HIGHLIGHT = 0.3;
+
 // The cell lattice's line thickness (render/grid.js): thin enough to read as lines
 // rather than bars. Its colour and opacity are the viewer's stylesheet's — see
 // `setGrid` in stage.js.
 export const GRID_W = 0.8;
+
+// The lattice cell the train is in is filled, this far inside the cell's faces so
+// the fill never lies flat on a cube. Colour and opacity are the stylesheet's.
+export const TRAIN_CELL_INSET = 0.5;
 
 // A piece that cannot go where it has been asked to go, pulsing between these two
 // until it is taken away again.

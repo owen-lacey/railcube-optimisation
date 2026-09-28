@@ -20,12 +20,12 @@ import assert from 'node:assert/strict';
 
 import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
-import { createStage, together, GRID_CLASS } from '../site/src/lib/render/stage.js';
+import { createStage, together, GRID_CLASS, TRAIN_CELL_CLASS } from '../site/src/lib/render/stage.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
-import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W } from '../site/src/lib/render/dimensions.js';
-import { gridLines } from '../site/src/lib/render/grid.js';
+import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W, TRAIN_CELL_INSET } from '../site/src/lib/render/dimensions.js';
+import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { toWorld, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { CUBE } from '../site/src/lib/render/dimensions.js';
@@ -52,7 +52,11 @@ function fakeScene(now = () => 0) {
         disposed: false,
         classes: new Set(),
         element: { classList: { add: name => handle.classes.add(name) } },
-        setPolygons() { handle.bakes += 1; handle.bakeAt.push(now()); },
+        setPolygons(polygons) {
+          handle.bakes += 1;
+          handle.bakeAt.push(now());
+          handle.painted = new Set(polygons.map(p => p.color));
+        },
         setTransform(t) { handle.transforms.push(t); },
         dispose() { handle.disposed = true; },
       };
@@ -490,6 +494,71 @@ test('a replaced phase takes its train off the track with it', () => {
   assert.equal(handles.length, 20, 'two trains were ever made, and one was thrown away');
 });
 
+// ---- The cube the train is in ---------------------------------------------
+
+/** Drive a finished track and record, every frame, which cubes are off their paint. */
+function driving(shape, seconds) {
+  const { cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  const pieces = piecesOf(shape);
+  const own = new Map(cubeIds(pieces).map((id, i) => [id, pieces[i].color]).filter(([id]) => id));
+  const offPaint = () => [...own].filter(([id, color]) => stage.cubes.get(id).color !== color);
+
+  stage.run([trackPhase(stage, pieces, { drive: true })]);
+  stage.start();
+  const frames = [];
+  clock.run(seconds, () => frames.push(offPaint().map(([id]) => id)));
+  frames.shift();   // the loop's first frame only reads the clock: nothing has run
+  return { stage, pieces, own, frames, offPaint };
+}
+
+/** Consecutive repeats collapsed: the order cubes were lit in. */
+const runs = list => list.filter((x, i) => i === 0 || x !== list[i - 1]);
+
+test('the train lights the cube it is in, one cube at a time', () => {
+  const { stage, pieces, own, frames } = driving(SET, 20);
+
+  for (const [i, lit] of frames.entries()) {
+    assert.equal(lit.length, 1, `frame ${i} has ${lit.length} cubes lit`);
+  }
+  // In route order, starting where the train does, and round the whole loop.
+  const order = runs(frames.map(([id]) => id));
+  assert.deepEqual(order.slice(0, pieces.length), identify(pieces));
+
+  // What was drawn, not just what was recorded: the lit cube's polygons carry a
+  // lighter version of its colour, and nothing else does.
+  const [id] = frames.at(-1);
+  const drawn = stage.cubes.get(id).mesh.handle.painted;
+  assert.equal(drawn.has(own.get(id)), false, `${id} is still drawn in its own colour`);
+
+  // A repaint only on entering a cube: the first one lit, then two per change.
+  const bakes = [...own.keys()].reduce((n, key) => n + stage.cubes.get(key).mesh.handle.bakes, 0);
+  assert.equal(bakes, 2 * (order.length - 1) + 1, 'a cube was repainted without the train moving');
+});
+
+test('a crossed cross is lit on both of its passes', () => {
+  const shape = 'XSLLLSXSRRRS';
+  const { pieces, frames } = driving(shape, 12);
+  const ids = cubeIds(pieces);
+  const cross = ids[0];
+  // The route's own order, with the second pass standing for the cube it revisits.
+  const expected = runs(ids.map(id => id ?? cross));
+  assert.deepEqual(runs(frames.map(([id]) => id)).slice(0, expected.length), expected);
+});
+
+test('a replaced phase puts the lit cube back to its own colour', () => {
+  const { stage, own, offPaint } = driving(SET, 3);
+  assert.equal(offPaint().length, 1);
+
+  stage.run([tumblePhase(stage, piecesOf(SET), { drop: 1, limit: 1 })]);
+  assert.equal(offPaint().length, 0, 'a cube went into the collapse still lit');
+  for (const [id, color] of own) {
+    const { painted } = stage.cubes.get(id).mesh.handle;
+    assert.ok(!painted || painted.has(color), `${id} is drawn lit`);
+  }
+});
+
 test('a picked-up cube also finishes down the connector axis', () => {
   // The doctrine, and the reason a pick-up is two legs rather than one arc: the
   // cubes click male-to-female along the direction of travel, so however a piece
@@ -789,4 +858,60 @@ test('the lattice is one mesh, which clearing the cubes leaves standing', () => 
   assert.equal(second.disposed, true);
   // Tagged for the stylesheet to repaint as an overlay, and nothing else is.
   assert.deepEqual(handles.filter(h => h.classes.has(GRID_CLASS)), [first, second]);
+});
+
+test('the lattice fills the cell the train is in, and moves the fill rather than redrawing it', () => {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  const pieces = piecesOf(SET);
+  const marks = () => handles.filter(h => h.classes.has(TRAIN_CELL_CLASS));
+
+  stage.run([trackPhase(stage, pieces, { drive: true })]);
+  stage.start();
+  clock.run(1);
+  assert.equal(marks().length, 0, 'a cell was marked with no lattice to mark it on');
+
+  // A lattice put up under a train that is already running marks its cell at once.
+  stage.setGrid(gridLines(extentOf(pieces)));
+  assert.equal(marks().length, 1);
+  clock.run(20);
+
+  const [mark] = marks();
+  assert.equal(mark.bakes, 0, 'the mark was redrawn rather than moved');
+  // Round the whole loop: into a train cell of every piece that books any. Not
+  // every one — the model books a curve's whole 2×2 block, and the arc cuts a
+  // corner of it. And only cells of the track: an inside curve books no train
+  // cells, because its train runs through the curve's own footprint.
+  const worlds = cells => cells.map(c => String(toWorld(c)));
+  const visited = new Set(mark.transforms.map(t => String(t.position)));
+  for (const [i, piece] of pieces.entries()) {
+    if (!piece.train.length) continue;
+    assert.ok(worlds(piece.train).some(at => visited.has(at)), `piece ${i} was never marked`);
+  }
+  const track = new Set(pieces.flatMap(p => worlds([...p.train, ...p.material])));
+  for (const at of visited) assert.ok(track.has(at), `${at} is off the track`);
+  // One transform per cell entered, not one per frame.
+  assert.ok(mark.transforms.length < 20 / 0.016 / 10, `${mark.transforms.length} transforms`);
+
+  // The train's phase replaced: the mark goes with the train.
+  stage.run([tumblePhase(stage, pieces, { drop: 1, limit: 1 })]);
+  assert.equal(mark.disposed, true, 'the mark outlived its train');
+});
+
+test('the train cell\'s fill is six outward faces, clear of the cell\'s own', () => {
+  const faces = cellBox(TRAIN_CELL_INSET);
+  assert.equal(faces.length, 6);
+  const edge = CUBE / 2 - TRAIN_CELL_INSET;
+  for (const { vertices } of faces) {
+    for (const v of vertices.flat()) assert.ok(Math.abs(Math.abs(v) - edge) < 1e-9, `${v} is not on the box`);
+    // Wound outward: the normal points the same way as the face's centre.
+    const [p, q, r] = vertices;
+    const n = [0, 1, 2].map(k => {
+      const [a, b] = [(k + 1) % 3, (k + 2) % 3];
+      return (q[a] - p[a]) * (r[b] - p[b]) - (q[b] - p[b]) * (r[a] - p[a]);
+    });
+    const centre = [0, 1, 2].map(k => vertices.reduce((sum, v) => sum + v[k], 0) / 4);
+    assert.ok(n.reduce((dot, x, k) => dot + x * centre[k], 0) > 0, 'a face is wound inward');
+  }
 });

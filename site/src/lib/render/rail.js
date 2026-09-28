@@ -88,9 +88,9 @@ assertRailMouths();
 // Walk a chained route and sample the whole rail as one polyline in scene
 // space. Each piece contributes `samples` points from its entry mouth up to
 // (not including) its exit, where the next piece takes over — so on a closed
-// loop the polyline closes too.
+// loop the polyline closes too. `piece` is the route index a sample came from.
 export function trackPath(placed, samples = 24) {
-  return placed.flatMap(({ cell, type, pose }) => {
+  return placed.flatMap(({ cell, type, pose }, piece) => {
     const basis = poseRotation(pose), origin = toWorld(cell);
     return Array.from({ length: samples }, (_, k) => {
       const { pos, fwd, up } = railFrame(type, k / samples);
@@ -98,6 +98,7 @@ export function trackPath(placed, samples = 24) {
         pos: add(through(basis, pos), origin),
         fwd: through(basis, fwd),
         up: through(basis, up),
+        piece,
       };
     });
   });
