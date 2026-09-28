@@ -1,12 +1,12 @@
 <script>
   // A visualisation that hasn't been built yet. Deliberately loud: an unfilled
   // slot should be impossible to mistake for finished page furniture.
-  let { caption = '', aspect = '16 / 10' } = $props();
+  let { caption = '', aspect = '16 / 10', label = 'Visualisation' } = $props();
 </script>
 
 <figure>
   <div class="slot" style:aspect-ratio={aspect}>
-    <p>Visualisation</p>
+    <p>{label}</p>
   </div>
   {#if caption}
     <figcaption>{caption}</figcaption>
