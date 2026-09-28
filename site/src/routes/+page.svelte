@@ -6,12 +6,8 @@
   import LayoutViewer from '$lib/components/LayoutViewer.svelte';
   import { SWEEP_28, SWEEP_CROSSED } from '$lib/sweeps.js';
 
-  // On a phone the rearrangement is not worth what it costs in scale: its fixed
-  // frame must hold every layout in the sweep at once (the union of the crossed
-  // sweep's bounds is the full ±8 box — measured, not assumed), which draws the
-  // track at about half the size a tight frame would. So narrow screens get an
-  // instant redraw framed tight on each layout, and a taller viewer — the zoom
-  // fit is height-bound at 16/10 (see camera.js), so 4/3 alone is worth ~20%.
+  // Narrow screens get a taller viewer: the zoom fit is height-bound at 16/10
+  // (see camera.js), so 4/3 alone is worth ~20%.
   const narrow = new MediaQuery('(max-width: 640px)', false);
 
   const CONFIGS = [
@@ -29,11 +25,9 @@
 
   const config = $derived(CONFIGS.find(c => c.key === selected));
 
-  // Off, a shuffle is an instant redraw framed tight on the new layout — what a
-  // phone always gets. On, it is the collapse-and-rebuild wherever the screen can
-  // afford it.
+  // Off, a shuffle is an instant redraw framed tight on the new layout. On, it is
+  // the collapse-and-rebuild.
   let animate = $state(true);
-  const sequenced = $derived(animate && !narrow.current);
 
   let autoShuffle = $state(false);
   // A log slider, so the fast end — flicking through solves — gets as much travel
@@ -100,13 +94,13 @@
      rearrangement across them would strand the difference on the floor. Within a
      configuration the viewer stays mounted, so a shuffle is the collapse-and-
      rebuild. `reach` is the box the sweep was solved in — the crossed sweep's 8
-     outreaches the default frame. Keyed on `sequenced` too, because TrackViewer
+     outreaches the default frame. Keyed on `animate` too, because TrackViewer
      reads it once at mount — it decides the frame and whether the physics loads. -->
-{#key `${config.key}:${sequenced}`}
+{#key `${config.key}:${animate}`}
   <LayoutViewer
     {shape}
     reach={config.sweep.question.box}
-    sequence={sequenced}
+    sequence={animate}
     aspect={narrow.current ? '4 / 3' : '16 / 10'}
   />
 {/key}

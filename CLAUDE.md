@@ -29,9 +29,7 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 (`.storybook/`, `npm run storybook`). Two routes: the front page is a solve viewer — pick one
 of the two swept configurations (`site/src/lib/sweeps.js`), shuffle for a random layout — and
 the draft blog post lives at `/post`, deliberately unlinked from it. On narrow screens the
-front page turns `sequence` off and gets the tight per-layout frame: the fixed frame must hold
-the whole sweep (the crossed union is the full ±8 box — measured), which draws a track at
-about half tight size, and a phone cannot afford that where a desktop can. Deployed to GitHub Pages
+front page gets a taller 4/3 viewer but the same sequencing as desktop. Deployed to GitHub Pages
 by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath URL;
 `kit.paths.base` reads it and stays empty locally. The four
 showcase pages that used to live here (overview, pieces, layouts, a live `/solve`) are gone;
