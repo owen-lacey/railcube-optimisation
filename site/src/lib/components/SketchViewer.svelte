@@ -6,7 +6,7 @@
   let {
     shape = '',
     aspect = '16 / 10',
-    interactive = true,
+    interactive = false,
     pace = 0.1,
     speed = 1.2,
   } = $props();

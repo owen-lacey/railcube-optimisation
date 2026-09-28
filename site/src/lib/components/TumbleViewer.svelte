@@ -10,7 +10,7 @@
     shape = '',
     drop = 3,
     aspect = '16 / 10',
-    interactive = true,
+    interactive = false,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());

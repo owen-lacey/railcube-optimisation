@@ -1,6 +1,6 @@
 <script>
   import TrackViewer from './TrackViewer.svelte';
-  import { openScene, frame, cubesIn, scoreOf } from '$lib/scenes.js';
+  import { openScene, frame } from '$lib/scenes.js';
 
   let {
     shape = '',

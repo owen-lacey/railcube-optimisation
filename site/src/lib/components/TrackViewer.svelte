@@ -11,7 +11,7 @@
     camera = {},
     drive = false,
     aspect = '4 / 3',
-    interactive = true,
+    interactive = false,
     label = '',
     // A new layout collapses the one that is there and is built out of the pieces
     // that fall — see `show`. Off by default: a catalogue card showing one piece

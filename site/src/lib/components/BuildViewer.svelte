@@ -11,7 +11,7 @@
     pace = 0.1,
     speed = 1,
     aspect = '16 / 10',
-    interactive = true,
+    interactive = false,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());

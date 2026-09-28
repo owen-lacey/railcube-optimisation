@@ -6,7 +6,7 @@
     type,
     poses = false,
     aspect = poses ? '16 / 9' : '5 / 4',
-    interactive = true,
+    interactive = false,
     label = '',
   } = $props();
 
