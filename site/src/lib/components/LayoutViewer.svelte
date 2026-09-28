@@ -1,7 +1,6 @@
 <script>
   import TrackViewer from './TrackViewer.svelte';
-  import { sceneFromRoute, cubesIn, scoreOf } from '$lib/scenes.js';
-  import { routeOf } from '../../../../src/layouts.js';
+  import { openScene, frame, cubesIn, scoreOf } from '$lib/scenes.js';
 
   let {
     shape = '',
@@ -23,18 +22,16 @@
 
   const letters = $derived(shape.trim().toUpperCase());
 
-  // The shape is re-derived through `chainTrack`, which throws unless the route
-  // closes and nothing collides — so an illegal string gets the model's own
-  // objection, not a drawing of nonsense.
-  //
-  // An illegal shape unmounts the viewer below, which destroys the stage and the
-  // cubes on it. So the next legal shape has nothing to knock down and is drawn
-  // finished, exactly as the first one was. That is deliberate: the alternative is
-  // machinery for keeping a track alive behind an error message.
+  // The shape is re-derived through `chainOpen`, which reports rather than
+  // refuses: an unfinished or stuck route is drawn as far as it goes, with a
+  // piece that has nowhere to go flashing red where it was asked to land.
+  // `routeOf` still throws on a letter outside the six piece types, which is
+  // the one thing left that blanks the viewer.
   const result = $derived.by(() => {
     if (!letters) return { state: 'empty' };
     try {
-      return { state: 'ok', scene: sceneFromRoute(routeOf(letters)) };
+      const { pieces, closed, offender } = openScene(letters);
+      return { state: 'ok', pieces, closed, offender, camera: frame(pieces) };
     } catch (error) {
       return { state: 'invalid', message: error.message };
     }
@@ -43,15 +40,15 @@
 
 {#if result.state === 'ok'}
   <TrackViewer
-    pieces={result.scene.pieces}
-    camera={result.scene.camera}
+    pieces={result.pieces}
+    camera={result.camera}
+    drive={drive && result.closed}
     {sequence}
     {pace}
     {speed}
     {handover}
     {drop}
     {reach}
-    {drive}
     {aspect}
     {interactive}
     label="The layout {letters}"
@@ -59,7 +56,12 @@
   <p class="caption">
     <span class="shape">{letters}</span>
     <span class="muted">
-      {cubesIn(result.scene.pieces)} cubes · {scoreOf(result.scene.pieces)} pts
+      {cubesIn(result.pieces)} cubes · {scoreOf(result.pieces)} pts
+      {#if result.offender}
+        · stuck: {result.offender.message}
+      {:else if !result.closed}
+        · open
+      {/if}
     </span>
   </p>
 {:else}
