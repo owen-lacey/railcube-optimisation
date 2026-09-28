@@ -30,9 +30,12 @@
 // a fixed box rather than anything derived from what is being shown.
 
 import { GEOMETRY } from './pieces.js';
-import { movingMesh } from './meshes.js';
+import { movingMesh, meshLike } from './meshes.js';
 import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
+
+/** The class the lattice's mesh carries, for the stylesheet to find it by. */
+export const GRID_CLASS = 'cell-grid';
 
 /**
  * Two or more phases as one, advancing together off the same clock and finishing
@@ -218,6 +221,25 @@ export function createStage(cameraEl, sceneEl) {
     cubes.clear();
   }
 
+  // ---- The cell lattice ---------------------------------------------------
+  //
+  // Not a cube and not in the registry, so `clear()` between two shapes leaves it
+  // standing; whoever set it takes it down with `setGrid(null)`. One mesh, mounted
+  // once per box and never written to after.
+  //
+  // It is an overlay, not an object, and PolyCSS has no unlit material to say so:
+  // every face is shaded from its normal and painted opaque. So the mesh is tagged
+  // `GRID_CLASS` and the viewer's stylesheet repaints its faces flat and translucent.
+
+  let grid = null;
+
+  /** Replace the lattice with these polygons, or take it away with `null`. */
+  function setGrid(polygons) {
+    grid?.dispose();
+    grid = polygons ? scene.add(meshLike(polygons), {}) : null;
+    grid?.element.classList.add(GRID_CLASS);
+  }
+
   return {
     scene,
     cubes,
@@ -231,5 +253,6 @@ export function createStage(cameraEl, sceneEl) {
     start: loop.start,
     stop: loop.stop,
     clear,
+    setGrid,
   };
 }

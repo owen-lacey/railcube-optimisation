@@ -41,6 +41,11 @@ export const COLORS = {
 };
 export const START_COLOR = '#f8fafc'; // the one white cube the set ships with
 
+// The cell lattice's line thickness (render/grid.js): thin enough to read as lines
+// rather than bars. Its colour and opacity are the viewer's stylesheet's — see
+// `setGrid` in stage.js.
+export const GRID_W = 0.8;
+
 // A piece that cannot go where it has been asked to go, pulsing between these two
 // until it is taken away again.
 //

@@ -3,6 +3,7 @@
   import { createStage, together } from '../render/stage.js';
   import { LIGHT } from '../render/dimensions.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
+  import { gridLines } from '../render/grid.js';
   import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
   import { identify } from '../../../../src/layouts.js';
 
@@ -38,6 +39,9 @@
     // is the JS solver's own box constraint (see `fixedFrame`); a viewer showing a
     // sweep solved in a bigger box passes that sweep's `question.box` instead.
     reach = undefined,
+    // A box of cells, `{ lo, hi }`, to draw the model's cell lattice around; null
+    // draws none. See `render/grid.js`.
+    grid = null,
   } = $props();
 
   // How long the collapse is simulated for at the outside.
@@ -232,6 +236,7 @@
       live = false;
       stopObserving();
       ro.disconnect();
+      stage?.setGrid(null);
       stage?.clear();
       stage = null;
     };
@@ -241,6 +246,16 @@
     const next = pieces;
     if (!ready || !stage) return;
     show(next);
+  });
+
+  // The lattice. Keyed on the box's corners, not the object: an equal box handed
+  // over new would otherwise remount a thousand polygons for nothing.
+  let gridKey = null;
+  $effect(() => {
+    const key = grid ? `${grid.lo}|${grid.hi}` : null;
+    if (!ready || !stage || key === gridKey) return;
+    stage.setGrid(grid ? gridLines(grid) : null);
+    gridKey = key;
   });
 
   // Framing. In sequencing mode this deliberately does *not* read `pieces` or
@@ -290,6 +305,8 @@
 
 <style>
   .viewer {
+    --grid-color: #4f75b8;
+    --grid-opacity: 0.22;
     position: relative;
     width: 100%;
     overflow: hidden;
@@ -306,6 +323,15 @@
 
   .viewer :global(poly-camera) {
     display: block;
+  }
+
+  /* The cell lattice is an overlay, not an object: one flat colour on every face,
+     so no side of a line reads as lit or in shade, and see-through. PolyCSS writes
+     each face's shaded colour inline, hence `!important`. Opacity goes on the faces,
+     which are leaves — on the preserve-3d mesh container it would flatten the 3D. */
+  .viewer :global(.cell-grid > *) {
+    color: var(--grid-color) !important;
+    opacity: var(--grid-opacity);
   }
 
   .failed {

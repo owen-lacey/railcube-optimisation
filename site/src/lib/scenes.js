@@ -129,6 +129,17 @@ export const boundsOf = pieces => {
   return { lo: bound(Math.min), hi: bound(Math.max) };
 };
 
+/**
+ * The box of cells a set of pieces *and their train* occupies — the lattice a
+ * layout is drawn in. `boundsOf` is material only, which is right for anything
+ * about where cubes are; the train rides a cell above them and has to be inside.
+ */
+export const extentOf = pieces => {
+  const cells = pieces.flatMap(p => [...(p.material ?? [p.cell]), ...(p.train ?? [])]);
+  const bound = pick => [0, 1, 2].map(a => pick(...cells.map(c => c[a])));
+  return { lo: bound(Math.min), hi: bound(Math.max) };
+};
+
 const SPREAD = 2;   // cubes of room either side for a pile to sprawl into
 
 /**

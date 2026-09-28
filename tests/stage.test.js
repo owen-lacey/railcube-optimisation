@@ -20,11 +20,12 @@ import assert from 'node:assert/strict';
 
 import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
-import { createStage, together } from '../site/src/lib/render/stage.js';
+import { createStage, together, GRID_CLASS } from '../site/src/lib/render/stage.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
-import { ALARM, ALARM_FLASH, ALARM_PERIOD } from '../site/src/lib/render/dimensions.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
+import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W } from '../site/src/lib/render/dimensions.js';
+import { gridLines } from '../site/src/lib/render/grid.js';
 import { toWorld, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { CUBE } from '../site/src/lib/render/dimensions.js';
@@ -49,6 +50,8 @@ function fakeScene(now = () => 0) {
         bakeAt: [],
         transforms: [],
         disposed: false,
+        classes: new Set(),
+        element: { classList: { add: name => handle.classes.add(name) } },
         setPolygons() { handle.bakes += 1; handle.bakeAt.push(now()); },
         setTransform(t) { handle.transforms.push(t); },
         dispose() { handle.disposed = true; },
@@ -734,4 +737,56 @@ test('a pan outlives the phase that asked for it', () => {
 
   assert.equal(Number(cameraEl.attributes.zoom).toFixed(3), (2 * 0.88).toFixed(3));
   assert.equal(clock.running(), false, 'the loop ran on after the pan finished');
+});
+
+// ---- The cell lattice -------------------------------------------------------
+
+test('the lattice box holds the train as well as the cubes', () => {
+  const pieces = piecesOf(RING);
+  const { lo, hi } = extentOf(pieces);
+
+  // A flat ring's train rides one layer above its cubes.
+  assert.equal(hi[1], boundsOf(pieces).hi[1] + 1);
+  for (const cell of pieces.flatMap(p => [...p.material, ...p.train])) {
+    for (const a of [0, 1, 2]) assert.ok(cell[a] >= lo[a] && cell[a] <= hi[a], `${cell} outside`);
+  }
+});
+
+test('the lattice is one prism per line, and stays on the cell boundaries', () => {
+  const box = { lo: [-3, 0, -2], hi: [0, 1, 1] };   // 4 × 2 × 4 cells
+  const polygons = gridLines(box);
+  const [nx, ny, nz] = [4, 2, 4];
+  const lines = (ny + 1) * (nz + 1) + (nx + 1) * (nz + 1) + (nx + 1) * (ny + 1);
+  assert.equal(polygons.length, 4 * lines);
+
+  // Every vertex sits within half a line's width of the box's outer faces.
+  const reach = CUBE / 2 + GRID_W / 2 + 1e-9;
+  const [wlo, whi] = [toWorld(box.lo), toWorld(box.hi)];
+  for (const [x, y, z] of polygons.flatMap(p => p.vertices)) {
+    [x, y, z].forEach((v, k) => {
+      assert.ok(v >= Math.min(wlo[k], whi[k]) - reach && v <= Math.max(wlo[k], whi[k]) + reach);
+    });
+  }
+});
+
+test('the lattice is one mesh, which clearing the cubes leaves standing', () => {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const pieces = piecesOf(RING);
+
+  stage.setGrid(gridLines(extentOf(pieces)));
+  const first = handles.at(-1);
+  stage.run([trackPhase(stage, pieces, { drive: false })]);
+  stage.clear();
+  assert.equal(first.disposed, false, 'clearing the cubes took the lattice');
+
+  stage.setGrid(gridLines(extentOf(piecesOf(SET))));
+  assert.equal(first.disposed, true, 'a replaced lattice was left behind');
+  const second = handles.at(-1);
+  assert.notEqual(second, first);
+
+  stage.setGrid(null);
+  assert.equal(second.disposed, true);
+  // Tagged for the stylesheet to repaint as an overlay, and nothing else is.
+  assert.deepEqual(handles.filter(h => h.classes.has(GRID_CLASS)), [first, second]);
 });

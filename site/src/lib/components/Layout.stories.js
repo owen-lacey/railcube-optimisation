@@ -24,6 +24,7 @@ export default {
     handover: { control: { type: 'range', min: 0, max: 3, step: 0.05 } },
     drop: { control: { type: 'range', min: 0, max: 6, step: 1 } },
     aspect: { control: 'text' },
+    grid: { control: 'boolean' },
   },
 };
 
@@ -70,6 +71,21 @@ export const Rearranged = {
           + 'proportions the easings are tuned against are preserved. `pace` is separate '
           + 'for the one case worth setting alone: stretching only the gap, to watch a '
           + 'single arrival.',
+      },
+    },
+  },
+};
+
+export const Grid = {
+  name: 'In its grid',
+  args: { shape: 'LLLL', grid: true, sequence: false, interactive: true },
+  parameters: {
+    docs: {
+      description: {
+        story: 'The cells the model reasons in, drawn. One cell is one straight cube; a '
+          + 'curve fills a 2×2 block of them, and the train needs the cells on the rail '
+          + 'side of each piece. The lattice covers every cell the cubes *and* the train '
+          + 'touch, empty ones included. Drag to orbit.',
       },
     },
   },

@@ -1,6 +1,6 @@
 <script>
   import TrackViewer from './TrackViewer.svelte';
-  import { openScene, frame } from '$lib/scenes.js';
+  import { openScene, frame, extentOf, frameTight } from '$lib/scenes.js';
 
   let {
     shape = '',
@@ -18,6 +18,9 @@
     // How far the fixed frame reaches — the box the shapes were solved in. Unset
     // means the JS solver's own constraint; see `fixedFrame` in scenes.js.
     reach = undefined,
+    // Draw the model's cell lattice around the layout and its train, framed tight
+    // on that box rather than on the cubes alone.
+    grid = false,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -31,7 +34,9 @@
     if (!letters) return { state: 'empty' };
     try {
       const { pieces, closed, offender } = openScene(letters);
-      return { state: 'ok', pieces, closed, offender, camera: frame(pieces) };
+      const box = grid ? extentOf(pieces) : null;
+      const camera = box ? frameTight(box) : frame(pieces);
+      return { state: 'ok', pieces, closed, offender, box, camera };
     } catch (error) {
       return { state: 'invalid', message: error.message };
     }
@@ -49,6 +54,7 @@
     {handover}
     {drop}
     {reach}
+    grid={result.box}
     {aspect}
     {interactive}
     label="The layout {letters}"
