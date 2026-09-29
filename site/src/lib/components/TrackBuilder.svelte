@@ -153,7 +153,7 @@
       onclick={removeLast}
       aria-label="Remove the last piece"
       title="Remove the last piece"
-    ><Delete aria-hidden="true" /></button>
+    ><Delete fill="currentColor" aria-hidden="true" /></button>
   </div>
 </div>
 
@@ -199,5 +199,11 @@
     border: 2px solid currentColor;
     background: transparent;
     color: inherit;
+  }
+
+  /* The icon's body is filled, so the × inside it has to be cut out in the page
+     colour or it vanishes into the fill. The body is the icon's first path. */
+  .remove :global(svg path:not(:first-of-type)) {
+    stroke: var(--wash, #fff);
   }
 </style>
