@@ -1,5 +1,5 @@
 // The crossed sweep, a random track at a time. Type a number from 1 to 1,000 to
-// hold that one; Shuffle sets it cycling again. Nothing changes while it is off
+// hold that one; play sets it cycling again, and pause holds the train too. Nothing changes while it is off
 // screen, since every swap redraws a whole 35-cube layout.
 
 import KnownTracks from './KnownTracks.svelte';

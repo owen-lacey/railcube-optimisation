@@ -1,10 +1,10 @@
 <script>
   // A sweep, one layout at a time: a random track every `every` ms, numbered from
-  // 1 in the sweep file's order. Typing a number holds that track; Shuffle lets
-  // it go again.
+  // 1 in the sweep file's order. Pausing holds the track and the train on it,
+  // and typing a number pauses on that track; play lets it go again.
   import { onMount, untrack } from 'svelte';
-  import Shuffle from '@lucide/svelte/icons/shuffle';
   import LayoutViewer from './LayoutViewer.svelte';
+  import PlayPause from './PlayPause.svelte';
   import { SWEEP_CROSSED } from '$lib/sweeps.js';
 
   let { sweep = SWEEP_CROSSED, every = 2000, aspect = '16 / 10', drive = true } = $props();
@@ -14,7 +14,7 @@
   // Track 1, not a random one: the page is prerendered, and the server and the
   // browser must agree on what the HTML says. The first shuffle happens on screen.
   let index = $state(0);
-  let cycling = $state(true);
+  let playing = $state(true);
   let onScreen = $state(false);
   let host;
 
@@ -29,17 +29,13 @@
   // whatever is being typed. The number takes effect on blur; anything that is not
   // a track number puts the field back to the one showing.
   function hold() {
-    cycling = false;
+    playing = false;
   }
 
   function choose(event) {
     const n = Number(event.currentTarget.value);
     if (Number.isInteger(n) && n >= 1 && n <= shapes.length) index = n - 1;
     event.currentTarget.value = String(index + 1);
-  }
-
-  function resume() {
-    cycling = true;
   }
 
   // Off screen, nothing changes: every swap is a whole layout redrawn.
@@ -59,7 +55,7 @@
   });
 
   $effect(() => {
-    if (!cycling || !onScreen) return;
+    if (!playing || !onScreen) return;
     // Untracked, or the effect would depend on the `index` it writes and re-run itself.
     untrack(shuffle);
     const timer = setInterval(shuffle, every);
@@ -68,7 +64,14 @@
 </script>
 
 <figure bind:this={host}>
-  <LayoutViewer shape={shapes[index].shape} sequence={false} interactive={true} {aspect} {drive} />
+  <LayoutViewer
+    shape={shapes[index].shape}
+    sequence={false}
+    interactive={true}
+    paused={!playing}
+    {aspect}
+    {drive}
+  />
   <figcaption>
     <label>
       Track #<input
@@ -81,9 +84,7 @@
         aria-label="Track number, 1 to {shapes.length}"
       />
     </label>
-    <button type="button" onclick={resume} disabled={cycling} title="Shuffle">
-      <Shuffle aria-hidden="true" /> Shuffle
-    </button>
+    <PlayPause bind:playing label="the tracks" />
   </figcaption>
 </figure>
 
@@ -118,28 +119,5 @@
   input::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
-  }
-
-  button {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font: inherit;
-    color: var(--ink);
-    background: var(--wash);
-    border: 1px solid var(--rule);
-    border-radius: 0.5rem;
-    padding: 0.35rem 0.9rem;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: default;
-    color: var(--muted);
-  }
-
-  button :global(svg) {
-    width: 1em;
-    height: 1em;
   }
 </style>

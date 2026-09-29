@@ -63,6 +63,8 @@
     // to — see `trackPhase`. Read once, at mount.
     trainAt = undefined,
     onTrainAt = undefined,
+    // Hold everything where it is — see `setPaused` in stage.js.
+    paused = false,
   } = $props();
 
   // How long the collapse is simulated for at the outside.
@@ -218,6 +220,7 @@
           onTrainCell: cell => onTrainCell?.(cell),
           onCamera: () => origin && scheduleAxisLabels(),
         });
+        stage.setPaused(paused);
         if (interactive) controls = attachControls(host, cameraEl, stage);
         ready = true;
         // Framed once, here, and never again in sequencing mode: `fixedFrame` is a
@@ -285,6 +288,15 @@
     const next = pieces;
     if (!ready || !stage) return;
     show(next);
+  });
+
+  // Paused or played. Starting either way is right: paused, it draws one still
+  // frame and stops; played, it carries on from there.
+  $effect(() => {
+    const hold = paused;
+    if (!ready || !stage) return;
+    stage.setPaused(hold);
+    stage.start();
   });
 
   // The lattice. Keyed on the box's corners, not the object: an equal box handed

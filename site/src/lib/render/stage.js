@@ -102,6 +102,8 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
   let phaseAt = 0;       // loop time the head phase started, so its clock is its own
   let framed = null;     // the camera description in force, or being panned away from
   let pan = null;        // { to, seconds, spent }, null when the camera is still
+  let paused = false;
+  let lost = 0;          // loop time spent on paused frames, which is not time that passed
 
   /**
    * The cube with this ID, mounted if it is not on the stage yet.
@@ -223,16 +225,38 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
    * predecessor.
    */
   const loop = createLoop((delta, elapsed) => {
+    // Paused, a frame is a still: the head phase is drawn where it has got to and
+    // the loop stops. That one frame is what puts a train on a track shown while
+    // paused, which would otherwise sit unturned at the origin until play. Its delta
+    // is not time that passed, so it goes into `lost` and nothing moves on by it.
+    if (paused) {
+      lost += delta;
+      queue[0]?.advance(0, elapsed - lost - phaseAt);
+      return false;
+    }
+    const now = elapsed - lost;
     // The camera is stepped first and independently: a pan outlives the phase that
     // asked for it, so the loop must not stop while one is still running.
     const panning = stepPan(delta);
     if (!queue.length) return panning ? undefined : false;
-    if (queue[0].advance(delta, elapsed - phaseAt) === false) {
+    if (queue[0].advance(delta, now - phaseAt) === false) {
       queue.shift().dispose?.();
-      phaseAt = elapsed;
+      phaseAt = now;
       if (!queue.length) return panning ? undefined : false;
     }
   });
+
+  /** The stage's own time: the loop's, less what was spent on paused frames. */
+  const clock = () => loop.at() - lost;
+
+  /**
+   * Hold everything where it is, or let it go again. It does not start or stop the
+   * loop: a `start()` while paused draws one still frame, and one after unpausing
+   * carries on from exactly where the pause caught it.
+   */
+  function setPaused(next) {
+    paused = Boolean(next);
+  }
 
   /**
    * Run these phases, one after another. Anything still queued is dropped and
@@ -242,7 +266,7 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
   function run(phases) {
     for (const phase of queue) phase.dispose?.();
     queue = phases.filter(Boolean);
-    phaseAt = loop.at();
+    phaseAt = clock();
   }
 
   /**
@@ -255,6 +279,7 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
    */
   function clear() {
     loop.reset();
+    lost = 0;
     for (const phase of queue) phase.dispose?.();
     queue = [];
     phaseAt = 0;
@@ -420,6 +445,7 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
     run,
     start: loop.start,
     stop: loop.stop,
+    setPaused,
     clear,
     setGrid,
     setOrigin,

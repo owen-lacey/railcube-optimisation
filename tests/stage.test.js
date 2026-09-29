@@ -525,6 +525,25 @@ test('a held train stays put, and a whole lap on is where it started', () => {
   assert.equal(pose(), start, 'a whole lap on is the start');
 });
 
+test('a hold let go drives on from where it held the train', () => {
+  const { cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  let held = null;
+  const told = [];
+
+  stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => held, onTrainAt: f => told.push(f) })]);
+  stage.start();
+  clock.run(1);
+  held = 0.8;
+  clock.run(1);
+  held = null;
+  clock.run(0.05);
+
+  const after = told.at(-1);
+  assert.ok(after > 0.8 && after < 0.85, `it carried on from 0.8, not the clock (${after})`);
+});
+
 test('a driving train reports how far round the lap it is', () => {
   const { cameraEl, sceneEl } = fakeScene();
   const stage = createStage(cameraEl, sceneEl);
@@ -540,6 +559,51 @@ test('a driving train reports how far round the lap it is', () => {
   const wraps = told.slice(1).filter((f, i) => f < told[i]);
   assert.ok(wraps.length >= 1, 'twenty seconds is more than a lap');
   assert.ok(wraps.every(f => f < 0.1), 'it only ever goes back by lapping');
+});
+
+test('a paused stage draws one still frame, stops, and carries on from there', () => {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  const told = [];
+
+  stage.run([trackPhase(stage, piecesOf(RING), { onTrainAt: f => told.push(f) })]);
+  stage.start();
+  clock.run(1);
+  const before = told.at(-1);
+  const train = handles.at(-1);
+  const writes = train.transforms.length;
+
+  stage.setPaused(true);
+  stage.start();
+  clock.run(1);
+  assert.equal(clock.running(), false, 'a paused stage stops asking for frames');
+  assert.equal(told.at(-1), before, 'the still frame is where the train had got to');
+  assert.equal(train.transforms.length, writes + 1, 'one still frame, and only one');
+
+  stage.setPaused(false);
+  stage.start();
+  clock.run(0.05);
+  const after = told.at(-1);
+  assert.ok(after > before && after - before < 0.05, 'it carries on from where it stopped');
+});
+
+test('a track shown while paused gets its train, standing still', () => {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  const told = [];
+
+  stage.setPaused(true);
+  stage.run([trackPhase(stage, piecesOf(RING), { onTrainAt: f => told.push(f) })]);
+  stage.start();
+  clock.run(1);
+
+  const train = handles.at(-1);
+  // One transform to mount it, unturned at the origin, and one to put it on the track.
+  assert.equal(train.transforms.length, 2, 'the train is put on the track once');
+  assert.equal(clock.running(), false);
+  assert.deepEqual(told, [0], 'at the start of the lap');
 });
 
 test('a picked-up cube also finishes down the connector axis', () => {

@@ -260,7 +260,7 @@ function departuresFor(leaving, { beat, flight }) {
  * have no rail for a train to find.
  *
  * `trainAt` hands the train to someone else: asked every frame, a number is how
- * far round the lap to hold it (0 to 1), and null lets it drive. `onTrainAt` is
+ * far round the lap to hold it (0 to 1), and null lets it drive on from there. `onTrainAt` is
  * told how far round a driving train has got, every frame, so a slider can follow.
  */
 export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } = {}) {
@@ -269,13 +269,25 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } =
 
   const driver = createDriver(stage);
   driver.setRoute(pieces);
+  // A hold let go carries on from where it held the train, not from wherever the
+  // clock says it would have got to: `lag` is how far the drive runs behind the
+  // clock for that.
+  let heldAt = null;
+  let lag = 0;
   return {
     advance: (_, elapsed) => {
       const held = trainAt?.();
-      if (typeof held === 'number') return driver.atFraction(held);
+      if (typeof held === 'number') {
+        heldAt = held;
+        return driver.atFraction(held);
+      }
+      if (heldAt !== null) {
+        lag = elapsed - driver.secondsTo(heldAt);
+        heldAt = null;
+      }
       // Driven first and reported after: `onTrainAt?.(driver.at(…))` would skip
       // the drive altogether whenever nobody is listening.
-      const fraction = driver.at(elapsed);
+      const fraction = driver.at(elapsed - lag);
       onTrainAt?.(fraction);
     },
     // The train is the one thing here the stage does not own, so it is the one

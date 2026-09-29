@@ -64,6 +64,9 @@ export function createDriver(stage) {
     return d / lap;
   }
 
+  /** How many seconds of driving it takes to get `fraction` of the way round. */
+  const secondsTo = fraction => (fraction * lap) / SPEED;
+
   /**
    * Put the train `fraction` of the way round the lap. 1 is a whole lap, which on
    * a closed loop is exactly where 0 is.
@@ -108,5 +111,5 @@ export function createDriver(stage) {
     lap = 0;
   }
 
-  return { setRoute, at, atFraction, dispose, driving: () => lap > 0 };
+  return { setRoute, at, atFraction, secondsTo, dispose, driving: () => lap > 0 };
 }

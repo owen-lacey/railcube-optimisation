@@ -1,5 +1,6 @@
 <script>
   import TrackViewer from './TrackViewer.svelte';
+  import PlayPause from './PlayPause.svelte';
   import { AXIS_GAP } from '$lib/render/dimensions.js';
   import { openScene, frame, extentOf, frameTight } from '$lib/scenes.js';
 
@@ -27,8 +28,11 @@
     // Draw the origin's axis arrows, so the caption's x, y, z have a direction each.
     origin = false,
     // A slider for where the train is round the lap, left the start and right a
-    // whole lap on. It follows the train until it is dragged, and then holds it.
+    // whole lap on, and a play/pause beside it. It follows the train until it is
+    // dragged or paused, and then holds it until played.
     scrub = false,
+    // Hold the train where it is, and anything else moving.
+    paused = false,
   } = $props();
 
   // How far round the lap the train is, 0 to 1, and whether the slider has it.
@@ -84,6 +88,7 @@
     grid={grid ? result.box : null}
     {aspect}
     {interactive}
+    {paused}
     label="The layout {letters}"
     origin={origin ? result.box : null}
     onTrainCell={cell => (trainCell = cell)}
@@ -91,16 +96,19 @@
     onTrainAt={scrub ? f => { if (!held) lap = f; } : undefined}
   />
   {#if scrub && drive && result.closed && !sequence}
-    <input
-      class="scrub"
-      type="range"
-      min="0"
-      max="1"
-      step="any"
-      bind:value={lap}
-      oninput={() => (held = true)}
-      aria-label="Where the train is round the lap"
-    />
+    <div class="scrubber">
+      <PlayPause bind:playing={() => !held, playing => (held = !playing)} label="the train" />
+      <input
+        class="scrub"
+        type="range"
+        min="0"
+        max="1"
+        step="any"
+        bind:value={lap}
+        oninput={() => (held = true)}
+        aria-label="Where the train is round the lap"
+      />
+    </div>
   {/if}
   {#if trainCaption && drive && result.closed}
     <p class="caption">
@@ -137,9 +145,15 @@
     color: var(--grid-color);
   }
 
+  .scrubber {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  /* The play/pause's outline colour, so the two read as one control. */
   .scrub {
-    display: block;
-    width: 100%;
-    accent-color: var(--grid-color);
+    flex: 1;
+    accent-color: currentColor;
   }
 </style>
