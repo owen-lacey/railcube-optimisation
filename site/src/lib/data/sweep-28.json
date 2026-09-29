@@ -1,25 +1,22 @@
 {
-  "source": "sweep-28.jsonl",
-  "generatedBy": "scripts/extract-sweep.js",
+  "name": "sweep-28",
+  "generatedBy": "scripts/merge-sweeps.js",
   "question": {
     "inventory": {
       "straight": 8,
+      "cross": 0,
       "leftCurve": 4,
       "rightCurve": 4,
       "insideCurve": 8,
       "outsideCurve": 4
     },
+    "steps": 28,
     "box": 6,
     "minY": 0,
-    "exclude": [
-      "cross"
-    ],
     "startPose": "UF"
   },
   "cubes": 28,
   "score": 48,
-  "records": 1096,
-  "solved": 1043,
   "distinct": 1042,
   "mirrors": 0,
   "shapes": [

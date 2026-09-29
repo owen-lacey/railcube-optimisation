@@ -1,8 +1,17 @@
 /**
  * A long list of distinct crossed-cross layouts, recorded as JSON Lines.
  *
- *   node scripts/sweep-crossings.js --out sweep-crossed.jsonl
+ *   node scripts/sweep-crossings.js --min-loop 10 --max 200
  *   node scripts/sweep-crossings.js --out sweep-crossed.jsonl --max 500
+ *
+ * Run as a ladder: one process per `--min-loop`, concurrently, each to its own
+ * file (the default `--out` is named after it). A crossing splits the route into
+ * two loops, and left free the solver closes nearly every one the smallest way it
+ * is allowed — banning six just moved the pile-up to eight. So each rung asks for
+ * the smaller loop to be at least k, and the pile-up lands on k instead of on
+ * whatever is smallest. It is "at least", not "exactly": a rung may return larger
+ * loops too, so two rungs' files can share shapes. Split `--workers` across the
+ * rungs by hand; see the note on oversubscription below.
  *
  * Why this exists rather than `explore.py --random`: the Python explorer has no
  * crossing encoding at all, and this inventory *requires* a crossing. With 14
@@ -32,7 +41,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 
 import { chainTrack } from '../src/track.js';
 import { solveTrack } from '../src/solver/index.js';
-import { routeOf, shapeOf } from '../src/layouts.js';
+import { loopsOf, routeOf, shapeOf } from '../src/layouts.js';
 
 /** Extents of the material, the same three numbers check-route.js reports. */
 const spanOf = placed => {
@@ -61,7 +70,10 @@ const arg = (name, fallback) => {
   return i === -1 ? fallback : process.argv[i + 1];
 };
 
-const out = arg('out', 'sweep-crossed.jsonl');
+// The smaller of a crossing's two loops must be at least this many steps. Unset,
+// nothing is bounded and the six-step figure eight XSLLLSX is almost all you get.
+const minLoop = process.argv.includes('--min-loop') ? Number(arg('min-loop')) : null;
+const out = arg('out', `sweep-crossed-${minLoop === null ? 'free' : `min${minLoop}`}.jsonl`);
 const max = Number(arg('max', 0)) || Infinity;
 const perSolve = Number(arg('time', 180));
 // 6 rather than the default 8: this runs alongside another sweep on a 14-core
@@ -72,16 +84,11 @@ const workers = Number(arg('workers', 6));
 // four each. It halves the search by fixing which handedness appears first; the
 // mirror pass puts the other half back without solving for it.
 const symmetry = !process.argv.includes('--no-symmetry');
-// Whether a crossing may be the tightest one there is — six steps out and back,
-// which spells XSLLLSX. Allowed, it is almost all you get: 32 of the first 38
-// layouts swept were that single motif. There is no width to choose here, only
-// whether the tightest is in or out.
-const tight = !process.argv.includes('--no-tight');
 
 // A sweep file holds one question. The fingerprint goes on every line so a file
 // of two inventories — a file of incomparable layouts — is caught on sight.
 const config = { inventory: INVENTORY, steps: STEPS, box: BOX, minY: 0,
-                 startPose: 'DF', tightCrossings: tight };
+                 startPose: 'DF', minLoopLength: minLoop };
 const fingerprint = JSON.stringify(config);
 
 const already = existsSync(out)
@@ -97,7 +104,7 @@ if (already.length) console.log(`${out} holds ${already.length} layout(s); appen
 
 console.log(`${CUBES} cubes over ${STEPS} steps  box ${BOX}  ${perSolve}s a solve`
   + `  ${workers} workers  max ${max === Infinity ? 'unbounded' : max}`
-  + `  ${tight ? 'tight crossings allowed' : 'no tight crossings'}`);
+  + `  ${minLoop === null ? 'loops unbounded' : `smaller loop >= ${minLoop}`}`);
 
 const shapes = new Set(already.map(r => r.shape));
 const started = Date.now();
@@ -153,28 +160,38 @@ const record = s => {
 // So round one starts from a layout already known to be legal. Hints are advisory
 // and cannot change what is feasible; and `allSolutions` calls `model.clearHints()`
 // after the first cut, since from then on the hint points at a forbidden solution.
-// Two witnesses, because a hint has to satisfy the constraints or it is worse
-// than none. The first is the tight figure eight itself, so it is not a legal
-// starting point once tight crossings are off. The second came out of the
-// unconstrained sweep with its passes twelve steps apart. Both open on a left
-// curve after mirroring, which is what the symmetry break requires.
-const WITNESS = {
-  tight: 'RIISROLXSLLLSXSRIOSISIRSISSSOOSIISSS',   // gap 6
-  wide: 'RLRXSLIOOLLOOISXIRIISSSISSSSISSSSSRI',    // gap 12
-};
-const HINT = arg('hint', tight ? WITNESS.tight : WITNESS.wide);
+// Witnesses by the smaller of their two loops, because a hint has to satisfy the
+// constraints or it is worse than none. The first came out of an earlier sweep
+// with its passes twelve steps apart; the second is the tight figure eight
+// itself. A rung above twelve has no witness and runs unhinted.
+const WITNESSES = [
+  'RLRXSLIOOLLOOISXIRIISSSISSSSISSSSSRI',    // smaller loop 12
+  'RIISROLXSLLLSXSRIOSISIRSISSSOOSIISSS',    // smaller loop 6
+];
+
+/** The smaller of the two loops a crossing makes, off the chained route. */
+const smallerLoop = shape => loopsOf(chainTrack(routeOf(shape)))[0];
+const allows = shape => minLoop === null || smallerLoop(shape) >= minLoop;
+
+// The symmetry break allows a right curve only after a left one, so a hint that
+// meets a right curve first is asked for as its mirror: an equally good track,
+// and the handedness the model has not forbidden.
+const handed = shape => (symmetry && shape.indexOf('R') < shape.indexOf('L') ? mirrorOf(shape) : shape);
+
+const given = arg('hint', null);
+if (given !== null && !allows(given)) {
+  console.error(`--hint has a loop of ${smallerLoop(given)}, below --min-loop ${minLoop}`);
+  process.exit(1);
+}
+const HINT = given ?? WITNESSES.find(allows) ?? null;
 
 try {
   const result = await solveTrack({
     steps: STEPS, box: BOX, minY: 0, inventory: INVENTORY,
     crossings: true, minCrossings: 1, fill: true,
-    tightCrossings: tight,
+    minLoopLength: minLoop,
     symmetryBreaking: symmetry,
-    // The symmetry break allows a right curve only after a left one, so the
-    // known layout — which opens on a right curve — is not a legal hint under it.
-    // Its mirror is, and describes an equally good track. Hinting the wrong
-    // handedness would be a hint at something the model has just forbidden.
-    hint: routeOf(symmetry ? mirrorOf(HINT) : HINT),
+    hint: HINT === null ? undefined : routeOf(handed(HINT)),
     allSolutions: true,
     maxSolutions: max === Infinity ? undefined : max,
     maxTimeInSeconds: perSolve,

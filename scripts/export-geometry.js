@@ -10,12 +10,28 @@
 // `poses`/`pieceTypes`, and `transitions` keeps transitionTable()'s pose-major,
 // type-minor nesting. `cells[kind][poseIndex][typeIndex]` is the list of cell
 // offsets a piece claims, relative to its head (the train's cell), from cellsFor.
-// `startCells[poseIndex]` is where the train starts in that pose, from startCell:
-// the start cube is the origin, so the train is one cell off it.
+//
+// `rotations[poseIndex]` is where that pose sends right, up and forwards — the
+// three columns of its rotation, from poseLetters — for anything that composes or
+// inverts motions rather than only stepping them (scripts/meet.py).
+// `crossRevisits` is the poses whose pass over a cross placed in DF is its second
+// rail, as isRevisit decides it. `startCells[poseIndex]` is where the train
+// starts in that pose, from startCell: the start cube is the origin, so the
+// train is one cell off it.
 
-import { POSES, PIECE_TYPES, SCORES, SET, cellsFor, startCell } from '../src/track.js';
+import {
+  POSES, PIECE_TYPES, PROJ, SCORES, SET, cellsFor, cubeOf, isRevisit, poseLetters, startCell,
+} from '../src/track.js';
 import { transitionTable } from '../src/solver/transitions.js';
 import { shapeOf } from '../src/layouts.js';
+
+const rotation = pose => {
+  const map = poseLetters(pose);
+  return [PROJ[map.R], PROJ[map.U], PROJ[map.F]];
+};
+
+// A cross entered at DF from the head at the origin: its cube is the one below.
+const crossInDF = new Map([[cubeOf([0, 0, 0], 'DF').join(','), { type: 'cross', pose: 'DF' }]]);
 
 const cells = kind => POSES.map(pose =>
   PIECE_TYPES.map(type => cellsFor(type, pose, [0, 0, 0])[kind]));
@@ -28,5 +44,7 @@ console.log(JSON.stringify({
   set: SET,
   transitions: transitionTable(),
   cells: { material: cells('material'), train: cells('train') },
+  rotations: POSES.map(rotation),
   startCells: POSES.map(startCell),
+  crossRevisits: POSES.flatMap((pose, i) => (isRevisit('cross', [0, 0, 0], pose, crossInDF) ? [i] : [])),
 }));

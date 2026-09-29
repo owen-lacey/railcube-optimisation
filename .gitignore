@@ -6,8 +6,10 @@ site/.svelte-kit/
 *storybook.log
 
 # Sweep output. A log is the record of a *run* — one line per round, growing on
-# every resume — and the artefact is what gets extracted out of it, not the log:
-# see scripts/extract-sweep.js and site/src/lib/data/.
+# every resume — and the artefact is what gets merged out of it, not the log:
+# see scripts/merge-sweeps.js. The database it merges into is rebuilt from the
+# logs, so it is local too; the glob takes its WAL sidecars with it.
 sweep-*.jsonl
 sweep-*.log
+sweeps.db*
 __pycache__/

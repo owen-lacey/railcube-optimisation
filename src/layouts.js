@@ -12,7 +12,7 @@
 // Shapes are the letters used throughout: S straight, L left curve, R right
 // curve, I inside curve, O outside curve, X cross.
 
-import { PIECE_TYPES } from './track.js';
+import { chainTrack, cubeOf, PIECE_TYPES, PROJ } from './track.js';
 
 const LETTER_OF = {
   straight: 'S', leftCurve: 'L', rightCurve: 'R',
@@ -53,6 +53,83 @@ export function identify(placed) {
     seen[type] = (seen[type] ?? 0) + 1;
     return `${seen[type]}${LETTER_OF[type]}`;
   });
+}
+
+/**
+ * The 24 rotations of a cube, as signed permutation matrices with determinant +1.
+ * Generated rather than listed: all 48 signed permutations, keeping the proper
+ * ones. The improper half are reflections, which is why a mirror is not a
+ * rotation and keeps a key of its own.
+ */
+const ROTATIONS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]
+  .flatMap(perm => [1, -1].flatMap(a => [1, -1].flatMap(b => [1, -1].map(c => ({ perm, sign: [a, b, c] })))))
+  .filter(({ perm, sign }) => {
+    const parity = perm[0] > perm[1] ? 1 : 0;
+    const swaps = parity + (perm[0] > perm[2] ? 1 : 0) + (perm[1] > perm[2] ? 1 : 0);
+    return (swaps % 2 === 0 ? 1 : -1) * sign[0] * sign[1] * sign[2] === 1;
+  });
+
+/**
+ * The same physical track, whatever route describes it.
+ *
+ * A shape string is one way of reading a track: entering the loop at a
+ * different piece, or driving it the other way, reads the same pieces as a
+ * different string. So two layouts are the same track when their placed pieces
+ * coincide up to a rotation and a shift in space — which is what this compares,
+ * off the chained geometry rather than any algebra on the letters. Material
+ * cells say where a piece is, train cells which face its rail is on, and the
+ * heading which way it points — the cubes click male-to-female along the
+ * direction of travel, so a piece's direction is part of the build.
+ *
+ * That last part is why driving a track backwards is *not* another reading of
+ * it. Reversed, every piece would be entered through its male end, and a left
+ * curve entered backwards turns right — no route over the same mouldings says
+ * that. Measured: no L/R or I/O relabelling of a reversed string reproduces
+ * the 18-cube set's key. Only the start piece is free, so the duplicates this
+ * catches are cyclic shifts, found wherever they were rotated to in space.
+ *
+ * The key is the smallest serialisation over the 24 rotations, each translated
+ * so its lowest corner sits at the origin.
+ */
+export function trackKey(shape) {
+  // A crossed cross is one cube driven over twice, and which pass comes first
+  // depends on where the route starts — so its headings are both passes, unordered.
+  const byCube = new Map();
+  for (const p of chainTrack(routeOf(shape))) {
+    const at = cubeOf(p.cell, p.pose).join(',');
+    if (!byCube.has(at)) byCube.set(at, { ...p, headings: [] });
+    byCube.get(at).headings.push(PROJ[p.pose[1]]);
+  }
+  const pieces = [...byCube.values()];
+  const cells = pieces.flatMap(p => [...p.material, ...p.train]);
+
+  let best = null;
+  for (const { perm, sign } of ROTATIONS) {
+    const turn = c => [sign[0] * c[perm[0]], sign[1] * c[perm[1]], sign[2] * c[perm[2]]];
+    const low = [Infinity, Infinity, Infinity];
+    for (const c of cells) turn(c).forEach((v, a) => { low[a] = Math.min(low[a], v); });
+    // Spans stay well under 64 cells, so a cell packs into one sortable number.
+    const pack = c => { const t = turn(c); return ((t[0] - low[0]) * 64 + t[1] - low[1]) * 64 + t[2] - low[2]; };
+    const aim = h => turn(h).join('');
+    const key = pieces
+      .map(p => `${LETTER_OF[p.type]}${p.material.map(pack).sort((a, b) => a - b)}`
+        + `|${p.train.map(pack).sort((a, b) => a - b)}>${p.headings.map(aim).sort()}`)
+      .sort().join(' ');
+    if (best === null || key < best) best = key;
+  }
+  return best;
+}
+
+/**
+ * The two loops a crossing splits a route into, smaller first, in steps — or
+ * null when nothing is crossed. The cross's two passes cut the route in two, and
+ * the loops always sum to its length, so only the split says anything.
+ */
+export function loopsOf(placed) {
+  const at = placed.flatMap((piece, i) => (piece.type === 'cross' ? [i] : []));
+  if (at.length !== 2) return null;
+  const gap = at[1] - at[0];
+  return [Math.min(gap, placed.length - gap), Math.max(gap, placed.length - gap)];
 }
 
 if (Object.keys(LETTER_OF).length !== PIECE_TYPES.length) {

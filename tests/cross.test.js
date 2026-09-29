@@ -339,13 +339,13 @@ test('the two counts differ exactly on crossings', () => {
   assert.equal(countPieces(placed).cross, 1, 'but there is one cube on the table');
 });
 
-// ---- Whether a crossing may be the tightest one --------------------------
+// ---- How small a crossing's loop may be ----------------------------------
 
 // Left to itself the solver closes almost every crossing the tightest way there
 // is: the two passes six steps apart, which spells XSLLLSX — the figure eight at
 // the top of this file. Legal, and dull in bulk: 32 of the first 38 layouts of a
-// 35-cube sweep were that one motif. `tightCrossings: false` says "not that one",
-// and this pins that it removes those loops rather than inventing others.
+// 35-cube sweep were that one motif. `minLoopLength: 8` says "not that one", and
+// this pins that it removes those loops rather than inventing others.
 //
 // Measured off the chained route rather than off `firstAt`/`secondAt`, because a
 // constraint that silently fails to bind is the failure mode this whole file
@@ -372,13 +372,13 @@ test('six is the tightest a crossing can be', () => {
   assert.deepEqual([...gaps].sort((a, b) => a - b), [6]);
 });
 
-test('tightCrossings off keeps every loop except the tightest', async () => {
+test('minLoopLength 8 keeps every loop except the tightest', async () => {
   const every = extra => solveTrack({
     steps: 12, box: 4, minY: 0, inventory: CROSSING_SET, crossings: true,
     allSolutions: true, ...extra,
   });
   const loose = (await every({})).routes;
-  const wide = (await every({ tightCrossings: false })).routes;
+  const wide = (await every({ minLoopLength: 8 })).routes;
   const gaps = routes => routes.map(route => crossingGap(chainTrack(route)));
 
   assert.ok(gaps(loose).includes(6), 'unconstrained, the tight figure eight is reachable');
@@ -398,13 +398,13 @@ test('tightCrossings off keeps every loop except the tightest', async () => {
 // across the start, where the gap in route order reads eight.
 const WRAP_SET = { straight: 6, leftCurve: 3, rightCurve: 3, insideCurve: 0, outsideCurve: 0, cross: 1 };
 
-test('tightCrossings off catches a tight lobe across the start', async () => {
+test('minLoopLength 8 catches a tight lobe across the start', async () => {
   const every = extra => solveTrack({
     steps: 14, box: 4, minY: 0, inventory: WRAP_SET, crossings: true, fill: true,
     allSolutions: true, ...extra,
   });
   const loose = (await every({})).routes.map(route => chainTrack(route));
-  const wide = (await every({ tightCrossings: false })).routes.map(route => chainTrack(route));
+  const wide = (await every({ minLoopLength: 8 })).routes.map(route => chainTrack(route));
   const inOrder = placed => {
     const at = placed.flatMap((piece, i) => (piece.type === 'cross' ? [i] : []));
     return at[1] - at[0];

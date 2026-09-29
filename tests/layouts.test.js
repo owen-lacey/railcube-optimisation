@@ -12,8 +12,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LAYOUTS, routeOf, shapeOf, identify } from '../src/layouts.js';
-import { chainTrack, countPieces, POOLS, POOL_OF } from '../src/track.js';
+import { LAYOUTS, routeOf, shapeOf, identify, trackKey } from '../src/layouts.js';
+import { chainOpen, chainTrack, countPieces, POOLS, POOL_OF } from '../src/track.js';
 
 const entries = Object.entries(LAYOUTS);
 
@@ -86,5 +86,50 @@ for (const [name, layout] of entries) {
 test('every layout says whether it was proved optimal', () => {
   for (const [name, layout] of entries) {
     assert.equal(typeof layout.proved, 'boolean', `${name} does not say`);
+  }
+});
+
+// `trackKey` says when two shape strings are one physical track. What it has to
+// get right, in both directions: every reading of a loop agrees, and nothing that
+// is a different build does.
+const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
+
+test('a track is the same track entered at any piece', () => {
+  // A shift of the route starts the same loop at another cube, which lands the
+  // whole track somewhere else in space and turned — the key must not notice.
+  for (const [name, { shape }] of entries) {
+    const key = trackKey(shape);
+    for (let i = 1; i < shape.length; i += 1) {
+      assert.equal(trackKey(shape.slice(i) + shape.slice(0, i)), key, `${name} shifted by ${i}`);
+    }
+  }
+});
+
+test('different layouts are different tracks', () => {
+  const keys = entries.map(([, { shape }]) => trackKey(shape));
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+test('a mirror is a different track, unless the track is its own mirror', () => {
+  // A reflection is not a rotation, so it keeps a key of its own — except for a
+  // track that is symmetric under reflection, where the mirror *is* the track
+  // turned round. The figure eight is one; the rest are not.
+  for (const [name, { shape }] of entries) {
+    const same = trackKey(mirrorOf(shape)) === trackKey(shape);
+    assert.equal(same, name === 'eight', `${name}'s mirror`);
+  }
+});
+
+test('driving a track backwards is not a way of reading it', () => {
+  // Reversed, every piece is entered through its male end. No relabelling of the
+  // letters reproduces the same build, so the key keeps a piece's heading and a
+  // reversal is not a duplicate of anything.
+  const { shape } = LAYOUTS.set;
+  const reversed = [...shape].reverse().join('');
+  for (const swap of [{}, { L: 'R', R: 'L' }, { I: 'O', O: 'I' }, { L: 'R', R: 'L', I: 'O', O: 'I' }]) {
+    const relabelled = [...reversed].map(l => swap[l] ?? l).join('');
+    const { closed, faults } = chainOpen(routeOf(relabelled));
+    if (!closed || faults.length) continue;   // not a legal track, so not this one
+    assert.notEqual(trackKey(relabelled), trackKey(shape), `reversed with ${JSON.stringify(swap)}`);
   }
 });

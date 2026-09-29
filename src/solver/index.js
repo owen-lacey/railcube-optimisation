@@ -100,7 +100,10 @@ const scoreOf = placed => placed.reduce(
  *
  * It halves the search without touching the optimal value. It does not break
  * rotation (the same cyclic loop read from a different starting piece), which is
- * the larger symmetry and a harder one to state.
+ * the larger symmetry and a harder one to state. Smaller than it looks, though:
+ * the start is face-up with nothing below it, so only pieces at the bottom of a
+ * track can open it — 8.9 of 36 on average over the swept 35-cube tracks.
+ * Pinning the cross as the start was tried and removed; CLAUDE.md has why.
  */
 function breakMirrorSymmetry(model, rows, selectors) {
   const ofType = (vars, name) =>
@@ -146,19 +149,9 @@ const AXIS_OF = { L: 0, R: 0, U: 1, D: 1, F: 2, B: 2 };
  * three), that a placement is never itself a revisit, and that a step is not both
  * passes over itself.
  */
-/**
- * The fewest steps a crossing can span: out of the cross and back through it on
- * the other rail. Not a tuned threshold — it is the tightest crossing there is.
- * The gap is always even, because the head returns to the cell it left and every
- * piece moves it an odd number of cells, and enumerating every crossing loop the
- * DFS oracle can build turns up 6 and nothing narrower. Spelled out, it is
- * XSLLLSX: the figure eight of tests/cross.test.js.
- */
-const TIGHT_CROSSING = 6;
-
 function addCrossings({
   model, rows, selectors, x, y, z, active, reach, crosses, minCrossings,
-  tightCrossings,
+  minLoopLength,
 }) {
   const steps = selectors.length;
   // Two steps to a crossing, and never more crossings than crosses in the box.
@@ -206,21 +199,20 @@ function addCrossings({
 
     // Of two passes over one cube the earlier is the placement, by definition.
     model.add(at[0].lt(at[1])).onlyEnforceIf(on);
-    // Shape rather than legality: a tight crossing is perfectly legal, and left
-    // to itself the solver closes almost every one that way — 32 of the first 38
-    // layouts of a 35-cube sweep were the same figure eight. Switching them off
-    // says only "not the tightest one", which is why there is no width to choose
-    // here: anything wider is whatever the route happens to do.
+    // Shape rather than legality: a small loop is perfectly legal, and left to
+    // itself the solver closes almost every crossing the smallest way it is
+    // allowed — 32 of the first 38 layouts of a 35-cube sweep were the same
+    // six-step figure eight, and banning that moved the pile-up to eight.
     //
-    // A crossing splits the loop into two lobes, and both are bounded. The gap
-    // in route order is only one of them; the other runs from the second pass
-    // round through the start to the first, so a route that starts inside the
-    // tight lobe reads as a gap of length − 6 and slipped through when only the
-    // first was checked — twelve layouts of that same sweep did.
-    if (!tightCrossings) {
+    // A crossing splits the loop into two, and both are bounded. The gap in
+    // route order is only one of them; the other runs from the second pass round
+    // through the start to the first, so a route that starts inside the small
+    // loop reads as a gap of length − 6 and slipped through when only the first
+    // was checked — twelve layouts of that same sweep did.
+    if (minLoopLength !== null) {
       const gap = at[1].minus(at[0]);
-      model.add(gap.gt(TIGHT_CROSSING)).onlyEnforceIf(on);
-      model.add(sum(active).minus(gap).gt(TIGHT_CROSSING)).onlyEnforceIf(on);
+      model.add(gap.ge(minLoopLength)).onlyEnforceIf(on);
+      model.add(sum(active).minus(gap).ge(minLoopLength)).onlyEnforceIf(on);
     }
     // The rails must actually cross. Said via `differ` because notEquals does not.
     differ(model, axis[0], axis[1], `crossAxis_${c}`);
@@ -406,7 +398,7 @@ function addClearance(model, material, train) {
  */
 function buildModel({
   steps, box, minY, exclude, startPose, collisions, checkTrain,
-  inventory, objective, symmetryBreaking, crossings, minCrossings, tightCrossings,
+  inventory, objective, symmetryBreaking, crossings, minCrossings, minLoopLength,
   require: forced, hint, fill,
 }) {
   const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
@@ -480,11 +472,16 @@ function buildModel({
       throw new Error(`minCrossings ${minCrossings} but the inventory holds ${crosses} cross(es)`);
     }
   }
+  // Without the encoding there is no crossing to bound, so the bound would be
+  // silently ignored — which reads as "no loop was that small" when none was asked.
+  if (minLoopLength !== null && !crossings) {
+    throw new Error('minLoopLength needs crossings: true — with the encoding off there is no crossing to bound');
+  }
 
   // Crossings first: whether a step is a revisit decides whether it claims.
   const revisit = crossings
     ? addCrossings({ model, rows, selectors, x, y, z, active, reach, crosses,
-                     minCrossings, tightCrossings })
+                     minCrossings, minLoopLength })
     : null;
 
   const g = grid(box);
@@ -579,14 +576,16 @@ const chosenRows = (result, selectors) =>
  *                says whether it arrived during the search or was replayed at the
  *                end — see cpsat-js, which can only enter JS from the search when
  *                there is one worker. Watch-only: the return value is ignored
- *   tightCrossings
- *                whether a crossing may close the tightest way it can, six steps
- *                out and back — the figure eight, XSLLLSX. On by default because
- *                it is legal track; turn it off when a sweep keeps returning the
- *                same motif, which it will. Not a width to tune: off means only
- *                "wider than the tightest", and how much wider is the route's
- *                business. Needs `crossings`
- *   fill         demand that every step is used, rather than leaving the length to
+ *   minLoopLength
+ *                the fewest steps either of the two loops a crossing makes may
+ *                have, or null for no bound. A crossing splits the route in two,
+ *                and this bounds the smaller. The tightest loop there is is six
+ *                steps out and back — the figure eight, XSLLLSX — so anything up
+ *                to 6 constrains nothing (loops are always even: the head returns
+ *                to the cell it left and every piece moves it an odd number of
+ *                cells). Left unbounded, a sweep piles up on the smallest loop it
+ *                is allowed, which is what this is for. Needs `crossings`
+ *   fill        demand that every step is used, rather than leaving the length to
  *                an objective. With crossings off that is "spend the whole
  *                inventory", so every solution is already as good as a loop can
  *                be — which is what makes enumeration worth watching, since a
@@ -616,7 +615,7 @@ export async function solveTrack({
   steps, box = 6, minY = null, exclude = [], startPose = 'DF',
   collisions = true, checkTrain = true, inventory,
   objective, symmetryBreaking = false, crossings = false, minCrossings,
-  tightCrossings = true, require, hint,
+  minLoopLength = null, require, hint,
   fill = false, enumerateAllSolutions = false,
   allSolutions = false, maxSolutions, maxTimeInSeconds, numWorkers, onSolution,
 }) {
@@ -630,11 +629,14 @@ export async function solveTrack({
   if (minY !== null && !Number.isInteger(minY)) {
     throw new Error(`minY must be an integer or null, got ${minY}`);
   }
+  if (minLoopLength !== null && !(Number.isInteger(minLoopLength) && minLoopLength >= 1)) {
+    throw new Error(`minLoopLength must be a positive integer or null, got ${minLoopLength}`);
+  }
 
   const solver = await getSolver();
   const { model, rows, selectors, active } = buildModel({
     steps, box, minY, exclude, startPose, collisions, checkTrain,
-    inventory, objective, symmetryBreaking, crossings, minCrossings, tightCrossings,
+    inventory, objective, symmetryBreaking, crossings, minCrossings, minLoopLength,
     require, hint, fill,
   });
   const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);
