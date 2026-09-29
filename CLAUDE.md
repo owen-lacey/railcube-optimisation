@@ -26,9 +26,11 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |
 
 `site/` is the SvelteKit app, plus the components it draws with, developed in Storybook
-(`.storybook/`, `npm run storybook`). Two routes: the front page is a solve viewer — pick one
-of the two swept configurations (`site/src/lib/sweeps.js`), shuffle for a random layout — and
-the draft blog post lives at `/post`, deliberately unlinked from it. On narrow screens the
+(`.storybook/`, `npm run storybook`). Two routes: the front page is a solve viewer — the
+28-cube sweep and a 1,000-layout sample of the crossed one (`site/src/lib/sweeps.js`),
+shuffle for a random layout — and the draft blog post lives at `/post`, deliberately
+unlinked from it. The crossed sweep itself outgrew a file the page imports whole and lives
+in `sweeps.db` (below); the site carries a uniform sample of it. On narrow screens the
 front page gets a taller 4/3 viewer but the same sequencing as desktop. Deployed to GitHub Pages
 by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath URL;
 `kit.paths.base` reads it and stays empty locally. The four
@@ -215,6 +217,154 @@ long runs do re-discover layouts (the round line marks each `new` or `seen`). Fe
 recorded shapes back as no-good cuts would make a long sweep strictly productive, and is
 follow-up work rather than something this does.
 
+### The crossed sweep is a ladder: `scripts/sweep-crossings.js --min-loop k`
+
+A crossing splits a route into two loops, and `minLoopLength` bounds the smaller (null = no
+bound; 6, the figure eight `XSLLLSX`, is the tightest there is, so anything ≤ 6 is a no-op).
+Left free, the solver closes nearly every crossing the smallest way it is allowed: 32 of the
+first 38 unconstrained layouts were the 6, and with 6 banned the pile-up moved to 8
+(`SIRIRIS`/`SILILIS` were 548 of 1,306). Banning a size only moves the pile-up one rung, so
+the sweep runs as a **ladder** — one concurrent process per `--min-loop k`, each to its own
+`sweep-crossed-min{k}.jsonl`, with `--workers` split across them by hand.
+
+- **A rung is "at least k", not "exactly k"** — Owen's call, over a `maxLoopLength` that
+  would need a reified OR. Rungs can share shapes and a rung's file is not guaranteed pure.
+- **Why not an objective**: a rung is a satisfiability solve, fast, with its no-good cuts
+  kept to itself. And a linear penalty on both loop lengths is inert — they always sum to the
+  route length; only `min(d, L − d)` or a threshold says anything.
+- **The hint must satisfy the rung** or it is worse than none: the script picks a witness
+  whose smaller loop is ≥ k, runs unhinted above 12, and refuses a `--hint` below k.
+- The ladder controls loop *size*, not *shape*; rung 8 may still be mostly the two 8-motifs.
+
+**Breaking the cyclic-shift symmetry by starting at the cross was built, measured and removed**
+— Owen's call, not worth it. Pinning the cross's first pass to step 0 (`at[0] = 0`) leaves each
+track two entries, one per pass. Measured over the 8,372 swept tracks, and worth knowing before
+trying anything like it again:
+
+- **The floor had already broken most of that symmetry.** The start piece is face-up with
+  nothing below it, so a track averages **8.9** valid entries, not 36. That caps the gain.
+- **Only 39% of tracks can be entered at their cross.** The cross must sit face-up on the floor
+  and within the box measured from it, so a sweep pinned there can never find the other 61%. Small
+  oracle instances never show this, because every crossing they make is on the floor.
+- **It bought about 1.3×.** That was on rung min10, alone on a quiet machine at 6 workers, with the
+  arms alternating over 3 runs of 20 solved layouts each. The median gap was 40.8 s pinned vs 54.4 s
+  unpinned, time to 20 was 723–1,258 s vs 948–1,746 s, and the ranges overlap.
+
+One side result: one rung alone ran at ~54 s a layout, against 168–218 s with the full ladder
+running, but seven concurrent rungs still produced more layouts per hour in total.
+
+### Crossed layouts without a solver: `scripts/meet.py`
+
+`uv run scripts/meet.py --set '<inventory>' --box 8 --rounds 0 --out sweep-crossed-meet.jsonl`
+is a meet-in-the-middle generator for the crossed question, and it outruns the ladder by orders
+of magnitude. Seed 3 at 20k halves does a lobe-17 round in 2.8 s on one core — **690 verified
+layouts in 10 s** — against 62–218 s per layout from `sweep-crossings.js`. Four workers
+(separate `--out` files, one core each) sustain ~86 layouts/s together — which is what pushed
+the crossed sweep out of a JSON file the front page imported whole and into `sweeps.db`. The
+design choices are Owen's:
+
+- **The route is read from the cross, `X · A · X · B`.** Both lobes run from the cross back to
+  it, so each is a path between two fixed states and is itself a half-and-half join: four
+  quarters. That makes the return to the X hold by construction rather than by luck, and it keeps
+  crosses out of every half, so counts are cubes throughout. Reading from the other pass swaps
+  the lobes and turns UL into UR, so drawing A no longer than B with both headings misses nothing.
+- **Halves are grown forwards from UF and inverted**, so they are frame-free: one pool per
+  half-length serves both lobes and both ends. The price is that a half cannot see the cross or
+  the box while it grows, only its own claims and a span cap. Those are checked at the join.
+- **Built in the cross's frame, then re-anchored.** The start piece is picked afterwards, by
+  trying each piece until one reading puts it at UF with the floor and box satisfied. Pinning the
+  cross as the start is the 39% narrowing above; this reaches every track.
+- **Lobe lengths are sampled per round**, and `--min-loop k` bounds the shorter from below.
+
+It is Python on the explore.py terms. Geometry is `export-geometry.js` on every run, which now
+also exports `rotations` (from `poseLetters`) and `crossRevisits` (from `isRevisit`), and the
+rotations must reproduce every transition row and cell entry before anything is built. Every
+output goes through `check-route.js --stdin`, one node process for the whole run, and a
+disagreement exits nonzero. Spawning one per shape cost ~0.17 s, which was most of the wall time
+and a 12× slowdown. The collision rule is a port, of the `createClaims` verdict only.
+
+`tests/meet.test.js` runs `--exhaustive` against `enumerateLoops` by `trackKey`, and it is the
+first test that needs `uv`. `--exhaustive` emits no mirrors, so the oracle sees both headings
+found on their own. What it does and does not catch was measured with mutants:
+
+- **Dropping a heading** is caught in the fast tier.
+- **Refusing to re-anchor** (the cross must start) is caught only by the 16-step slow test.
+- **Treating shared train cells as a clash** is caught by nothing: no oracle-sized track shares a
+  train cell across a join. That port is right by reading, not by test.
+- A **false accept** of any kind is `check-route.js`'s job, not the oracle's.
+
+One thing seen in the output, not yet acted on: **yield piles up on long lobes.** Rounds with A
+of 15–17 give ~250 layouts each, A ≤ 9 gives almost none, and A ≤ 3 cannot close at all. So the
+low ladder rungs are not served by uniform draws, and about half of a run's rounds are spent on
+lengths that yield little.
+
+### Sweep logs are a staging area: `scripts/merge-sweeps.js` → `sweeps.db`
+
+The gitignored `sweep-*.jsonl` logs are where solves land; `sweeps.db` at the repo root is what
+they add up to — SQLite via better-sqlite3, **gitignored too**, and since merging drains the logs
+it is **the only copy** of every layout it holds: it cannot be rebuilt, so back it up. Two
+tables: `questions` (the `questionOf` JSON, cubes, score) and `layouts`, one row per physical
+track with a column for everything the geometry decides — spans across/up/along, volume,
+revisits, `mirrored`, `loop_small`/`loop_large` (the two loops a crossing makes, so a ladder
+rung is a `WHERE`), and provenance (`source_log`, `merged_at`). WAL mode, so it can be queried
+from `sqlite3` while a watch writes. `site/src/lib/data/sweep-28.json` is frozen: nothing writes it
+any more. `site/src/lib/data/sweep-crossed.json` is `scripts/sample-sweep.js --question 1
+--count 1000 --seed 1`: a uniform draw of rows, each re-derived and its stored columns
+compared before it is written. Uniform means skewed the way the database is — the first
+sample held one layout at rung 8 and none at 6 — and since a watch keeps adding rows, the
+same seed only reproduces the file against the same database.
+
+`merge-sweeps.js` moves layouts from logs to the database: each record goes under the
+**question** it answers (`questionOf` in `scripts/sweep-data.js`: inventory, steps, box, minY,
+startPose — `minLoopLength`/`tightCrossings`/`exclude` are search knobs, so every rung merges
+under one question), is re-verified through `chainTrack`, and is inserted only if the database
+does not already hold it *as a physical track*. `--watch .` re-runs the pass whenever a
+`sweep-crossed-*.jsonl` changes (run it in tmux beside the ladder); `--new-question` admits a
+question the database lacks. Every duplicate is also appended, once per shape, to the gitignored
+`sweep-duplicates.jsonl` — the tmux pane's scrollback will not last an overnight sweep.
+
+**Every pass drains what it merges.** It claims a log by renaming it to `<log>.claimed` — every
+sweep opens its log afresh for each append, so the next one starts a new file — waits a second
+for an append in flight, merges the claim in one transaction, and deletes it only once that
+commits. A record the geometry disagrees with, or a claim cut off part-way through a record,
+stops the pass and keeps nothing from it; the claim stays on disk and is merged first next time,
+before its live log is claimed again. A record for a question the database lacks is set aside in
+`sweep-unmatched.jsonl` beside its log, which `--new-question` admits (and drains). Logs are read
+a 16 MB chunk at a time, because a meet log outgrows the longest string V8 will make (~512 MB) —
+that is what crashed the watch at 591 MB. Two things draining costs:
+
+- **A shapeless record is gone once merged.** Misses carry no layout, so nothing keeps them —
+  and `explore.py --resume` replays its seed stream from exactly those records. Merging an
+  explore log ends its resumability.
+- **A restarted sweep forgets what it found.** `meet.py` and `sweep-crossings.js` seed their
+  dedupe from their own log at startup, so after a drain they re-find layouts the database
+  already holds. Harmless — they merge as known — but it is wasted search.
+
+**A gitignored database cannot be under `npm test`**, and a test that skipped when the file was
+absent would be a silent skip. So the crossed sweep's checks — every row re-chained, every column
+and track hash re-derived, box and floor, one crossing each, mirrors paired — are
+`merge-sweeps.js --check`, which exits nonzero on any fault. It pays a key per row, so it is
+minutes, and on demand. `tests/merge-sweeps.test.js` covers the code against throwaway
+databases, audit included.
+
+**`trackKey(shape)` in `src/layouts.js` is what "the same track" means.** The placed pieces —
+type, material cells, train cells and heading — up to the 24 rotations and a translation, so a
+route entered at a different piece (a cyclic shift) is caught wherever it lands in space. Two
+things measured rather than assumed:
+
+- **Driving a track backwards is not another reading of it.** Every piece would be entered
+  through its male end; no L/R or I/O relabelling of a reversed string reproduces the build.
+  That is why the heading is in the key.
+- **A mirror is usually a different track, not always.** `eight` is achiral — its mirror is
+  itself turned round — so a sweep's mirror pass on such a layout would be refused as a
+  duplicate and break the mirror pairing that `merge-sweeps.js --check` audits. No swept layout is
+  achiral yet; if one turns up, that is a decision for Owen, not something to paper over.
+
+A crossed cross keys on *both* its passes' headings, because which pass comes first depends on
+where the route starts. Keying costs ~3–7 ms a shape — which is why the database stores the key
+hashed (`track_hash`, sha256, UNIQUE per question) rather than a merge re-keying every row it
+holds, and why an exact-string match is checked first and pays nothing.
+
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 
 `IntVar.notEquals` builds a constraint that is silently a no-op — two variables pinned to the same value still solve. `src/solver/index.js` uses a `differ` helper (a reified pair of strict inequalities) instead. `tests/library.test.js` asserts the bug still exists, so fixing the port will fail that test and point at the workaround to delete. `addAllDifferent` and `onlyEnforceIf` are fine, as are `addHint` and `onSolution`.
@@ -263,11 +413,12 @@ track part-way through being built, `frame` for the auto-framing, `paint`/`cubes
 `scoreOf` for the colours and the counts. There is deliberately no `buildScene`: the builder
 frames the *finished* loop, which is what `sceneFromRoute` already returns, so a factory
 there would only have renamed one.
-Six components sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts
+Seven components sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts
 PolyCSS, owns the stage and the intersection/resize observers), `PieceViewer.svelte` (a piece
 type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `SketchViewer.svelte`
-(a text box the track is typed into), `TumbleViewer.svelte` and `BuildViewer.svelte`. The
-stories are plain JS CSF files beside them.
+(a text box the track is typed into), `TrackBuilder.svelte` (buttons the track is clicked
+together with), `TumbleViewer.svelte` and `BuildViewer.svelte`. The stories are plain JS CSF
+files beside them.
 
 `TrackViewer` mounts PolyCSS one way and shows a layout three, chosen by two flags, which is
 why the wrappers stay thin rather than becoming copies of the plumbing. Plain: new pieces
@@ -329,6 +480,54 @@ the keystroke that closes and drives from there.
 Under `prefers-reduced-motion` the arrivals are instant, the camera snaps instead of
 panning, and the rejected piece is a flat red rather than a pulsing one — a pulsing element
 is precisely what that preference is about.
+
+**Taking a piece off slides it back out.** `showGrown` does not `drop` the cubes past the
+common prefix; it `stage.detach`es them and hands them to `growPhase` as `leaving`, which
+plays the arrival in reverse — back along the heading to the `STANDOFF`, the tilt returning
+over the last 60% — and disposes each at the end, or at once if the phase is replaced first.
+Nothing new arrives until the way is clear. `detach` frees the ID *immediately*: a piece
+removed and put straight back would otherwise find the departing cube still holding its ID,
+take it for one already standing, and strand it mid-slide. Under reduced motion they go at
+once.
+
+**A piece still arriving when the next change lands carries on home.** `growPhase` used to
+treat any cube on the stage as standing, so a second letter (or click) inside a flight left
+the first piece frozen in mid-air — a bug in `Sketch` too, just rarer at typing speed. A cube
+on the stage but not exactly at its slot now finishes from where it got to.
+
+### Clicking a track together: `TrackBuilder`
+
+`Sketch` with buttons for a keyboard: six piece buttons, "Remove last" and "Reset view",
+over `TrackViewer grow drive interactive`. The piece buttons go dead while the track is
+stuck, since nothing after a rejected piece could be built. What it does differently is the
+camera: it starts wide (`BUILD_FLOOR`, passed as `from`, seeds `growBox` in place of the
+sketch's tight floor, and still only grows), and it can be handled. Square on a phone,
+16/10 otherwise, unless `aspect` is given. It is in Storybook only; where it goes in the
+post is Owen's call.
+
+### Handling a viewer: `render/controls.js`
+
+`interactive` means `attachControls`, on `@use-gesture/vanilla`: one-pointer drag orbits,
+pinch or wheel zooms, two fingers or a right-/shift-drag pans. It replaced
+`<poly-orbit-controls>` in every viewer, because PolyCSS's controls follow one pointer
+(no pinch, no two-finger pan) and keep their camera in element state — so the next attribute
+the stage wrote (a resize, `frameTo`, every frame of `panTo`) put the camera back.
+
+**The hand-moved camera is an adjustment, not a camera.** `camera.js` holds a `view`
+(`{ rotX, rotY, zoomBy, offset }`) and composes it over the description in `applyCamera`
+(`adjusted`): rotation absolute, zoom a multiple of the frame's, target offset. So the stage
+can reframe as it likes and the turn, zoom and pan survive; `adjust(null)` is the reset, and
+writes back what the view had overridden. The markup defaults are `CAMERA` in `camera.js`.
+
+The pan (`slid`) is along the ground, inverted from the transform PolyCSS emits —
+`scale(zoom/50) rotateX rotate translate3d(-target)`, target x/y swapped and ×50 — and
+`tests/controls.test.js` checks it against `buildPolyCameraSceneTransform`'s actual string,
+at several tilts, turns and zooms, rather than against the reasoning. A sign mutant fails it.
+
+use-gesture decides at *module load* whether it is on a touchscreen, and only then does
+pinch listen to touch. So a CDP check of pinch must enable touch emulation before navigating;
+enabled afterwards, a two-finger gesture just orbits. Verified that way on a 390px emulated
+phone: pinch zooms, two fingers pan, one orbits, and a tap adds a piece.
 
 **A shape string is always re-derived through `chainTrack`**, in `LayoutViewer` as it was on
 the old `/view` page, and in `TumbleViewer` and `BuildViewer` after it: the chain throws
@@ -605,8 +804,9 @@ The growing viewer is in there too, on the same fake scene, and its first assert
 one that matters: **a cube already standing receives no writes when the next letter is
 typed** — no `setPolygons`, no `setTransform`, not disposed and remade. "It does not
 twitch" is a claim about writes rather than pixels, which is exactly what the fake scene
-can settle and the eye cannot. Beside it: a backspace disposes exactly one cube and leaves
-the others the same handles; there is no train until the route closes and exactly one
+can settle and the eye cannot. Beside it: a backspace slides exactly one cube back out along
+its heading and then disposes it, leaving the others the same handles with no writes; a piece
+put back mid-departure is a fresh cube; a piece still arriving when the next is added lands; there is no train until the route closes and exactly one
 after; the rejected piece is the *only* mesh ever repainted, about twice a second; and a
 stuck track keeps asking for frames while a settled open one stops.
 

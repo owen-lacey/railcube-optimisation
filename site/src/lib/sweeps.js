@@ -6,21 +6,26 @@
 // Nothing here is more interesting than anything else in it, and that is the
 // point: the post can say "a thousand of these" and show you.
 //
-// Two sweeps, two questions, so two files rather than one with a column saying
-// which. `data/sweep-28.json` is 28 cubes in a box of 6 with no cross;
+// `data/sweep-28.json` is 28 cubes in a box of 6 with no cross: a finished sweep,
+// and frozen — nothing writes to it any more. Every shape in it was chained
+// through the model and counted against the inventory on the way in, and
+// `tests/sweeps.test.js` does it again on every run — so a shape reaching a
+// viewer from here has been past the geometry twice and the solver's word for it
+// counts for nothing.
+//
 // `data/sweep-crossed.json` is 35 cubes over 36 steps in a box of 8, crossing
-// itself once. Both are written by `scripts/extract-sweep.js` from logs that are
-// not checked in. Every shape in them was chained through the model and counted
-// against the inventory at extract time, and `tests/sweeps.test.js` does it again
-// on every run — so a shape reaching a viewer from here has been past the
-// geometry twice and the solver's word for it counts for nothing.
+// itself once — and it is a *sample*. The sweep itself is millions of layouts in
+// the gitignored `sweeps.db`, far more than a page can import whole, so
+// `scripts/sample-sweep.js` draws a thousand uniformly from it, re-derives each
+// through the model, and writes them here. Uniform means it is skewed the way
+// the database is, to big loops: a crossing whose smaller loop is 6 or 8 cubes is
+// all but absent. `population` is how many it was drawn from.
 //
 // **Within a sweep they all score the same, and that is the finding rather than a
 // flaw.** Both sweeps spend their inventory in full, so every layout in a file
 // holds the same cubes and differs only in their order; the objective sums the
-// cubes, so all 1,042 of the first tie on 48 and all 1,306 of the second tie on
-// 56. See "SCORES is inert" in CLAUDE.md. Sorting either list by score would sort
-// nothing.
+// cubes, so all of the first tie on 48 and all of the second on 56. See "SCORES
+// is inert" in CLAUDE.md. Sorting either list by score would sort nothing.
 
 // The import attribute is not decoration: without it Node refuses the import
 // outright (ERR_IMPORT_ATTRIBUTE_MISSING), and this module has to load under
@@ -31,36 +36,15 @@ import sweepCrossed from './data/sweep-crossed.json' with { type: 'json' };
 /** The 28-cube sweep: the question, the run, and every distinct layout it found. */
 export const SWEEP_28 = sweep28;
 
-/**
- * The crossed sweep: 35 cubes over 36 steps, so the train drives over one cube
- * twice. A different question from the 28 — a bigger inventory, a bigger box,
- * the cross allowed — which is why it is a second file rather than more rows.
- *
- * It was run with `tightCrossings: false`. Left free, the solver closes every
- * crossing the tightest way it can, and a sweep comes back holding one motif
- * over and over; forbidding the tight close is what makes it a sweep of shapes
- * rather than a sweep of one shape. See `minCrossingGap` in src/solver/index.js.
- */
+/** A uniform sample of the crossed sweep: 35 cubes over 36 steps, so the train drives over one cube twice. */
 export const SWEEP_CROSSED = sweepCrossed;
 
-/** Both, for anything that wants to iterate rather than name one. */
+/** Every sweep the site carries, for anything that wants to iterate rather than name one. */
 export const SWEEPS = [SWEEP_28, SWEEP_CROSSED];
 
 /** Just the shape strings, in the file's order — sorted, so it is stable. */
 export const SHAPES_28 = sweep28.shapes.map(s => s.shape);
 export const SHAPES_CROSSED = sweepCrossed.shapes.map(s => s.shape);
-
-/**
- * The crossed sweep holds every layout twice: a mirror swaps left curves for
- * right ones, and the inventory holds four of each, so a reflection is a track
- * you could really build and not a duplicate row. It is still trivially derived
- * from its partner, though, so a post counting layouts has a choice to make —
- * 1,306 of them, or 653 and their reflections. This is that filter.
- *
- * Sweeps with no mirror in them are unaffected: nothing is flagged, so nothing
- * is dropped.
- */
-export const withoutMirrors = ({ shapes }) => shapes.filter(s => !s.mirrored);
 
 /** How many cells a layout fills, across, up and along. Its `span` multiplied out. */
 export const volumeOf = ({ span }) => span[0] * span[1] * span[2];

@@ -1,7 +1,8 @@
 <script>
-  // The front page: pick a configuration, shuffle, watch a solve. Each sweep is
-  // every distinct full-spend layout its solve run found (see lib/sweeps.js), so a
-  // shuffle is a draw from the whole answer set, not a sample of highlights.
+  // The front page: pick a configuration, shuffle, watch a solve. The 28-cube
+  // sweep is every distinct full-spend layout its run found, and the crossed one
+  // a uniform sample of its database (see lib/sweeps.js), so a shuffle is a draw
+  // from the answers, not a pick of highlights.
   import { MediaQuery } from 'svelte/reactivity';
   import LayoutViewer from '$lib/components/LayoutViewer.svelte';
   import { SWEEP_28, SWEEP_CROSSED } from '$lib/sweeps.js';
@@ -11,8 +12,8 @@
   const narrow = new MediaQuery('(max-width: 640px)', false);
 
   const CONFIGS = [
-    { key: 'crossed', label: '35 cubes, one cross', sweep: SWEEP_CROSSED },
     { key: '28', label: '28 cubes', sweep: SWEEP_28 },
+    { key: 'crossed', label: '35 cubes, one cross', sweep: SWEEP_CROSSED },
   ];
 
   // The key rather than the config itself: `$state` proxies an object, so the
@@ -90,11 +91,11 @@
   <button class="shuffle" onclick={shuffle}>Shuffle</button>
 </div>
 
-<!-- Keyed on the configuration: the two sweeps hold different inventories, and a
+<!-- Keyed on the configuration: sweeps hold different inventories, and a
      rearrangement across them would strand the difference on the floor. Within a
      configuration the viewer stays mounted, so a shuffle is the collapse-and-
-     rebuild. `reach` is the box the sweep was solved in — the crossed sweep's 8
-     outreaches the default frame. Keyed on `animate` too, because TrackViewer
+     rebuild. `reach` is the box the sweep was solved in — a box of 8 outreaches
+     the default frame. Keyed on `animate` too, because TrackViewer
      reads it once at mount — it decides the frame and whether the physics loads. -->
 {#key `${config.key}:${animate}`}
   <LayoutViewer
