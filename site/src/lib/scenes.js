@@ -6,14 +6,11 @@
 
 import { chainTrack, chainOpen, cellsFor, SCORES } from '../../../src/track.js';
 import { routeOf, identify } from '../../../src/layouts.js';
-import { COLORS, START_COLOR, ALARM } from './render/dimensions.js';
+import { COLORS, ALARM } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
-export const paint = placed => placed.map((piece, i) => ({
-  ...piece,
-  color: i === 0 ? START_COLOR : COLORS[piece.type],
-}));
+export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[piece.type] }));
 
 /** How many cubes a chained route actually spends — revisits are not cubes. */
 export const cubesIn = pieces => pieces.filter(p => !p.revisit).length;

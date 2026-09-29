@@ -10,18 +10,11 @@
 // that a track that collapses leaves its train hanging in mid-air over the
 // wreckage. Which it did.
 
-//
-// The driver also lights the cube the train is inside, so the eye can follow it
-// round. That is a `recolour`, which is a `setPolygons` on one cube, so it is done
-// on *entering* a cube — the old one put back, the new one lightened — and never
-// per frame. At SPEED that is two repaints about twice a second.
-
 import { movingMesh } from './meshes.js';
 import { trainBody } from './train.js';
 import { trackPath } from './rail.js';
-import { SPEED, BODY_Z, TRAIN_H, HIGHLIGHT } from './dimensions.js';
+import { SPEED, BODY_Z, TRAIN_H } from './dimensions.js';
 import { cross, add, sub, len, unit, toCell } from './vec.js';
-import { cubeIds } from '../scenes.js';
 
 // The height of the body's centre above the rail — the point whose motion the
 // eye reads as the train's speed. Matches where `trainBody` puts the shell.
@@ -31,48 +24,11 @@ const BODY_REF = BODY_Z + TRAIN_H / 2;
 // baked afresh every frame anyway, so it is mounted turned by nothing.
 const UNTURNED = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
-/** A `#rrggbb` colour moved `t` of the way toward white. */
-function lighten(hex, t) {
-  const channel = i => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
-  const mixed = [0, 1, 2].map(i => Math.round(channel(i) + (255 - channel(i)) * t));
-  return `#${mixed.map(v => v.toString(16).padStart(2, '0')).join('')}`;
-}
-
-/**
- * The cube each route step runs through. A revisit is a crossed cross's second
- * pass, which places nothing, so it is the cube already standing in its cell.
- */
-function cubesAlong(pieces) {
-  const ids = cubeIds(pieces);
-  const byCell = new Map(pieces.map((p, i) => [String(p.cell), ids[i]]).filter(([, id]) => id));
-  return ids.map((id, i) => id ?? byCell.get(String(pieces[i].cell)));
-}
-
 /** Bind a train to a live stage. It has no mesh until it has a route. */
 export function createDriver(stage) {
   let mesh = null;
   let path = [], gaps = [], lap = 0;
   let k = 0, travelled = 0;  // travelled = distance to the start of sample k
-  let ids = [];
-  let lit = null;            // { cube, color }: the cube lightened, and its own colour
-
-  /**
-   * Put the lightened cube back to its own colour, if it is still on the stage.
-   * Checked by object rather than by ID: a typed track can drop a cube and mint
-   * another under the same ID, painted differently, before this train is disposed.
-   */
-  function unlight() {
-    if (lit && stage.cubes.get(lit.cube.id) === lit.cube) lit.cube.recolour(lit.color);
-    lit = null;
-  }
-
-  function light(id) {
-    if (lit?.cube.id === id) return;
-    unlight();
-    const cube = stage.cubes.get(id);
-    lit = { cube, color: cube.color };
-    cube.recolour(lighten(cube.color, HIGHLIGHT));
-  }
 
   /** Hand the train a new route. Safe to call with the same pieces repeatedly. */
   function setRoute(pieces) {
@@ -83,7 +39,6 @@ export function createDriver(stage) {
     // worse picture than an empty box.
     if (!mesh) mesh = movingMesh(stage.scene, trainBody(), UNTURNED, [0, 0, 0]);
     path = trackPath(pieces);
-    ids = cubesAlong(pieces);
     // Pace the train by the body, not by the wheels. A rail sample is the point
     // where the wheels touch the strip, and the body rides BODY_REF above it, so
     // on a curve the body sweeps a different radius from the rail: 1.59× on the
@@ -124,16 +79,12 @@ export function createDriver(stage) {
     // being right in every frame rather than only when it stops.
     const pos = blend(a.pos, b.pos);
     mesh.bake([cross(fwd, up), fwd, up], pos);
-    light(ids[a.piece]);
     // The lattice cell is the one the body is in, not the wheels: the body is what
     // is seen, and it rides clear of the cube, in the cell the model books as train.
     stage.markTrainCell(toCell(add(pos, up.map(v => v * BODY_REF))));
   }
 
-  // Put back before the train goes, so a track that collapses next does not
-  // collapse with one cube still lit.
   function dispose() {
-    unlight();
     stage.markTrainCell(null);
     mesh?.dispose();
     mesh = null;
