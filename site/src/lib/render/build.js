@@ -258,15 +258,26 @@ function departuresFor(leaving, { beat, flight }) {
  * viewer's first paint is, and what a static track viewer is made of. `drive` is
  * off for the catalogue views, which are loose pieces rather than routes and so
  * have no rail for a train to find.
+ *
+ * `trainAt` hands the train to someone else: asked every frame, a number is how
+ * far round the lap to hold it (0 to 1), and null lets it drive. `onTrainAt` is
+ * told how far round a driving train has got, every frame, so a slider can follow.
  */
-export function trackPhase(stage, pieces, { drive = true } = {}) {
+export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } = {}) {
   for (const slot of slotsFor(stage, pieces)) finish(stage, slot);
   if (!drive) return { advance: () => false };
 
   const driver = createDriver(stage);
   driver.setRoute(pieces);
   return {
-    advance: (_, elapsed) => { driver.at(elapsed); },
+    advance: (_, elapsed) => {
+      const held = trainAt?.();
+      if (typeof held === 'number') return driver.atFraction(held);
+      // Driven first and reported after: `onTrainAt?.(driver.at(…))` would skip
+      // the drive altogether whenever nobody is listening.
+      const fraction = driver.at(elapsed);
+      onTrainAt?.(fraction);
+    },
     // The train is the one thing here the stage does not own, so it is the one
     // thing this has to take away with it.
     dispose: driver.dispose,

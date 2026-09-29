@@ -56,6 +56,10 @@
     // Told the cell the train is in, `[x, y, z]`, each time it enters a new one, and
     // `null` when the train goes. Read once, at mount.
     onTrainCell = undefined,
+    // Static mode only: who holds the train, and who is told where it has driven
+    // to — see `trackPhase`. Read once, at mount.
+    trainAt = undefined,
+    onTrainAt = undefined,
   } = $props();
 
   // How long the collapse is simulated for at the outside.
@@ -164,7 +168,7 @@
   /** Draw it finished and drive it, off an emptied stage. */
   function showStatic(next) {
     stage.clear();
-    stage.run([trackPhase(stage, next, { drive })]);
+    stage.run([trackPhase(stage, next, { drive, trainAt, onTrainAt })]);
   }
 
   /**

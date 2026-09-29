@@ -54,17 +54,34 @@ export function createDriver(stage) {
   }
 
   /**
-   * Put the train where it has got to after `seconds` of driving.
+   * Put the train where it has got to after `seconds` of driving, and say how far
+   * round the lap that is, from 0 up to (but never reaching) 1.
+   */
+  function at(seconds) {
+    if (!lap) return null;   // no track yet, so nowhere to put a train
+    const d = (seconds * SPEED) % lap;
+    place(d);
+    return d / lap;
+  }
+
+  /**
+   * Put the train `fraction` of the way round the lap. 1 is a whole lap, which on
+   * a closed loop is exactly where 0 is.
+   */
+  function atFraction(fraction) {
+    if (!lap) return;
+    place((fraction * lap) % lap);
+  }
+
+  /**
+   * Put the train `d` along the lap, measured on the body's path.
    *
    * Between two rail samples both the heading and the up direction are blended
    * and squared back up, so the train leans into the corners instead of snapping
    * between facets.
    */
-  function at(seconds) {
-    if (!lap) return;   // no track yet, so nowhere to put a train
-
-    let d = (seconds * SPEED) % lap;
-    if (d < travelled) { k = 0; travelled = 0; } // lapped: back to the start
+  function place(d) {
+    if (d < travelled) { k = 0; travelled = 0; } // lapped, or dragged back: from the start
     while (d - travelled >= gaps[k]) { travelled += gaps[k]; k = (k + 1) % path.length; }
 
     const a = path[k], b = path[(k + 1) % path.length], f = (d - travelled) / gaps[k];
@@ -91,5 +108,5 @@ export function createDriver(stage) {
     lap = 0;
   }
 
-  return { setRoute, at, dispose, driving: () => lap > 0 };
+  return { setRoute, at, atFraction, dispose, driving: () => lap > 0 };
 }

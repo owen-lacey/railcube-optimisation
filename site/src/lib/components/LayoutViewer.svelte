@@ -26,7 +26,14 @@
     trainCaption = false,
     // Draw the origin's axis arrows, so the caption's x, y, z have a direction each.
     origin = false,
+    // A slider for where the train is round the lap, left the start and right a
+    // whole lap on. It follows the train until it is dragged, and then holds it.
+    scrub = false,
   } = $props();
+
+  // How far round the lap the train is, 0 to 1, and whether the slider has it.
+  let lap = $state(0);
+  let held = $state(false);
 
   // The cell the train is in, the model's `[right, up, forwards]` from the start
   // cube (docs/coordinates.md), or null while there is no train.
@@ -80,7 +87,21 @@
     label="The layout {letters}"
     origin={origin ? result.box : null}
     onTrainCell={cell => (trainCell = cell)}
+    trainAt={scrub ? () => (held ? lap : null) : undefined}
+    onTrainAt={scrub ? f => { if (!held) lap = f; } : undefined}
   />
+  {#if scrub && drive && result.closed && !sequence}
+    <input
+      class="scrub"
+      type="range"
+      min="0"
+      max="1"
+      step="any"
+      bind:value={lap}
+      oninput={() => (held = true)}
+      aria-label="Where the train is round the lap"
+    />
+  {/if}
   {#if trainCaption && drive && result.closed}
     <p class="caption">
       Train in cell {trainCell ? `(${readerFrame(trainCell).join(', ')})` : '—'}
@@ -116,4 +137,9 @@
     color: var(--grid-color);
   }
 
+  .scrub {
+    display: block;
+    width: 100%;
+    accent-color: var(--grid-color);
+  }
 </style>

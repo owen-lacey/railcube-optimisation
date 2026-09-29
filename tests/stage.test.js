@@ -57,6 +57,7 @@ function fakeScene(now = () => 0) {
           handle.bakes += 1;
           handle.bakeAt.push(now());
           handle.painted = new Set(polygons.map(p => p.color));
+          handle.polygons = polygons;
         },
         setTransform(t) { handle.transforms.push(t); },
         dispose() { handle.disposed = true; },
@@ -493,6 +494,52 @@ test('a replaced phase takes its train off the track with it', () => {
   // The build's own train has set off by now — one train, not two, and not three.
   assert.equal(alive(), 19, '18 cubes and exactly one train');
   assert.equal(handles.length, 20, 'two trains were ever made, and one was thrown away');
+});
+
+test('a held train stays put, and a whole lap on is where it started', () => {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  let held = 0.3;
+  const told = [];
+
+  stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => held, onTrainAt: f => told.push(f) })]);
+  stage.start();
+  const train = handles.at(-1);
+  const pose = () => JSON.stringify(train.polygons);
+
+  clock.run(0.05);
+  const first = pose();
+  clock.run(1);
+  assert.equal(pose(), first, 'the train did not move while held');
+  assert.deepEqual(told, [], 'a held train is not reported as driving');
+
+  held = 0;
+  clock.run(0.05);
+  const start = pose();
+  held = 0.6;
+  clock.run(0.05);
+  assert.notEqual(pose(), start, 'moving the hold moves the train');
+  held = 1;
+  clock.run(0.05);
+  assert.equal(pose(), start, 'a whole lap on is the start');
+});
+
+test('a driving train reports how far round the lap it is', () => {
+  const { cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const clock = fakeClock();
+  const told = [];
+
+  stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => null, onTrainAt: f => told.push(f) })]);
+  stage.start();
+  clock.run(20);
+
+  assert.ok(told.length > 0);
+  assert.ok(told.every(f => f >= 0 && f < 1), 'every fraction is in [0, 1)');
+  const wraps = told.slice(1).filter((f, i) => f < told[i]);
+  assert.ok(wraps.length >= 1, 'twenty seconds is more than a lap');
+  assert.ok(wraps.every(f => f < 0.1), 'it only ever goes back by lapping');
 });
 
 test('a picked-up cube also finishes down the connector axis', () => {

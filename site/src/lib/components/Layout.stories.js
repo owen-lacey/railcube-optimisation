@@ -27,6 +27,7 @@ export default {
     grid: { control: 'boolean' },
     trainCaption: { control: 'boolean' },
     origin: { control: 'boolean' },
+    scrub: { control: 'boolean' },
   },
 };
 
@@ -88,6 +89,22 @@ export const Grid = {
           + 'curve fills a 2×2 block of them, and the train needs the cells on the rail '
           + 'side of each piece. The lattice covers every cell the cubes *and* the train '
           + 'touch, empty ones included. Drag to orbit.',
+      },
+    },
+  },
+};
+
+export const Scrubbed = {
+  name: 'Train on a slider',
+  args: {
+    shape: 'SLLIOOILLSSS', grid: true, trainCaption: true, origin: true, scrub: true,
+    sequence: false, interactive: true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'The slider follows the train round until it is dragged, and from then on '
+          + 'holds it: left is the start, right is a whole lap on, which is the same place.',
       },
     },
   },
