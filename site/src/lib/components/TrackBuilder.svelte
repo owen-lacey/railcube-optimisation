@@ -20,6 +20,8 @@
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
   import { PIECES } from '$lib/catalogue.js';
   import { claimKeys } from '$lib/keys.js';
+  import { chainOpen } from '../../../../src/track.js';
+  import { routeOf } from '../../../../src/layouts.js';
 
   let {
     shape = '',
@@ -79,8 +81,27 @@
   let builder = $state(null);
   onMount(() => claimKeys(builder, onKeydown));
 
-  const add = letter => { if (!done) letters += letter; };
-  const removeLast = () => { letters = letters.slice(0, -1); };
+  /**
+   * Does the head sit on a cross already laid, so that a cross now is the train
+   * coming back over it? That pass places nothing, and there is only one piece it
+   * could be, so the builder puts it down rather than asking for it.
+   */
+  const meetsCross = text => {
+    const { placed, faults } = chainOpen(routeOf(text + 'X'));
+    return faults.length === 0 && placed.at(-1).revisit;
+  };
+
+  const add = letter => {
+    if (done) return;
+    letters += letter;
+    if (letters.length < LIMIT && meetsCross(letters)) letters += 'X';
+  };
+  // A cross that was put down for you goes with the piece that led into it,
+  // otherwise Backspace would leave the head stranded on a cross with no way on.
+  const removeLast = () => {
+    const last = view.pieces.length && chainOpen(routeOf(letters)).placed.at(-1).revisit;
+    letters = letters.slice(0, last && letters.length > 1 ? -2 : -1);
+  };
 
   /** The keyboard: a letter or an arrow adds a piece, Backspace takes one off. */
   function onKeydown(event) {
