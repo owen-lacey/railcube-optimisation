@@ -8,14 +8,15 @@
   // turned a quarter clockwise, the rail faces the viewer.
   const POSES = { insideCurve: 'UL' };
 
-  let { type } = $props();
+  // `full` spells the piece's name out, with its letter in brackets after it.
+  let { type, full = false } = $props();
 
   const piece = $derived(PIECES.find(p => p.type === type));
 </script>
 
-<figure style:--piece={piece.hex}>
+<figure class:full style:--piece={piece.hex}>
   <PieceViewer {type} pose={POSES[type]} scale={1.6} aspect="1 / 1" label={piece.name} />
-  <figcaption>{piece.letter}</figcaption>
+  <figcaption>{full ? `${piece.name} (${piece.letter})` : piece.letter}</figcaption>
 </figure>
 
 <style>
@@ -25,6 +26,14 @@
     border: 2px solid var(--piece);
     border-radius: 0.5rem;
     overflow: hidden;
+  }
+
+  figure.full {
+    width: 150px;
+  }
+
+  figure.full figcaption {
+    font-size: 0.85rem;
   }
 
   figcaption {

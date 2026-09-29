@@ -18,5 +18,11 @@ export const InsideCurve = { args: { type: 'insideCurve' } };
 export const OutsideCurve = { args: { type: 'outsideCurve' } };
 export const Cross = { args: { type: 'cross' } };
 
+/** The name spelled out, with the letter in brackets after it. */
+export const FullName = { args: { type: 'straight', full: true } };
+
 /** All six at once, wrapping to the width available. */
 export const All = { render: () => ({ Component: PieceCardGrid }) };
+
+/** All six with their names spelled out. */
+export const AllFullNames = { render: () => ({ Component: PieceCardGrid, props: { full: true } }) };
