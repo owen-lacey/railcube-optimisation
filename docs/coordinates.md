@@ -10,6 +10,10 @@ the layout — **up/down, left/right, forwards/backwards**, with forwards = away
 viewer. The frame never rotates with the train: "left" always means the viewer's left,
 even when the train is on a wall or upside down.
 
+The viewers draw it that way round: forwards runs away from the reader, up and to the
+right on screen, so a track sets off from the bottom left (`CAMERA` in
+`site/src/lib/render/camera.js`).
+
 Single-letter abbreviations: **U, D, L, R, F, B**. Each direction has an opposite:
 U↔D, L↔R, F↔B.
 
@@ -30,6 +34,18 @@ right is x+1, one cube up is y+1, one cube forwards is z+1, and so on.
 than (2, 1, 0).)
 
 The origin (0, 0, 0) is the cell the start cube occupies.
+
+## The reader's axes
+
+The post writes positions as (x, y, z) with **x left, y forwards, z up**. Viewed
+from the default camera (forwards up and away to the right), x then grows away from
+the reader too, which is why it was chosen. The cost: with z up this is a
+*left-handed* frame, so it is not the maths/CAD convention. The model's own frame
+above (x right, y up, z forwards) is unchanged; what the reader sees negates x and
+swaps the last two. The viewer's `origin` option outlines the origin cell and stands
+three arrows just outside the lattice's outer corner, clear of the track
+(`render/axes.js`), with x, y and z as text beside their tips; the train-cell caption
+is written in this frame, so a cell one to the right of the start reads x = -1.
 
 ## Faces
 

@@ -10,4 +10,8 @@ html {
   --ghost-before: #b4bfcd;
   --ghost-after: #6b7a90;
   --ghost-opacity: 0.6;
+
+  /* The lattice's colour, here for the same reason: the train-cell caption sits
+     outside the viewer and is written in it. */
+  --grid-color: #4f75b8;
 }

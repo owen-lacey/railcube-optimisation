@@ -20,12 +20,13 @@ import assert from 'node:assert/strict';
 
 import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
-import { createStage, together, GRID_CLASS, TRAIN_CELL_CLASS, GHOST_CLASS } from '../site/src/lib/render/stage.js';
+import { createStage, together, GRID_CLASS, ORIGIN_CLASS, TRAIN_CELL_CLASS, GHOST_CLASS } from '../site/src/lib/render/stage.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
-import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W, TRAIN_CELL_INSET } from '../site/src/lib/render/dimensions.js';
+import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
+import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
 import { toWorld, poseRotation, through, add } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
@@ -920,6 +921,64 @@ test('the lattice fills the cell the train is in, and moves the fill rather than
   // The train's phase replaced: the mark goes with the train.
   stage.run([tumblePhase(stage, pieces, { drop: 1, limit: 1 })]);
   assert.equal(mark.disposed, true, 'the mark outlived its train');
+});
+
+test('the stage reports each cell the train enters once, lattice or not, and null when it goes', () => {
+  const { cameraEl, sceneEl } = fakeScene();
+  const reported = [];
+  const stage = createStage(cameraEl, sceneEl, { onTrainCell: cell => reported.push(cell) });
+  const clock = fakeClock();
+  const pieces = piecesOf(SET);
+
+  stage.run([trackPhase(stage, pieces, { drive: true })]);
+  stage.start();
+  clock.run(20);
+
+  const cells = reported.filter(Boolean);
+  assert.ok(cells.length > 0, 'nothing was reported with no lattice up');
+  assert.ok(cells.every(c => c.length === 3 && c.every(Number.isInteger)), 'not whole-number cells');
+  cells.slice(1).forEach((c, i) => assert.notEqual(String(c), String(cells[i]), 'a cell was reported twice running'));
+  assert.ok(cells.length < 20 / 0.016 / 10, `${cells.length} reports is one per frame`);
+  assert.equal(reported.includes(null), false, 'the train was reported gone while running');
+
+  stage.run([tumblePhase(stage, pieces, { drop: 1, limit: 1 })]);
+  assert.equal(reported.at(-1), null, 'the train went and nobody was told');
+});
+
+test('the origin\'s outline and arrows are class-tagged overlays that clear() leaves and setOrigin(null) takes away', () => {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const axes = () => handles.filter(h => h.classes.has(ORIGIN_CLASS));
+
+  stage.setOrigin({ lo: [0, 0, 0], hi: [2, 2, 2] });
+  assert.equal(axes().length, 2);
+  stage.clear();
+  assert.ok(axes().every(h => !h.disposed), 'clear() took the axes down');
+  stage.setOrigin(null);
+  assert.ok(axes().every(h => h.disposed));
+});
+
+test('the arrows stand outside the box\'s corner and reach left, forwards and up, in the reader\'s frame', () => {
+  const polys = axisArrows();
+  assert.ok(polys.every(p => p.vertices.length >= 3 && p.vertices.flat().every(Number.isFinite)));
+  // PolyCSS is X right, Y forwards, Z up; the reader's x is left, so it runs toward -X.
+  const dirs = [-1, 1, 1];
+  const along = k => polys.flatMap(p => p.vertices.map(v => v[k] * dirs[k]));
+  for (const k of [0, 1, 2]) {
+    assert.ok(Math.abs(Math.min(...along(k))) <= AXIS_HEAD_W * CUBE * Math.SQRT2 + 1, `axis ${k} does not start at the corner`);
+    assert.ok(Math.max(...along(k)) >= CUBE * 1.5, `axis ${k} is too short to read`);
+  }
+  // Each label sits past its own arrow's tip, on its own axis.
+  for (const [k, { name, position }] of LABEL_SPOTS.entries()) {
+    assert.equal(name, 'xyz'[k]);
+    assert.ok(position[k] * dirs[k] > Math.max(...along(k)) - 1, `${name}'s label is not past its tip`);
+    for (const other of [0, 1, 2].filter(o => o !== k)) {
+      assert.ok(Math.abs(position[other]) < 1e-9, `${name}'s label is off its axis`);
+    }
+  }
+  // Clear of the box: the anchor is outside its high x corner and its low y and z ones.
+  const [ax, ay, az] = axisAnchor({ lo: [0, 0, 0], hi: [3, 3, 3] });
+  assert.ok(ax > 3.5 * CUBE && ay < -CUBE / 2 && az < -CUBE / 2, 'the arrows start inside the box');
 });
 
 test('the train cell\'s fill is six outward faces, clear of the cell\'s own', () => {

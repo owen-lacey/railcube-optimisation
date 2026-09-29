@@ -47,9 +47,15 @@
     // A box of cells, `{ lo, hi }`, to draw the model's cell lattice around; null
     // draws none. See `render/grid.js`.
     grid = null,
+    // Outline the origin cell and stand the axis arrows (x right, y forwards, z up)
+    // at this box's corner, `{ lo, hi }`; null draws neither. See `render/axes.js`.
+    origin = null,
     // Trains that stand still, `{ type, cell, pose, tint }` each, tinted by the stylesheet
     // below. See `setGhosts` in stage.js.
     ghosts = [],
+    // Told the cell the train is in, `[x, y, z]`, each time it enters a new one, and
+    // `null` when the train goes. Read once, at mount.
+    onTrainCell = undefined,
   } = $props();
 
   // How long the collapse is simulated for at the outside.
@@ -201,7 +207,10 @@
         await customElements.whenDefined('poly-scene');
         if (sequence) ({ tumblePhase } = await import('../render/tumble.js'));
         if (!live) return;
-        stage = createStage(cameraEl, sceneEl);
+        stage = createStage(cameraEl, sceneEl, {
+          onTrainCell: cell => onTrainCell?.(cell),
+          onCamera: () => origin && scheduleAxisLabels(),
+        });
         if (interactive) controls = attachControls(host, cameraEl, stage);
         ready = true;
         // Framed once, here, and never again in sequencing mode: `fixedFrame` is a
@@ -255,6 +264,9 @@
       controls?.destroy();
       controls = null;
       stage?.setGrid(null);
+      stage?.setOrigin(null);
+      cancelAnimationFrame(labelFrame);
+      labelFrame = 0;
       stage?.setGhosts([]);
       stage?.clear();
       stage = null;
@@ -275,6 +287,35 @@
     if (!ready || !stage || key === gridKey) return;
     stage.setGrid(grid ? gridLines(grid) : null);
     gridKey = key;
+  });
+
+  // The origin's axes. A boolean, so there is nothing to key. The letters are HTML
+  // over the scene, found by asking the stage where each one's speck landed — after
+  // the camera has moved, and at most once a frame however many writes it took.
+  let axisLabels = $state([]);
+  let labelFrame = 0;
+
+  function placeAxisLabels() {
+    labelFrame = 0;
+    if (!stage || !origin || !host) {
+      axisLabels = [];
+      return;
+    }
+    const box = host.getBoundingClientRect();
+    axisLabels = stage.originTips().map(({ name, x, y }) => ({ name, x: x - box.left, y: y - box.top }));
+  }
+
+  function scheduleAxisLabels() {
+    if (!labelFrame) labelFrame = requestAnimationFrame(placeAxisLabels);
+  }
+
+  let originKey = null;
+  $effect(() => {
+    const key = origin ? `${origin.lo}|${origin.hi}` : null;
+    if (!ready || !stage || key === originKey) return;
+    stage.setOrigin(origin);
+    originKey = key;
+    scheduleAxisLabels();
   });
 
   // The ghost trains, keyed on what they are for the same reason as the lattice.
@@ -321,6 +362,9 @@
       ambient-intensity={LIGHT.ambient}
     ></poly-scene>
   </poly-camera>
+  {#each axisLabels as { name, x, y } (name)}
+    <span class="axis-label" style:left="{x}px" style:top="{y}px" aria-hidden="true">{name}</span>
+  {/each}
 
   {#if failed}
     <p class="failed">Could not start the 3D view: {failed}</p>
@@ -329,7 +373,6 @@
 
 <style>
   .viewer {
-    --grid-color: #4f75b8;
     --grid-opacity: 0.22;
     position: relative;
     width: 100%;
@@ -368,6 +411,29 @@
   .viewer :global(.train-cell > *) {
     color: var(--grid-color) !important;
     opacity: var(--grid-opacity);
+  }
+
+  /* The origin's axes: the lattice's blue at full strength, so the arrows and their
+     letters read as solid marks and not as more lattice. */
+  .viewer :global(.origin-axes > *) {
+    color: var(--grid-color) !important;
+  }
+
+  /* The specks the axis labels are placed by: present, so the browser can say where
+     they landed, and invisible. */
+  .viewer :global(.origin-marker > *) {
+    opacity: 0;
+  }
+
+  /* The axis letters are text, so they never turn with the camera or read backwards. */
+  .axis-label {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-family: ui-monospace, monospace;
+    font-weight: 600;
+    color: var(--grid-color);
+    pointer-events: none;
+    user-select: none;
   }
 
   /* Ghost trains, flat and see-through the same way, one tint before and one after. */

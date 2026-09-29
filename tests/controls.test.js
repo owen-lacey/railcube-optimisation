@@ -95,7 +95,7 @@ test('a hand-moved view survives the stage reframing and the viewer resizing', (
   camera.frameTo({ zoom: 4, target: '0,0,0' });
 
   const start = camera.view();
-  assert.deepEqual(start, { rotX: 65, rotY: 45, zoomBy: 1, offset: [0, 0, 0] }, 'nothing moved yet');
+  assert.deepEqual(start, { rotX: 65, rotY: -45, zoomBy: 1, offset: [0, 0, 0] }, 'nothing moved yet');
   camera.adjust({ ...start, rotY: 100, zoomBy: 2, offset: [5, 0, 0] });
 
   camera.frameTo({ zoom: 3, target: '10,0,0' });   // the stage's frame grew

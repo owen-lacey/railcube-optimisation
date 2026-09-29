@@ -19,11 +19,14 @@ const REFERENCE_HEIGHT = 700;
 const MARGIN = 0.88;
 
 /**
- * What a `<poly-camera>` shows before anything is described: the classic
- * isometric angle. The viewers' markup reads these, so there is one copy of them,
- * and a hand-moved view starts from them when a description names no rotation.
+ * What a `<poly-camera>` shows before anything is described: an isometric angle,
+ * turned so forwards runs *away* from the reader, up and to the right — the viewer
+ * frame of docs/coordinates.md — and a track sets off from the bottom left. The
+ * classic turn (+45) has forwards coming at them instead, down and to the right.
+ * The viewers' markup reads these, so there is one copy of them, and a hand-moved
+ * view starts from them when a description names no rotation.
  */
-export const CAMERA = { 'rot-x': 65, 'rot-y': 45, zoom: 4, target: '0,0,0' };
+export const CAMERA = { 'rot-x': 65, 'rot-y': -45, zoom: 4, target: '0,0,0' };
 
 const numbers = target => String(target).split(',').map(Number);
 
@@ -52,7 +55,7 @@ export function adjusted(described, view) {
 }
 
 /** Bind camera handling to a mounted `<poly-camera>`. */
-export function createCamera(cameraEl) {
+export function createCamera(cameraEl, onApply) {
   let described = {};
   let view = null;
 
@@ -70,6 +73,7 @@ export function createCamera(cameraEl) {
         : value;
       cameraEl.setAttribute(attr, String(scaled));
     }
+    onApply?.();
   }
 
   /** Apply a camera description — only the attributes it names. */

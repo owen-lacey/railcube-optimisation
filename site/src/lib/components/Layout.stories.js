@@ -25,6 +25,8 @@ export default {
     drop: { control: { type: 'range', min: 0, max: 6, step: 1 } },
     aspect: { control: 'text' },
     grid: { control: 'boolean' },
+    trainCaption: { control: 'boolean' },
+    origin: { control: 'boolean' },
   },
 };
 

@@ -24,7 +24,7 @@ const along = (axis, sign = 1) => [0, 1, 2].map(k => (k === axis ? sign : 0));
  * centre line at `at` in the other two axes. Everything is built in project cell
  * units and only then sent through `toWorld`, so the axis mapping lives in one place.
  */
-function line(axis, from, to, at) {
+function line(axis, from, to, at, half = HALF) {
   const [u, v] = [0, 1, 2].filter(k => k !== axis);
   const point = (a, du, dv) => {
     const p = [0, 0, 0];
@@ -34,10 +34,10 @@ function line(axis, from, to, at) {
     return toWorld(p);
   };
   const faces = [
-    [u, 1, [[HALF, -HALF], [HALF, HALF]]],
-    [u, -1, [[-HALF, -HALF], [-HALF, HALF]]],
-    [v, 1, [[-HALF, HALF], [HALF, HALF]]],
-    [v, -1, [[-HALF, -HALF], [HALF, -HALF]]],
+    [u, 1, [[half, -half], [half, half]]],
+    [u, -1, [[-half, -half], [-half, half]]],
+    [v, 1, [[-half, half], [half, half]]],
+    [v, -1, [[-half, -half], [half, -half]]],
   ];
   // No colour: the lattice is painted by the viewer's stylesheet, not by PolyCSS.
   return faces.map(([normal, sign, [[du0, dv0], [du1, dv1]]]) => ({
@@ -63,6 +63,23 @@ export function gridLines({ lo, hi }) {
       at[v] = pv;
       return line(axis, ...ends, at);
     }));
+  });
+}
+
+/**
+ * The twelve edges of the cell centred on `[0, 0, 0]`, as prisms `width` thick
+ * (world units) — the lattice's own lines, only bolder, for picking one cell out.
+ */
+export function cellEdges(width) {
+  const half = width / 2 / CUBE;
+  return [0, 1, 2].flatMap(axis => {
+    const [u, v] = [0, 1, 2].filter(k => k !== axis);
+    return [[-0.5, -0.5], [-0.5, 0.5], [0.5, -0.5], [0.5, 0.5]].flatMap(([pu, pv]) => {
+      const at = [0, 0, 0];
+      at[u] = pu;
+      at[v] = pv;
+      return line(axis, -0.5, 0.5, at, half);
+    });
   });
 }
 

@@ -252,7 +252,7 @@ export function poseGallery(type) {
   return {
     pieces,
     drive: false,
-    camera: { zoom: 4.4 / gap, target: `${30 * gap},${-50 * gap},0`, 'rot-x': 65, 'rot-y': 45 },
+    camera: { zoom: 4.4 / gap, target: `${30 * gap},${-50 * gap},0`, 'rot-x': 65 },
   };
 }
 
@@ -278,18 +278,13 @@ export function singlePiece(type, { pose = 'UF', scale = 1 } = {}) {
   return {
     pieces,
     drive: false,
+    // The classic turn rather than `CAMERA`'s: a piece alone has no track to set
+    // off from the bottom left, and PieceCard's poses were picked to read this way.
     camera: { target, zoom: scale * 30 / diagonal, 'rot-x': 62, 'rot-y': 45 },
   };
 }
 
 // ---- What one piece does to the train --------------------------------------
-
-/**
- * The turn that puts forwards *away* from the reader, up and to the right, so the
- * train sets off from the bottom left. The usual isometric turn has it coming at
- * them instead, down and to the right.
- */
-const FROM_THE_READER = -45;
 
 /**
  * One piece at the start, with a ghost train on it where the train is before, and
@@ -315,6 +310,6 @@ export function pieceMove(type) {
       { ...after, type: 'straight', tint: 'after' },
     ],
     grid,
-    camera: { ...frameTight(grid), zoom: 42 / diagonal, 'rot-y': FROM_THE_READER },
+    camera: { ...frameTight(grid), zoom: 42 / diagonal },
   };
 }

@@ -45,6 +45,16 @@ export const COLORS = {
 // `setGrid` in stage.js.
 export const GRID_W = 0.8;
 
+// The origin's axis arrows (render/axes.js). Thickness is in scene units; the rest
+// are in cells. Colour is the stylesheet's, like the lattice's.
+export const AXIS_W = 1.2;
+export const AXIS_LENGTH = 2;     // from the arrows' corner to the tip
+export const AXIS_HEAD = 0.4;
+export const AXIS_HEAD_W = 0.15;  // half the head's width at its base
+export const AXIS_LABEL = 0.4;    // how far past the tip the letter's label sits, in cells
+export const AXIS_GAP = 1;        // how far outside the lattice box's corner the arrows start, in cells
+export const ORIGIN_W = 2;        // the origin cell's outline, bolder than an arrow's shaft so the outline reads as bolder than the lattice
+
 // The lattice cell the train is in is filled, this far inside the cell's faces so
 // the fill never lies flat on a cube. Colour and opacity are the stylesheet's.
 export const TRAIN_CELL_INSET = 0.5;

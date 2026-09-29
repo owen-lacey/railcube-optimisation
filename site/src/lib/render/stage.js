@@ -34,13 +34,23 @@ import { movingMesh, meshLike } from './meshes.js';
 import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
 import { cellBox } from './grid.js';
-import { TRAIN_CELL_INSET } from './dimensions.js';
+import { originCell, axisArrows, axisAnchor, LABEL_SPOTS } from './axes.js';
+import { TRAIN_CELL_INSET, CUBE } from './dimensions.js';
 import { toWorld } from './vec.js';
 import { trainAt } from './rail.js';
 import { trainBody } from './train.js';
 
 /** The class the lattice's mesh carries, for the stylesheet to find it by. */
 export const GRID_CLASS = 'cell-grid';
+
+/** The class the origin's axes carry, for the same reason. */
+export const ORIGIN_CLASS = 'origin-axes';
+
+/** The class of the invisible specks the axis labels are placed by. */
+export const MARKER_CLASS = 'origin-marker';
+
+// A speck is a cell's box inset almost to nothing: a fifth of a scene unit a side.
+const MARKER_INSET = CUBE * 0.49;
 
 /** The class the train's cell carries, for the same reason. */
 export const TRAIN_CELL_CLASS = 'train-cell';
@@ -78,9 +88,9 @@ export function together(...phases) {
  * Bind a stage to a mounted `<poly-camera>` containing a `<poly-scene>`.
  * The caller is responsible for having awaited `customElements.whenDefined`.
  */
-export function createStage(cameraEl, sceneEl) {
+export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
   const scene = sceneEl.getScene();
-  const { frameTo: applyDescription, applyCamera, view, adjust } = createCamera(cameraEl);
+  const { frameTo: applyDescription, applyCamera, view, adjust } = createCamera(cameraEl, () => onCamera?.());
 
   // The cubes, by piece ID (`1L` is the first left curve — see `identify` in
   // src/layouts.js). This is the registry object constancy is made of: a phase
@@ -273,6 +283,49 @@ export function createStage(cameraEl, sceneEl) {
     showTrainCell();
   }
 
+  // ---- The origin's axes --------------------------------------------------
+  //
+  // An overlay like the lattice, and for the same reasons: not a cube, so `clear()`
+  // leaves it standing, and painted by the stylesheet through `ORIGIN_CLASS`.
+
+  let origin = [];    // the origin cell's outline, then the arrows
+  let markers = [];   // one invisible speck per axis label, which the label finds by
+
+  /** Outline the origin cell and stand the arrows at `box`'s corner, or take them away with null. */
+  function setOrigin(box) {
+    for (const handle of origin) handle.dispose();
+    for (const { handle } of markers) handle.dispose();
+    origin = [];
+    markers = [];
+    if (!box) return;
+    const anchor = axisAnchor(box);
+    const arrows = scene.add(meshLike(axisArrows()), {});
+    arrows.setTransform({ position: anchor, rotation: [0, 0, 0] });
+    origin = [scene.add(meshLike(originCell()), {}), arrows];
+    for (const handle of origin) handle.element.classList.add(ORIGIN_CLASS);
+    markers = LABEL_SPOTS.map(({ name, position }) => {
+      const handle = scene.add(meshLike(cellBox(MARKER_INSET)), {});
+      handle.setTransform({ position: position.map((c, k) => c + anchor[k]), rotation: [0, 0, 0] });
+      handle.element.classList.add(MARKER_CLASS);
+      return { name, handle };
+    });
+  }
+
+  /**
+   * Where each axis label belongs on screen, `{ name, x, y }` in client pixels.
+   *
+   * HTML text cannot be placed in the 3D scene, and a projection worked out here
+   * would be a second copy of PolyCSS's camera. So each label has an invisible
+   * speck at its spot and the browser is asked where the speck landed. Reading it
+   * forces a layout, so it is for after the camera has moved, not for every frame.
+   */
+  function originTips() {
+    return markers.map(({ name, handle }) => {
+      const { left, top, width, height } = handle.element.firstElementChild.getBoundingClientRect();
+      return { name, x: left + width / 2, y: top + height / 2 };
+    });
+  }
+
   // ---- The lattice cell the train is in -----------------------------------
   //
   // Part of the lattice, so it is only drawn while there is one. The driver reports
@@ -302,6 +355,7 @@ export function createStage(cameraEl, sceneEl) {
     if (String(cell) === String(trainCell)) return;
     trainCell = cell;
     showTrainCell();
+    onTrainCell?.(cell);
   }
 
   // ---- Ghost trains -------------------------------------------------------
@@ -348,6 +402,8 @@ export function createStage(cameraEl, sceneEl) {
     stop: loop.stop,
     clear,
     setGrid,
+    setOrigin,
+    originTips,
     setGhosts,
     markTrainCell,
   };
