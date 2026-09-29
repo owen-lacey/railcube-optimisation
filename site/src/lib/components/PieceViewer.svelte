@@ -5,6 +5,8 @@
   let {
     type,
     poses = false,
+    pose = 'UF',
+    scale = 1,
     aspect = poses ? '16 / 9' : '5 / 4',
     interactive = false,
     label = '',
@@ -12,7 +14,7 @@
 
   // Neither is a track, so neither drives: the gallery is a catalogue and a
   // lone piece has no route to run along.
-  const scene = $derived(poses ? poseGallery(type) : singlePiece(type));
+  const scene = $derived(poses ? poseGallery(type) : singlePiece(type, { pose, scale }));
 </script>
 
 <TrackViewer

@@ -253,9 +253,11 @@ export function poseGallery(type) {
 
 // ---- A single piece, on its own -------------------------------------------
 
-/** One piece in the canonical pose, framed close — for the component library. */
-export function singlePiece(type) {
-  const pose = 'UF';
+/**
+ * One piece on its own, framed close — for the component library. `pose` defaults
+ * to the canonical one; `scale` multiplies the zoom, for a view with no room to spare.
+ */
+export function singlePiece(type, { pose = 'UF', scale = 1 } = {}) {
   // The arc pieces fill a 2×2 footprint, so centring on the one cell the piece
   // is keyed to puts it half out of shot. Ask the model which cells it really
   // occupies and let `frame` do the arithmetic, exactly as it does for a layout.
@@ -271,6 +273,6 @@ export function singlePiece(type) {
   return {
     pieces,
     drive: false,
-    camera: { target, zoom: 30 / diagonal, 'rot-x': 62, 'rot-y': 45 },
+    camera: { target, zoom: scale * 30 / diagonal, 'rot-x': 62, 'rot-y': 45 },
   };
 }
