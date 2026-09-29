@@ -11,8 +11,8 @@
 // Three things follow from that, and all three are visible here:
 //
 //   - **Pieces already down never move.** A keystroke adds one arrival and touches
-//     nothing else — not a bake, not a transform. Backspace takes exactly one cube
-//     off the stage and leaves the rest standing.
+//     nothing else — not a bake, not a transform. Backspace slides exactly one cube
+//     back off the way it came and leaves the rest standing.
 //   - **A piece with nowhere to go is drawn where it was asked to go**, overlapping
 //     whatever it ran into, and flashes red there. The box stops taking letters
 //     until it is backspaced away; that is the only thing that unblocks it.

@@ -497,9 +497,15 @@ on the stage but not exactly at its slot now finishes from where it got to.
 
 ### Clicking a track together: `TrackBuilder`
 
-`Sketch` with buttons for a keyboard: six piece buttons, "Remove last" and "Reset view",
-over `TrackViewer grow drive interactive`. The piece buttons go dead while the track is
-stuck, since nothing after a rejected piece could be built. What it does differently is the
+`Sketch` with buttons for a keyboard: six letter buttons in the pieces' colours and a
+backspace (Lucide's `delete` icon, from `@lucide/svelte`), over `TrackViewer grow drive
+interactive`, and no caption. It also takes the six letters, the arrows as a d-pad
+(↑ straight, ← left curve, → right curve) and Backspace, with no click needed: `keys.js`
+gives the page's keys to whichever registered builder has the largest share of itself in
+view, if that is more than half — otherwise nobody has them and the arrows scroll the page.
+Keys typed into an input, textarea or select are left alone. Adding goes dead while the track is stuck, since nothing
+after a rejected piece could be built, and once the loop closes, since a finished track
+takes no more. What it does differently is the
 camera: it starts wide (`BUILD_FLOOR`, passed as `from`, seeds `growBox` in place of the
 sketch's tight floor, and still only grows), and it can be handled. Square on a phone,
 16/10 otherwise, unless `aspect` is given. It is in Storybook only; where it goes in the
@@ -516,8 +522,7 @@ the stage wrote (a resize, `frameTo`, every frame of `panTo`) put the camera bac
 **The hand-moved camera is an adjustment, not a camera.** `camera.js` holds a `view`
 (`{ rotX, rotY, zoomBy, offset }`) and composes it over the description in `applyCamera`
 (`adjusted`): rotation absolute, zoom a multiple of the frame's, target offset. So the stage
-can reframe as it likes and the turn, zoom and pan survive; `adjust(null)` is the reset, and
-writes back what the view had overridden. The markup defaults are `CAMERA` in `camera.js`.
+can reframe as it likes and the turn, zoom and pan survive. The markup defaults are `CAMERA` in `camera.js`.
 
 The pan (`slid`) is along the ground, inverted from the transform PolyCSS emits —
 `scale(zoom/50) rotateX rotate translate3d(-target)`, target x/y swapped and ×50 — and

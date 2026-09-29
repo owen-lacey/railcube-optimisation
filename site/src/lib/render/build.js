@@ -197,6 +197,61 @@ function slide(slot, s) {
 }
 
 /**
+ * The rest of an arrival that was cut short: from wherever the cube had got to,
+ * home. The cube is already on the connector axis, so a straight line from there
+ * stays on it.
+ */
+function resume(slot, s) {
+  slot.cube.place(
+    turnToward(slot.from.basis, slot.basis, turnEase(s)),
+    lerp(slot.from.position, slot.position, smooth(s)),
+  );
+}
+
+/** Is this cube exactly home in its slot — landed, and not still on its way? */
+const restsAt = (cube, slot) => cube
+  && cube.position.every((v, k) => Math.abs(v - slot.position[k]) < 1e-6)
+  && cube.basis.every((row, r) => row.every((v, k) => Math.abs(v - slot.basis[r][k]) < 1e-6));
+
+/**
+ * The same slide, run the other way: off the joint and back out along the
+ * connector axis to the standoff, where the piece is gone.
+ *
+ * It is the arrival reversed exactly — the position eases back over the whole leg
+ * and the tilt comes back over the last 60% of it — so taking a piece off reads
+ * as the same motion as putting it on. It goes from wherever the cube *is* rather
+ * than from its slot, because a piece can be taken off while it is still arriving;
+ * a cube that had landed starts from its slot anyway, and for that one the two are
+ * the same motion to the letter.
+ */
+function unslide(leaving, s) {
+  const basis = turnToward(leaving.from.basis, leaving.to.basis, 1 - turnEase(1 - s));
+  leaving.cube.place(basis, lerp(leaving.from.position, leaving.to.position, smooth(s)));
+}
+
+/**
+ * Where each leaving cube is going: the standoff behind its slot, turned by the
+ * tilt a mint arrives with. The last piece of the route goes first, so a tail is
+ * taken off the way it was put on, backwards.
+ */
+function departuresFor(leaving, { beat, flight }) {
+  return [...leaving].reverse().map(({ cube, piece }, i) => {
+    const basis = poseRotation(piece.pose);
+    return {
+      cube,
+      from: { basis: cube.basis, position: cube.position },
+      to: {
+        basis: compose(axisAngle(basis[0], TILT), basis),
+        position: add(toWorld(piece.cell), scale(basis[1], STANDOFF * CUBE)),
+      },
+      at: i * beat,
+      ends: i * beat + flight,
+      gone: false,
+    };
+  });
+}
+
+/**
  * A finished track, drawn all at once and driven — no assembly at all.
  *
  * What a reader who has asked for reduced motion gets instead of a build, what a
@@ -230,6 +285,12 @@ export function trackPhase(stage, pieces, { drive = true } = {}) {
  * no bake, no transform, not a single write. A piece already down must not so much
  * as twitch when the next letter is typed.
  *
+ * `leaving` is the pieces that no longer belong, `{ cube, piece }` each: the cube
+ * detached from the stage (see `stage.detach`) and the piece it was standing as.
+ * They slide back out the way they came in before anything new arrives, and this
+ * phase disposes them — at the end of the slide, or at once if it is itself
+ * replaced first, so a quick second change never strands one half-way out.
+ *
  * `alarm` is the ID of a cube the model has rejected — a piece that has been asked
  * to go somewhere it cannot. It pulses between two reds from the moment it lands
  * and does not stop, so the phase never finishes while one is showing. It is done
@@ -237,26 +298,42 @@ export function trackPhase(stage, pieces, { drive = true } = {}) {
  * thing writing to it in a frame.
  */
 export function growPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = false, alarm = null, instant = false,
+  pace = PACE, speed = 1, drive = false, alarm = null, instant = false, leaving = [],
 } = {}) {
   const timing = timingFor(pace, speed, 0);
   const slots = slotsFor(stage, pieces, timing);
-  // `pickUp` here means "already standing", and the arrivals are the rest, re-timed
-  // to set off one after another from the moment this phase starts.
-  const arriving = slots.filter(slot => !slot.pickUp);
-  arriving.forEach((slot, i) => {
-    slot.at = i * timing.beat;
+  const departing = departuresFor(leaving, timing);
+  // Nothing arrives until everything leaving has gone, so a piece put in the place
+  // of one taken off never passes through it on the way.
+  const clear = departing.reduce((last, d) => Math.max(last, d.ends), 0);
+  // `pickUp` here means the cube is on the stage. One that is home in its slot is
+  // standing and is left alone; the arrivals are everything else, re-timed to set
+  // off one after another from the moment the way is clear. A cube on the stage
+  // but *not* home was still arriving when the phase before this one was replaced
+  // — a second click inside a flight — and it carries on from where it got to,
+  // straight away, rather than being left frozen in mid-air.
+  const arriving = slots.filter(slot => !(slot.pickUp && restsAt(stage.cubes.get(slot.id), slot)));
+  let queued = 0;
+  for (const slot of arriving) {
+    if (slot.pickUp) {
+      const { basis, position } = stage.cubes.get(slot.id);
+      slot.from = { basis, position };
+      slot.at = 0;
+    } else {
+      slot.at = clear + queued++ * timing.beat;
+    }
     slot.lands = slot.at + timing.flight;
-  });
+  }
+  arriving.sort((a, b) => a.at - b.at);
 
   const alarmed = alarm ? slots.find(slot => slot.id === alarm) : null;
   // It is minted in ALARM already — `openScene` paints it — so the first repaint
   // due is the pale one, half a period after it lands.
   let lit = ALARM;
-  const alarmFrom = alarmed && (alarmed.pickUp ? 0 : alarmed.lands);
+  const alarmFrom = alarmed && (arriving.includes(alarmed) ? alarmed.lands : 0);
 
   const driver = drive ? createDriver(stage) : null;
-  const closes = arriving.reduce((last, s) => Math.max(last, s.lands), 0) + timing.hold;
+  const closes = arriving.reduce((last, s) => Math.max(last, s.lands), clear) + timing.hold;
 
   let next = 0;
   let flying = [];
@@ -271,13 +348,29 @@ export function growPhase(stage, pieces, {
     lit = want;
   }
 
+  function leave(elapsed) {
+    for (const d of departing) {
+      if (d.gone || elapsed < d.at) continue;
+      if (elapsed >= d.ends) {
+        d.cube.dispose();
+        d.gone = true;
+      } else {
+        unslide(d, (elapsed - d.at) / timing.flight);
+      }
+    }
+  }
+
+  const leavingStill = () => departing.some(d => !d.gone);
+
   if (instant) {
+    for (const d of departing) { d.cube.dispose(); d.gone = true; }
     for (const slot of arriving) stage.cube(slot.id, slot).place(slot.basis, slot.position);
   }
 
   return {
     advance(_, elapsed) {
       if (!instant) {
+        leave(elapsed);
         while (next < arriving.length && elapsed >= arriving[next].at) {
           const slot = arriving[next++];
           slot.cube = stage.cube(slot.id, slot);
@@ -288,7 +381,7 @@ export function growPhase(stage, pieces, {
             slot.cube.place(slot.basis, slot.position);   // the delta is now nothing
             return false;
           }
-          slide(slot, (elapsed - slot.at) / timing.flight);
+          (slot.pickUp ? resume : slide)(slot, (elapsed - slot.at) / timing.flight);
           return true;
         });
       }
@@ -302,7 +395,8 @@ export function growPhase(stage, pieces, {
         return undefined;
       }
       if (!driver) {
-        return instant || (next === arriving.length && !flying.length) ? false : undefined;
+        const settled = next === arriving.length && !flying.length && !leavingStill();
+        return instant || settled ? false : undefined;
       }
       if (closedAt === null && elapsed >= (instant ? 0 : closes)) {
         closedAt = elapsed;
@@ -310,7 +404,10 @@ export function growPhase(stage, pieces, {
       }
       driver.at(elapsed - closedAt);
     },
-    dispose() { driver?.dispose(); },
+    dispose() {
+      driver?.dispose();
+      for (const d of departing) if (!d.gone) { d.cube.dispose(); d.gone = true; }
+    },
   };
 }
 

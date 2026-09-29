@@ -568,15 +568,20 @@ function typing(shapes, { pace = 0.1 } = {}) {
   const type = shape => {
     const view = openScene(shape);
     // What the viewer does before running the phase: every cube past the point the
-    // two layouts stop agreeing comes off.
+    // two layouts stop agreeing is detached, and leaves.
     let prefix = 0;
     const key = p => `${p.type}${p.pose}${p.cell}`;
     while (prefix < shown.length && prefix < view.pieces.length
       && key(shown[prefix]) === key(view.pieces[prefix])) prefix += 1;
-    for (const id of cubeIds(shown).slice(prefix)) if (id) stage.drop(id);
+    const ids = cubeIds(shown);
+    const leaving = [];
+    for (let i = prefix; i < shown.length; i++) {
+      const cube = ids[i] && stage.detach(ids[i]);
+      if (cube) leaving.push({ cube, piece: shown[i] });
+    }
 
     stage.run([growPhase(stage, view.pieces, {
-      pace, drive: view.closed, alarm: view.offender?.id ?? null,
+      pace, leaving, drive: view.closed, alarm: view.offender?.id ?? null,
     })]);
     stage.start();
     shown = view.pieces;
@@ -622,23 +627,79 @@ test('a new piece is minted in flight and never baked', () => {
   assert.deepEqual(stage.cubes.get('1I').position, restingPlace(openScene('LI').pieces[1]));
 });
 
-test('backspace takes one cube off and leaves the rest standing', () => {
+test('backspace slides one cube off and leaves the rest standing', () => {
   const { handles, stage, clock, type, alive } = typing([]);
 
   type('LIRI');
   clock.run(4);
   assert.equal(alive(), 4);
   const kept = ['1L', '1I', '1R'].map(id => stage.cubes.get(id).mesh.handle);
+  const writes = kept.map(h => h.transforms.length);
+  const leaving = stage.cubes.get('2I').mesh.handle;
+  const moved = leaving.transforms.length;
+  const [last] = openScene('LIRI').pieces.slice(-1);
 
   type('LIR');
+  assert.equal(stage.cubes.has('2I'), false, 'the removed piece still holds its ID');
+  clock.run(FLIGHT / 2);
+  assert.equal(leaving.disposed, false, 'the removed piece vanished rather than leaving');
+  assert.ok(leaving.transforms.length > moved, 'the removed piece did not move');
   clock.run(4);
 
   assert.equal(alive(), 3, 'exactly one cube came off');
-  assert.equal(stage.cubes.has('2I'), false, 'the deleted piece is off the stage');
+  assert.equal(leaving.disposed, true, 'the removed piece was never taken away');
+  assert.equal(leaving.bakes, 0, 'a leaving piece was re-lit');
+  // It went back out the way a piece comes in: along its own heading, to the
+  // standoff behind its slot.
+  const out = leaving.transforms.at(-1).position.map((v, k) => v - restingPlace(last)[k]);
+  const heading = poseRotation(last.pose)[1];
+  const along = out.reduce((sum, v, k) => sum + v * heading[k], 0);
+  assert.ok(along > CUBE, `it stopped ${along.toFixed(1)} units out along its heading`);
+  assert.ok(Math.hypot(...out.map((v, k) => v - along * heading[k])) < 1e-6, 'it left off the axis');
+
   for (const [i, handle] of kept.entries()) {
     assert.equal(handle.disposed, false, `cube ${i} was disposed by a backspace`);
     assert.ok(handles.includes(handle), `cube ${i} is not the same mesh it was`);
+    assert.equal(handle.transforms.length, writes[i], `cube ${i} was moved by a backspace`);
   }
+});
+
+test('a piece put back while its predecessor is leaving is a new cube', () => {
+  const { handles, stage, clock, type, alive } = typing([]);
+
+  type('LIRI');
+  clock.run(4);
+  const old = stage.cubes.get('2I').mesh.handle;
+
+  type('LIR');
+  clock.run(FLIGHT / 3);        // part-way out
+  type('LIRI');
+  assert.equal(old.disposed, true, 'the leaving cube outlived the phase that owned it');
+  clock.run(4);
+
+  const now = stage.cubes.get('2I').mesh.handle;
+  assert.notEqual(now, old, 'the put-back piece reused the one that was leaving');
+  assert.deepEqual(stage.cubes.get('2I').position, restingPlace(openScene('LIRI').pieces[3]));
+  assert.equal(alive(), 4);
+  assert.equal(handles.length, 5, 'one cube minted for the put-back piece, and only one');
+});
+
+test('a piece still arriving when the next is added carries on home', () => {
+  const { stage, clock, type } = typing([]);
+
+  type('L');
+  clock.run(FLIGHT / 3);        // the first piece is part-way down its lane
+  const flying = stage.cubes.get('1L');
+  assert.notDeepEqual(flying.position, restingPlace(openScene('L').pieces[0]), 'it had already landed');
+  const handle = flying.mesh.handle;
+
+  type('LL');
+  clock.run(4);
+
+  assert.equal(stage.cubes.get('1L').mesh.handle, handle, 'it was replaced rather than carried on');
+  assert.deepEqual(stage.cubes.get('1L').position, restingPlace(openScene('L').pieces[0]),
+    'it was left frozen where it had got to');
+  assert.deepEqual(stage.cubes.get('1L').basis, poseRotation(openScene('L').pieces[0].pose));
 });
 
 test('there is no train until the loop closes, and then there is one', () => {

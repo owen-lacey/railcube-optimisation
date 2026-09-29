@@ -165,8 +165,15 @@ export const frameBox = ({ lo, hi }, { drop = 0 } = {}) => frame([{ material: [
  */
 const SKETCH_FLOOR = { lo: [-1, 0, -1], hi: [1, 1, 1] };
 
+/**
+ * Where the builder's frame starts: wide, so there is room to see where a track is
+ * going before it gets there. Someone clicking pieces on is not watching one letter
+ * at a time the way a sketch is, and they can zoom in themselves.
+ */
+export const BUILD_FLOOR = { lo: [-4, 0, -4], hi: [4, 3, 4] };
+
 export function growBox(pieces, box = SKETCH_FLOOR) {
-  const { lo, hi } = pieces.length ? boundsOf(pieces) : SKETCH_FLOOR;
+  const { lo, hi } = pieces.length ? boundsOf(pieces) : box;
   return {
     lo: box.lo.map((v, a) => Math.min(v, lo[a])),
     hi: box.hi.map((v, a) => Math.max(v, hi[a])),

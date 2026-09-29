@@ -75,7 +75,7 @@ export function together(...phases) {
  */
 export function createStage(cameraEl, sceneEl) {
   const scene = sceneEl.getScene();
-  const { frameTo: applyDescription, applyCamera } = createCamera(cameraEl);
+  const { frameTo: applyDescription, applyCamera, view, adjust } = createCamera(cameraEl);
 
   // The cubes, by piece ID (`1L` is the first left curve — see `identify` in
   // src/layouts.js). This is the registry object constancy is made of: a phase
@@ -118,7 +118,9 @@ export function createStage(cameraEl, sceneEl) {
         mesh.recolour(GEOMETRY[type](next), made.basis, made.position);
         made.color = next;
       },
-      dispose() { mesh.dispose(); cubes.delete(id); },
+      // A detached cube's ID may already belong to a newer one, which this must not
+      // take off the stage with it.
+      dispose() { mesh.dispose(); if (cubes.get(id) === made) cubes.delete(id); },
       mesh,
     };
     cubes.set(id, made);
@@ -131,6 +133,21 @@ export function createStage(cameraEl, sceneEl) {
   /** Take one cube off the stage, leaving every other one where it is. */
   function drop(id) {
     cubes.get(id)?.dispose();
+  }
+
+  /**
+   * Take a cube out of the registry but leave it drawn, and hand it over.
+   *
+   * For a piece that is *leaving*: it still has somewhere to go before it is gone,
+   * so it cannot be disposed yet, but its ID has to be free at once. Otherwise a
+   * piece removed and put straight back would find the departing cube still
+   * holding its ID, take it for one already standing, and leave it stranded
+   * wherever the departure had got to. Whoever detaches a cube disposes it.
+   */
+  function detach(id) {
+    const item = cubes.get(id);
+    cubes.delete(id);
+    return item ?? null;
   }
 
   // ---- The camera ---------------------------------------------------------
@@ -288,9 +305,12 @@ export function createStage(cameraEl, sceneEl) {
     cube,
     held,
     drop,
+    detach,
     frameTo,
     panTo,
     applyCamera,
+    view,
+    adjust,
     run,
     start: loop.start,
     stop: loop.stop,

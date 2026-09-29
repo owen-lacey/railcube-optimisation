@@ -1,6 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import { createStage, together } from '../render/stage.js';
+  import { CAMERA } from '../render/camera.js';
+  import { attachControls } from '../render/controls.js';
   import { LIGHT } from '../render/dimensions.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
   import { gridLines } from '../render/grid.js';
@@ -27,6 +29,9 @@
     // here so the renderer can flash it.
     closed = false,
     offender = null,
+    // Grow mode only: the box the frame starts from, before the track has reached
+    // past it. Unset, it is the tight one a sketch starts in — see `growBox`.
+    from = undefined,
     pace = 0.04,
     // One tempo over the whole assembly — see `timingFor` in build.js.
     speed = 1.2,
@@ -71,6 +76,7 @@
   // Grow mode's frame, which only ever enlarges. Not `$state` for the same reason
   // as `shown`: `showGrown` owns it, and the framing effect below must not read it.
   let box = undefined;
+  let controls = null;
 
   /**
    * What makes two `pieces` arrays the same layout drawn the same way.
@@ -107,8 +113,8 @@
    * The two layouts are compared piece by piece from the start, and everything they
    * have in common is simply left alone — not re-baked, not re-transformed, not
    * touched at all, which is what stops a track twitching when the next letter is
-   * typed. Every cube past that point comes off the stage, and `growPhase` slides
-   * the new tail on.
+   * typed. Every cube past that point is detached from the stage and slides back
+   * out the way it came, and `growPhase` slides the new tail on.
    *
    * The frame grows with it, and only grows: see `growBox`.
    */
@@ -120,9 +126,15 @@
 
     // A revisit has no cube of its own, so it has no ID and there is nothing to
     // take off — the cross it is a second pass over may well be in the prefix.
-    for (const id of cubeIds(before).slice(prefix)) if (id) stage.drop(id);
+    const ids = cubeIds(before);
+    const leaving = [];
+    for (let i = prefix; i < before.length; i++) {
+      const cube = ids[i] && stage.detach(ids[i]);
+      if (cube) leaving.push({ cube, piece: before[i] });
+    }
 
     stage.run([growPhase(stage, next, {
+      leaving,
       pace: Number(pace),
       speed: Number(speed),
       drive: drive && closed,
@@ -134,7 +146,7 @@
     // `growBox` — so it settles once the track stops reaching new ground, rather
     // than chasing every keystroke the way a per-layout frame would. A reader who
     // has asked for reduced motion gets the same box, arrived at instantly.
-    box = growBox(next, box);
+    box = growBox(next, box ?? from);
     const shot = frameTight(box);
     if (reduced) stage.frameTo(shot);
     else stage.panTo(shot);
@@ -187,6 +199,7 @@
         if (sequence) ({ tumblePhase } = await import('../render/tumble.js'));
         if (!live) return;
         stage = createStage(cameraEl, sceneEl);
+        if (interactive) controls = attachControls(host, cameraEl, stage);
         ready = true;
         // Framed once, here, and never again in sequencing mode: `fixedFrame` is a
         // box the layouts all fit inside rather than anything read off them, so
@@ -236,6 +249,8 @@
       live = false;
       stopObserving();
       ro.disconnect();
+      controls?.destroy();
+      controls = null;
       stage?.setGrid(null);
       stage?.clear();
       stage = null;
@@ -281,21 +296,17 @@
 >
   <poly-camera
     bind:this={cameraEl}
-    rot-x="65"
-    rot-y="45"
-    zoom="4"
-    target="0,0,0"
+    rot-x={CAMERA['rot-x']}
+    rot-y={CAMERA['rot-y']}
+    zoom={CAMERA.zoom}
+    target={CAMERA.target}
   >
     <poly-scene
       bind:this={sceneEl}
       directional-direction={LIGHT.direction}
       directional-intensity={LIGHT.directional}
       ambient-intensity={LIGHT.ambient}
-    >
-      {#if interactive}
-        <poly-orbit-controls drag wheel></poly-orbit-controls>
-      {/if}
-    </poly-scene>
+    ></poly-scene>
   </poly-camera>
 
   {#if failed}
@@ -317,8 +328,13 @@
   /* Orbiting and page-scrolling fight over the same drag on a touch screen.
      Only the viewers that are meant to be handled claim the gesture; the small
      cards stay scrollable. */
-  .viewer.interactive :global(poly-camera) {
+  .viewer.interactive {
     touch-action: none;
+    cursor: grab;
+  }
+
+  .viewer.interactive:active {
+    cursor: grabbing;
   }
 
   .viewer :global(poly-camera) {

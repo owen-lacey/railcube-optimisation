@@ -1,6 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import { createStage } from '../render/stage.js';
+  import { CAMERA } from '../render/camera.js';
+  import { attachControls } from '../render/controls.js';
   import { buildPhase, trackPhase } from '../render/build.js';
   import { LIGHT } from '../render/dimensions.js';
   import { sceneFromRoute, cubesIn } from '$lib/scenes.js';
@@ -63,6 +65,7 @@
 
   onMount(() => {
     let live = true;
+    let controls = null;
     let stopObserving = () => {};
 
     reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -73,6 +76,7 @@
         await customElements.whenDefined('poly-scene');
         if (!live) return;
         stage = createStage(cameraEl, sceneEl);
+        if (interactive) controls = attachControls(host, cameraEl, stage);
         ready = true;   // the effect below does the first build
 
         // Animate only what is on screen. A blog post is several of these on one
@@ -112,6 +116,7 @@
       live = false;
       stopObserving();
       ro.disconnect();
+      controls?.destroy();
       stage?.clear();
       stage = null;
     };
@@ -126,16 +131,19 @@
 </script>
 
 <div class="viewer" class:interactive bind:this={host} style:aspect-ratio={aspect}>
-  <poly-camera bind:this={cameraEl} rot-x="65" rot-y="45" zoom="4" target="0,0,0">
+  <poly-camera
+    bind:this={cameraEl}
+    rot-x={CAMERA['rot-x']}
+    rot-y={CAMERA['rot-y']}
+    zoom={CAMERA.zoom}
+    target={CAMERA.target}
+  >
     <poly-scene
       bind:this={sceneEl}
       directional-direction={LIGHT.direction}
       directional-intensity={LIGHT.directional}
       ambient-intensity={LIGHT.ambient}
     >
-      {#if interactive}
-        <poly-orbit-controls drag wheel></poly-orbit-controls>
-      {/if}
     </poly-scene>
   </poly-camera>
 
@@ -168,8 +176,13 @@
   }
 
   /* Orbiting and page-scrolling fight over the same drag on a touch screen. */
-  .viewer.interactive :global(poly-camera) {
+  .viewer.interactive {
     touch-action: none;
+    cursor: grab;
+  }
+
+  .viewer.interactive:active {
+    cursor: grabbing;
   }
 
   .viewer :global(poly-camera) {
