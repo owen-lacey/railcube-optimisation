@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { assertNoCollisions, cellsFor, step, chainTrack } from '../src/track.js';
+import { assertNoCollisions, cellsFor, startCell, step, chainTrack } from '../src/track.js';
 import { STARTER, UNLIMITED } from './fixtures.js';
 
 const LETTER = {
@@ -23,7 +23,7 @@ const unshape = s => [...s].map(l => BY_LETTER[l]);
 // Building this by hand rather than calling chainTrack keeps the check honest
 // about which rule is under test.
 function assertMaterialOnly(route) {
-  let head = { cell: [0, 0, 0], pose: 'UF' };
+  let head = { cell: startCell('DF'), pose: 'DF' };
   const placed = route.map(type => {
     const piece = { type, material: cellsFor(type, head.pose, head.cell).material, train: [] };
     head = step(head.cell, head.pose, type);

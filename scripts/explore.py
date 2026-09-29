@@ -112,8 +112,8 @@ def bound_material(model, geo, rows, selectors, x, y, z, box, min_y):
 
 
 def grid(box):
-    # Heads live within box + 1 and a train cell reaches one further again;
-    # undersize the span and two distinct cells fold onto the same id.
+    # Heads and train cells live within box + 1, and the span keeps a cell of
+    # room past that; undersize it and two distinct cells fold onto the same id.
     span = box + 2
     n = 2 * span + 1
     return {"n": n, "size": n**3, "shift": span * (1 + n + n * n)}
@@ -183,7 +183,9 @@ def hint_route(model, geo, rows, selectors, route, start_pose):
     if len(route) != len(selectors):
         raise SystemExit(f"hint is {len(route)} pieces but there are {len(selectors)} steps — "
                          "every piece is used now, so the hint must be full-length")
-    p, cell = geo["poses"].index(start_pose), [0, 0, 0]
+    p = geo["poses"].index(start_pose)
+    home = geo["startCells"][p]
+    cell = list(home)
     for i, piece in enumerate(route):
         r = next((r for r, row in enumerate(rows)
                   if row["pose"] == p and geo["pieceTypes"][row["type"]] == piece), None)
@@ -194,7 +196,7 @@ def hint_route(model, geo, rows, selectors, route, start_pose):
         row = rows[r]
         cell = [cell[0] + row["dx"], cell[1] + row["dy"], cell[2] + row["dz"]]
         p = row["nextPose"]
-    if p != geo["poses"].index(start_pose) or cell != [0, 0, 0]:
+    if p != geo["poses"].index(start_pose) or cell != home:
         raise SystemExit("hint route does not close back to where it started")
 
 
@@ -205,7 +207,7 @@ def build_model(geo, rows, p):
 
     # Head position and pose before each step, plus one more for after the last.
     # The head's own domain is one wider than the box, because the box binds
-    # material cells and a head can sit at the edge of a footprint inside it.
+    # material cells and a head is the train's cell, one beyond its cube.
     reach = box + 1
     x = [model.new_int_var(-reach, reach, f"x_{i}") for i in range(steps + 1)]
     y = [model.new_int_var(-reach if min_y is None else min_y - 1, reach, f"y_{i}")
@@ -221,9 +223,11 @@ def build_model(geo, rows, p):
 
     add_transitions(model, rows, selectors, x, y, z, pose)
 
-    # The loop closes on cell AND pose, at both ends.
-    for v, want in [(x[0], 0), (y[0], 0), (z[0], 0), (pose[0], start),
-                    (x[steps], 0), (y[steps], 0), (z[steps], 0), (pose[steps], start)]:
+    # The loop closes on cell AND pose, at both ends: the train's cell over the
+    # start cube, which is the origin.
+    hx, hy, hz = geo["startCells"][start]
+    for v, want in [(x[0], hx), (y[0], hy), (z[0], hz), (pose[0], start),
+                    (x[steps], hx), (y[steps], hy), (z[steps], hz), (pose[steps], start)]:
         model.add(v == want)
 
     bound_material(model, geo, rows, selectors, x, y, z, box, min_y)
@@ -504,7 +508,7 @@ def parse_args(geo):
     ap.add_argument("--miny", type=int, default=0, help="floor; 0 = nothing below ground")
     ap.add_argument("--no-floor", action="store_true", help="unset the floor (minY = null)")
     ap.add_argument("--exclude", default="cross", help="comma-separated piece types")
-    ap.add_argument("--start-pose", default="UF")
+    ap.add_argument("--start-pose", default="DF")
     ap.add_argument("--set", dest="set_json", help="inventory as JSON (default: the 18-cube SET)")
     ap.add_argument("--hint", help="shape string to start the search from")
     ap.add_argument("--time", type=float, default=180, help="max solve seconds")

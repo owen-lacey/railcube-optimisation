@@ -6,7 +6,7 @@
 
   // The canonical pose stands the inside curve side-on, hiding most of its rail;
   // turned a quarter clockwise, the rail faces the viewer.
-  const POSES = { insideCurve: 'UL' };
+  const POSES = { insideCurve: 'DL' };
 
   // `full` spells the piece's name out, with its letter in brackets after it.
   let { type, full = false } = $props();

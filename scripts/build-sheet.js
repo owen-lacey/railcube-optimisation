@@ -8,7 +8,7 @@
 // are looking at a pile of plastic, not a spreadsheet.
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, cubeOf, OPPOSITE, POOLS } from '../src/track.js';
 
 const COLOUR = {
   straight: 'yellow', leftCurve: 'green', rightCurve: 'blue',
@@ -86,8 +86,8 @@ function sheet(name) {
       ? `(the ${PIECE[p.type]} again — no new cube)`
       : `${PIECE[p.type]} (${COLOUR[p.type]})`;
     console.log(
-      `  ${String(i + 1).padStart(3)} ${label.padEnd(26)} ${where(p.cell).padEnd(26)} `
-      + `${FACE[p.pose[0]].padEnd(15)} ${HEADING[p.pose[1]]}`);
+      `  ${String(i + 1).padStart(3)} ${label.padEnd(26)} ${where(cubeOf(p.cell, p.pose)).padEnd(26)} `
+      + `${FACE[OPPOSITE[p.pose[0]]].padEnd(15)} ${HEADING[p.pose[1]]}`);
   });
   console.log('\nThe last piece closes the loop back onto the start cube.\n');
 }

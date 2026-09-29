@@ -6,12 +6,14 @@
 // passes with `isRevisit` from track.js — the same predicate chainTrack uses, so
 // the oracle and the thing it checks cannot drift apart on the rule itself.
 
-import { PIECE_TYPES, POSES, cellsFor, step, POOL_OF, POOLS, isRevisit } from './track.js';
+import {
+  PIECE_TYPES, POSES, cellsFor, cubeOf, step, startCell, POOL_OF, POOLS, isRevisit,
+} from './track.js';
 
 const key = cell => cell.join(',');
-const l1 = cell => Math.abs(cell[0]) + Math.abs(cell[1]) + Math.abs(cell[2]);
+const l1 = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
 
-/** The largest L1 displacement any one piece makes — the curves, at 2 + 1. */
+/** The largest L1 displacement any one piece makes — the flat and outside curves, at 2 + 1. */
 const MAX_REACH = 3;
 
 /**
@@ -86,11 +88,12 @@ const inBounds = (piece, box, minY) =>
  */
 export function enumerateLoops({
   inventory, maxPieces, minPieces = 1, box = 6, minY = null,
-  collisions = true, checkTrain = true, exclude = [], sixFaces = false, startPose = 'UF',
+  collisions = true, checkTrain = true, exclude = [], sixFaces = false, startPose = 'DF',
 }) {
   const types = PIECE_TYPES.filter(t => !exclude.includes(t) && (inventory[POOL_OF[t]] ?? 0) > 0);
+  const home = startCell(startPose);
   const homeDist = poseDistances(startPose);
-  // `crosses` is every cross already on the table, by its own cell, in the shape
+  // `crosses` is every cross already on the table, by its own cube, in the shape
   // isRevisit reads. `crossed` is the ones the train has been back through.
   const board = { solid: new Set(), train: new Map(), crosses: new Map(), crossed: new Set() };
   const spent = Object.fromEntries(POOLS.map(p => [p, 0]));
@@ -100,7 +103,7 @@ export function enumerateLoops({
 
   // Can a head this far from home possibly get back in `left` more pieces?
   const reachable = (cell, pose, left) =>
-    l1(cell) <= MAX_REACH * left && (homeDist.get(pose) ?? Infinity) <= left;
+    l1(cell, home) <= MAX_REACH * left && (homeDist.get(pose) ?? Infinity) <= left;
 
   const record = () => {
     if (route.length < minPieces) return;
@@ -109,10 +112,10 @@ export function enumerateLoops({
   };
 
   function descend(cell, pose, left) {
-    if (cell.every(v => v === 0) && pose === startPose) record();
+    if (cell.every((v, k) => v === home[k]) && pose === startPose) record();
     if (!left) return;
 
-    const at = key(cell);
+    const at = key(cubeOf(cell, pose));
     for (const type of types) {
       const pool = POOL_OF[type];
 
@@ -153,6 +156,6 @@ export function enumerateLoops({
     }
   }
 
-  descend([0, 0, 0], startPose, maxPieces);
+  descend(home, startPose, maxPieces);
   return found;
 }

@@ -16,6 +16,18 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 - The track must end where it begins — same cell *and* same pose (closed loop).
 - No collisions: at most one piece per cell, and no cell is ever both material and train. Train cells may coincide with each other, since there is only one train. See `docs/coordinates.md`.
 
+**A pose is read from inside the train's cell: floor + heading.** The head — the state a
+route has reached — is the cell the train is in once it has finished travelling a piece,
+plus which face of that cell it stands on and which way it is going. Owen's call, over the
+old rail-face-of-the-next-cube reading, because the train is always in a cell. So the
+canonical pose is `DF`, the start cube is the origin and the train starts above it at
+(0, 1, 0), and a piece is drawn and keyed at `cubeOf(cell, pose)`, the cube under the train.
+It is an exact relabelling of the old `UF` scheme (floor = the old face's opposite, cell =
+the old head plus one along that face), verified piece by piece over every layout and all
+144 steps, so no geometry, collision or answer changed. Positions and poses are only ever
+stated between pieces; mid-piece the train can be inside material (the inside curve's
+hollow), and nothing is said about that.
+
 ## The model lives in `src/`
 
 | File | |
@@ -267,12 +279,13 @@ design choices are Owen's:
   it, so each is a path between two fixed states and is itself a half-and-half join: four
   quarters. That makes the return to the X hold by construction rather than by luck, and it keeps
   crosses out of every half, so counts are cubes throughout. Reading from the other pass swaps
-  the lobes and turns UL into UR, so drawing A no longer than B with both headings misses nothing.
-- **Halves are grown forwards from UF and inverted**, so they are frame-free: one pool per
+  the lobes and turns DL into DR, so drawing A no longer than B with both headings misses nothing.
+- **Halves are grown forwards from DF and inverted**, so they are frame-free: one pool per
   half-length serves both lobes and both ends. The price is that a half cannot see the cross or
   the box while it grows, only its own claims and a span cap. Those are checked at the join.
 - **Built in the cross's frame, then re-anchored.** The start piece is picked afterwards, by
-  trying each piece until one reading puts it at UF with the floor and box satisfied. Pinning the
+  trying each piece until one reading puts its cube at the origin, entered in DF, with the floor
+  and box satisfied. Pinning the
   cross as the start is the 39% narrowing above; this reaches every track.
 - **Lobe lengths are sampled per round**, and `--min-loop k` bounds the shorter from below.
 
@@ -318,7 +331,10 @@ same seed only reproduces the file against the same database.
 **question** it answers (`questionOf` in `scripts/sweep-data.js`: inventory, steps, box, minY,
 startPose — `minLoopLength`/`tightCrossings`/`exclude` are search knobs, so every rung merges
 under one question), is re-verified through `chainTrack`, and is inserted only if the database
-does not already hold it *as a physical track*. `--watch .` re-runs the pass whenever a
+does not already hold it *as a physical track*. The one question in `sweeps.db` predates
+the pose relabelling and says `startPose: "UF"`; sweeps now write `"DF"` for the same
+physical start, so their records will not match it. Owen chose to leave the database as it
+is, so merging a new sweep means `--new-question`. `--watch .` re-runs the pass whenever a
 `sweep-crossed-*.jsonl` changes (run it in tmux beside the ladder); `--new-question` admits a
 question the database lacks. Every duplicate is also appended, once per shape, to the gitignored
 `sweep-duplicates.jsonl` — the tmux pane's scrollback will not last an overnight sweep.
@@ -572,7 +588,8 @@ together); the arc is easings on legs of the offset rather than any control poin
 sets off once the loop closes, which with two kinds of arrival is the *last* landing rather
 than simply the last piece.
 
-**Geometry is authored about the piece's keyed cell, always** — every mesh in the project
+**Geometry is authored about the piece's cube, always** — `cubePosition` in `vec.js`, the cube
+under the train's cell, since a piece's `cell` is the train's. Every mesh in the project
 agrees on that, and PolyCSS rotates about the geometry origin (`autoCenter` defaults to
 `false` and nothing here sets it). Anything wanting to move a piece about its **centre of
 mass** converts instead: `originAt(type, basis, com)` and `comAt` in `site/src/lib/shapes.js`.

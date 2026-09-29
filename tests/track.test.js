@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 
 import {
   POSES, FACES, OPPOSITE, PIECE_TYPES, POOLS, POOL_OF,
-  isValidPose, poseLetters, cellsFor, step,
+  isValidPose, poseLetters, cellsFor, cubeOf, step,
   assertNoCollisions, chainTrack, chainOpen, countPieces, overflowingPool, overflowingPoolByType,
   SET, SCORES,
 } from '../src/track.js';
@@ -23,11 +23,12 @@ const key = c => c.join(',');
 // y=up, z=forwards) is left-handed: cross(F, U) = L there, not R. Swap the two
 // maps over and every pose's "right" silently becomes "left" — all curves mirror,
 // every route still closes, and nothing throws. This is the canary.
-test('poseLetters keeps a right-handed frame: at UF, right is right', () => {
-  assert.equal(poseLetters('UF').R, 'R');
-  assert.equal(poseLetters('UF').L, 'L');
-  assert.equal(poseLetters('UF').U, 'U');
-  assert.equal(poseLetters('UF').F, 'F');
+test('poseLetters keeps a right-handed frame: at DF, right is right', () => {
+  assert.equal(poseLetters('DF').R, 'R');
+  assert.equal(poseLetters('DF').L, 'L');
+  assert.equal(poseLetters('DF').D, 'D');
+  assert.equal(poseLetters('DF').U, 'U');
+  assert.equal(poseLetters('DF').F, 'F');
 });
 
 // coordinates.md:80 — "24 valid poses out of 36 letter pairs", one per cube rotation.
@@ -54,15 +55,16 @@ test('every face admits exactly four headings', () => {
   }
 });
 
-// The spike renders in the PolyCSS frame, where R=x, F=y, U=z — right-handed,
-// so it takes `heading × face`. src/track.js works in the project frame, which is
-// left-handed, so it takes `face × heading`. Different maps, different operand
-// order, and they must agree on all 24 poses or the model and the picture drift.
+// The renderer works in the PolyCSS frame, where R=x, F=y, U=z — right-handed,
+// so it takes `heading × overhead`. src/track.js works in the project frame, which
+// is left-handed, so it takes `overhead × heading`. Different maps, different
+// operand order, and they must agree on all 24 poses or the model and the picture
+// drift. Overhead is the floor's opposite.
 test('poseLetters agrees with the render frame on every pose', () => {
   const DIR = { U: [0, 0, 1], D: [0, 0, -1], F: [0, 1, 0], B: [0, -1, 0], R: [1, 0, 0], L: [-1, 0, 0] };
   const xp = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   for (const pose of POSES) {
-    const right = xp(DIR[pose[1]], DIR[pose[0]]); // the spike's poseRotation, local X
+    const right = xp(DIR[pose[1]], DIR[OPPOSITE[pose[0]]]); // poseRotation's local X
     const want = FACES.find(k => DIR[k].every((v, i) => v === right[i]));
     assert.equal(poseLetters(pose).R, want, `pose ${pose}`);
   }
@@ -80,35 +82,36 @@ test('poseLetters is a bijection on the six letters, for every pose', () => {
 
 // ---- The move catalogue --------------------------------------------------
 
-// coordinates.md:114-121, the UF row of "What each piece does".
-test('every piece move matches the catalogue at UF', () => {
+// coordinates.md, the table in "What each piece does": entered at DF, where the
+// train is once it has travelled the piece.
+test('every piece move matches the catalogue at DF', () => {
   const expected = {
-    straight:     { disp: [0, 0, 1],  exit: 'UF' },
-    cross:        { disp: [0, 0, 1],  exit: 'UF' },
-    leftCurve:    { disp: [-2, 0, 1], exit: 'UL' },
-    rightCurve:   { disp: [2, 0, 1],  exit: 'UR' },
-    insideCurve:  { disp: [0, 2, 1],  exit: 'BU' },
-    outsideCurve: { disp: [0, -1, 0], exit: 'FD' },
+    straight:     { disp: [0, 0, 1],  exit: 'DF' },
+    cross:        { disp: [0, 0, 1],  exit: 'DF' },
+    leftCurve:    { disp: [-2, 0, 1], exit: 'DL' },
+    rightCurve:   { disp: [2, 0, 1],  exit: 'DR' },
+    insideCurve:  { disp: [0, 1, 0],  exit: 'FU' },
+    outsideCurve: { disp: [0, -2, 1], exit: 'BD' },
   };
   for (const [type, want] of Object.entries(expected)) {
-    const head = step([0, 0, 0], 'UF', type);
+    const head = step([0, 0, 0], 'DF', type);
     assert.deepEqual(head.cell, want.disp, `${type} displacement`);
     assert.equal(head.pose, want.exit, `${type} exit pose`);
   }
 });
 
-// coordinates.md:114-121, the "Cells occupied" column.
-test('every piece footprint matches the catalogue at UF', () => {
+// coordinates.md, the "Cells occupied" column, measured from the train's cell.
+test('every piece footprint matches the catalogue at DF', () => {
   const expected = {
-    straight:     [[0, 0, 0]],
-    cross:        [[0, 0, 0]],
-    leftCurve:    [[0, 0, 0], [0, 0, 1], [-1, 0, 0], [-1, 0, 1]],
-    rightCurve:   [[0, 0, 0], [0, 0, 1], [1, 0, 0], [1, 0, 1]],
-    insideCurve:  [[0, 0, 0], [0, 0, 1], [0, 1, 0], [0, 1, 1]],
-    outsideCurve: [[0, 0, 0]],
+    straight:     [[0, -1, 0]],
+    cross:        [[0, -1, 0]],
+    leftCurve:    [[0, -1, 0], [0, -1, 1], [-1, -1, 0], [-1, -1, 1]],
+    rightCurve:   [[0, -1, 0], [0, -1, 1], [1, -1, 0], [1, -1, 1]],
+    insideCurve:  [[0, -1, 0], [0, -1, 1], [0, 0, 0], [0, 0, 1]],
+    outsideCurve: [[0, -1, 0]],
   };
   for (const [type, want] of Object.entries(expected)) {
-    assert.deepEqual(sorted(cellsFor(type, 'UF', [0, 0, 0]).material), sorted(want), type);
+    assert.deepEqual(sorted(cellsFor(type, 'DF', [0, 0, 0]).material), sorted(want), type);
   }
 });
 
@@ -140,12 +143,13 @@ test('four inside curves close a vertical ring', () => {
   assert.equal(new Set(placed.flatMap(p => p.material).map(key)).size, 16);
 });
 
-// coordinates.md:129-132 — "Rotation covers up and over". An outside curve entered
-// at BU (climbing a wall) is the same row rotated: 1 forwards, exiting UF.
-test('an outside curve entered at BU crests the wall onto its top', () => {
-  const head = step([0, 0, 0], 'BU', 'outsideCurve');
-  assert.deepEqual(head.cell, [0, 0, 1], 'should move 1 forwards');
-  assert.equal(head.pose, 'UF');
+// coordinates.md — "Rotation covers up and over". An outside curve entered at FU
+// (climbing the near side of a wall) is the same row rotated: the train crests the
+// wall and ends up on top of the next cube, 2 forwards and 1 up, exiting DF.
+test('an outside curve entered at FU crests the wall onto its top', () => {
+  const head = step([0, 0, 0], 'FU', 'outsideCurve');
+  assert.deepEqual(head.cell, [0, 1, 2], 'should move 2 forwards and 1 up');
+  assert.equal(head.pose, 'DF');
 });
 
 test('every move from every pose lands on a valid pose', () => {
@@ -157,30 +161,32 @@ test('every move from every pose lands on a valid pose', () => {
   }
 });
 
-// A piece's own cell is always part of its footprint — it is the cell it clicks into.
-test('every piece occupies its own cell, from every pose', () => {
+// The cube under the train is always part of the footprint — it is the cube the
+// piece clicks into.
+test('every piece occupies the cube under the train, from every pose', () => {
   for (const pose of POSES) {
     for (const type of PIECE_TYPES) {
       const { material } = cellsFor(type, pose, [3, 4, 5]);
-      assert.ok(material.some(c => key(c) === '3,4,5'), `${type} at ${pose} misses its own cell`);
+      const cube = key(cubeOf([3, 4, 5], pose));
+      assert.ok(material.some(c => key(c) === cube), `${type} at ${pose} misses its cube`);
     }
   }
 });
 
 // ---- What the train needs ------------------------------------------------
 
-// coordinates.md:155-162, the clearance table verbatim.
-test('train clearance matches the catalogue at UF', () => {
+// coordinates.md, the clearance table in "What the train needs", from the train's cell.
+test('train clearance matches the catalogue at DF', () => {
   const expected = {
-    straight:     [[0, 1, 0]],
-    cross:        [[0, 1, 0]],
-    leftCurve:    [[0, 1, 0], [0, 1, 1], [-1, 1, 0], [-1, 1, 1]],
-    rightCurve:   [[0, 1, 0], [0, 1, 1], [1, 1, 0], [1, 1, 1]],
+    straight:     [[0, 0, 0]],
+    cross:        [[0, 0, 0]],
+    leftCurve:    [[0, 0, 0], [0, 0, 1], [-1, 0, 0], [-1, 0, 1]],
+    rightCurve:   [[0, 0, 0], [0, 0, 1], [1, 0, 0], [1, 0, 1]],
     insideCurve:  [],
-    outsideCurve: [[0, 1, 0], [0, 1, 1], [0, 0, 1]],
+    outsideCurve: [[0, 0, 0], [0, 0, 1], [0, -1, 1]],
   };
   for (const [type, want] of Object.entries(expected)) {
-    assert.deepEqual(sorted(cellsFor(type, 'UF', [0, 0, 0]).train), sorted(want), type);
+    assert.deepEqual(sorted(cellsFor(type, 'DF', [0, 0, 0]).train), sorted(want), type);
   }
 });
 
@@ -218,15 +224,16 @@ const place = (type, pose, cell) => ({ type, pose, cell, ...cellsFor(type, pose,
 
 test('two pieces in the same cell collide', () => {
   assert.throws(
-    () => assertNoCollisions([place('straight', 'UF', [0, 0, 0]), place('straight', 'UF', [0, 0, 0])]),
+    () => assertNoCollisions([place('straight', 'DF', [0, 0, 0]), place('straight', 'DF', [0, 0, 0])]),
     /collision/,
   );
 });
 
 test('a curve overlapping a straight collides', () => {
-  // The left curve at the origin claims [-1,0,0]; a straight parked there hits it.
+  // The left curve's train at the origin puts a cube at [-1,-1,0]; a straight
+  // whose train is at [-1,0,0] puts its cube there too.
   assert.throws(
-    () => assertNoCollisions([place('leftCurve', 'UF', [0, 0, 0]), place('straight', 'UF', [-1, 0, 0])]),
+    () => assertNoCollisions([place('leftCurve', 'DF', [0, 0, 0]), place('straight', 'DF', [-1, 0, 0])]),
     /collision/,
   );
 });
@@ -234,7 +241,7 @@ test('a curve overlapping a straight collides', () => {
 // coordinates.md:150 — "no cell is ever both material and train".
 test('a cube parked in the train cell above a rail collides', () => {
   assert.throws(
-    () => assertNoCollisions([place('straight', 'UF', [0, 0, 0]), place('straight', 'UF', [0, 1, 0])]),
+    () => assertNoCollisions([place('straight', 'DF', [0, 0, 0]), place('straight', 'DF', [0, 1, 0])]),
     /clearance/,
   );
 });
@@ -244,15 +251,15 @@ test('a cube parked in the train cell above a rail collides', () => {
 // them, and that is legal: there is only one train.
 test('two pieces may want the same train cell', () => {
   assert.doesNotThrow(() => assertNoCollisions([
-    place('straight', 'UF', [0, 0, 0]),   // rail on top, train needs [0,1,0]
-    place('straight', 'DF', [0, 2, 0]),   // rail underneath, train needs [0,1,0] too
+    place('straight', 'DF', [0, 0, 0]),   // standing on the floor of [0,0,0]
+    place('straight', 'UF', [0, 0, 0]),   // hanging from its ceiling, same cell
   ]));
 });
 
 // coordinates.md:176-177 — the cross is one piece visited twice, and both visits
 // want the same single cell above it. Nothing extra to claim.
 test('a cross needs one train cell, not two', () => {
-  assert.equal(cellsFor('cross', 'UF', [0, 0, 0]).train.length, 1);
+  assert.equal(cellsFor('cross', 'DF', [0, 0, 0]).train.length, 1);
 });
 
 // ---- Chaining ------------------------------------------------------------
@@ -300,12 +307,13 @@ test('an open route places every piece and says it is open', () => {
   assert.deepEqual(faults, [], 'an unfinished track is not a broken one');
 });
 
-test('the head is where the next piece would go', () => {
-  // One straight from the origin along the canonical pose: the head moves one cell
-  // forwards and keeps its pose, which is what makes a straight a straight.
+test('the head is where the train is once it has travelled the piece', () => {
+  // The start cube is the origin and the train starts on it, in the cell above.
+  // One straight in the canonical pose moves it one cell forwards and keeps its
+  // pose, which is what makes a straight a straight.
   const { head } = chainOpen(['straight']);
-  assert.deepEqual(head.cell, [0, 0, 1]);
-  assert.equal(head.pose, 'UF');
+  assert.deepEqual(head.cell, [0, 1, 1]);
+  assert.equal(head.pose, 'DF');
 });
 
 // The refactor's own regression net: chainTrack is this plus three throws, so the

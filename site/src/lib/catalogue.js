@@ -4,7 +4,7 @@
 // forwards/backwards, never coordinates.
 
 import { COLORS } from './render/dimensions.js';
-import { step, poseLetters, delta } from '../../../src/track.js';
+import { step, startCell } from '../../../src/track.js';
 
 export const PIECES = [
   {
@@ -78,13 +78,6 @@ export const PIECES = [
 
 // ---- What a piece does to the train, in words -------------------------------
 
-/**
- * Where the train rides for a head `{ cell, pose }`: the cell on the rail-face side
- * of it, which is the cell `MOVES` books as train for a piece clicked in there.
- */
-export const trainCell = ({ cell, pose }) =>
-  cell.map((v, k) => v + delta(poseLetters(pose), { U: 1 })[k]);
-
 // The order a move is read out in, and the word for each way round.
 const AXES = [
   { axis: 2, more: 'forwards', less: 'backwards' },
@@ -99,9 +92,9 @@ const FACING = { L: 'left', R: 'right', U: 'upwards', D: 'downwards', B: 'backwa
  * faces afterwards if that has changed. Read off the model, never written out.
  */
 export function describeMove(type) {
-  const before = { cell: [0, 0, 0], pose: 'UF' };
+  const before = { cell: startCell('DF'), pose: 'DF' };
   const after = step(before.cell, before.pose, type);
-  const [from, to] = [before, after].map(trainCell);
+  const [from, to] = [before.cell, after.cell];
   const moved = AXES
     .map(({ axis, more, less }) => ({ n: to[axis] - from[axis], more, less }))
     .filter(({ n }) => n !== 0)
@@ -109,3 +102,13 @@ export function describeMove(type) {
   const facing = after.pose[1] === 'F' ? '' : `, facing ${FACING[after.pose[1]]}`;
   return `Train moves ${moved.join(' and ')}${facing}`;
 }
+
+// ---- A pose, in words -------------------------------------------------------
+
+// A face is named by the way it points, so the front face is the far one.
+const FACE_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'front', B: 'back' };
+const HEADING_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'forwards', B: 'backwards' };
+
+/** A pose as the post words it: `DL` is "on the down face, heading left (DL)". */
+export const describePose = pose =>
+  `on the ${FACE_WORD[pose[0]]} face, heading ${HEADING_WORD[pose[1]]} (${pose})`;

@@ -15,7 +15,9 @@
 // reification at all.
 
 import { CpModel, CpSolver, CpSolverStatus, LinearExpr } from 'cpsat-js';
-import { POSES, FACES, PIECE_TYPES, POOLS, POOL_OF, SCORES, cellsFor, chainTrack } from '../track.js';
+import {
+  POSES, FACES, PIECE_TYPES, POOLS, POOL_OF, SCORES, cellsFor, chainTrack, startCell,
+} from '../track.js';
 import { transitionTable } from './transitions.js';
 
 /** The most cells any one piece's material fills — the 2×2 curves. */
@@ -260,7 +262,7 @@ function addInventory(model, rows, selectors, inventory, revisit) {
 /** sum of coefficient × selector — the value some quantity takes at this step. */
 const pick = (vars, rows, of) => sum(vars.map((v, r) => v.times(of(rows[r]))));
 
-/** The cells a row's piece claims, as offsets from the head cell. */
+/** The cells a row's piece claims, as offsets from the train's cell at the head. */
 const cellsOf = (row, kind) => cellsFor(PIECE_TYPES[row.type], POSES[row.pose], [0, 0, 0])[kind];
 
 /**
@@ -270,9 +272,9 @@ const cellsOf = (row, kind) => cellsFor(PIECE_TYPES[row.type], POSES[row.pose], 
  * selectors pick out — no multiplication anywhere.
  *
  * The span has to cover every cell any claim can reach, or two different cells
- * would fold onto the same id. Heads live within box + 1 (a head may sit one
- * outside the box with its footprint inside), and a train cell reaches one
- * further again.
+ * would fold onto the same id. Material lives within the box, and every head and
+ * train cell is one cell from material, so within box + 1; the span keeps one
+ * cell of room past that.
  */
 function grid(box) {
   const span = box + 2;
@@ -414,7 +416,7 @@ function buildModel({
   // Head position and pose before each step, plus one more for after the last:
   // that final head is what has to be back where it started. The head's own
   // domain is one wider than the box, because the box binds material cells and
-  // a head can sit at the edge of a footprint that is still inside it.
+  // a head is the train's cell, one beyond the cube it stands on.
   const reach = box + 1;
   const x = [], y = [], z = [], pose = [];
   for (let i = 0; i <= steps; i++) {
@@ -455,8 +457,10 @@ function buildModel({
 
   // The loop closes on cell AND pose: coming home with the wrong face or heading
   // means the last piece cannot click into the first (coordinates.md:95-100).
-  for (const [v, want] of [[x[0], 0], [y[0], 0], [z[0], 0], [pose[0], start],
-                           [x[steps], 0], [y[steps], 0], [z[steps], 0], [pose[steps], start]]) {
+  // Both ends are the train's cell above the start cube, which is the origin.
+  const [hx, hy, hz] = startCell(startPose);
+  for (const [v, want] of [[x[0], hx], [y[0], hy], [z[0], hz], [pose[0], start],
+                           [x[steps], hx], [y[steps], hy], [z[steps], hz], [pose[steps], start]]) {
     model.add(v.equals(want));
   }
 
@@ -609,7 +613,7 @@ const chosenRows = (result, selectors) =>
  * the route is worth under SCORES.
  */
 export async function solveTrack({
-  steps, box = 6, minY = null, exclude = [], startPose = 'UF',
+  steps, box = 6, minY = null, exclude = [], startPose = 'DF',
   collisions = true, checkTrain = true, inventory,
   objective, symmetryBreaking = false, crossings = false, minCrossings,
   tightCrossings = true, require, hint,

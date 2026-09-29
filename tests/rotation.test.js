@@ -209,8 +209,8 @@ test('turnToward turns a half-turn the same way every time', () => {
   // At exactly 180° the direction of travel is undetermined — both ways are the
   // same shortest arc — so the only thing worth asserting is that the choice does
   // not wobble. A pick-up that picked a different side each frame would tear.
-  const from = poseRotation('UF');
-  const to = poseRotation('DF');   // a half-turn about forwards
+  const from = poseRotation('DF');
+  const to = poseRotation('UF');   // a half-turn about forwards
   assert.ok(Math.abs(angleBetween(from, to) - 180) < 1e-9, 'not actually a half-turn');
   const half = turnToward(from, to, 0.5);
   for (let i = 0; i < 5; i++) {

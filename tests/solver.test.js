@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { solveTrack } from '../src/solver/index.js';
 import { transitionTable } from '../src/solver/transitions.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { POSES, PIECE_TYPES, step, chainTrack } from '../src/track.js';
+import { POSES, PIECE_TYPES, startCell, step, chainTrack } from '../src/track.js';
 import { STARTER } from './fixtures.js';
 
 const LETTER = {
@@ -61,10 +61,10 @@ test('the solver proves no loop closes in three pieces', async () => {
 test('every solution returns to the start pose, not just the start cell', async () => {
   const all = await solveTrack({ steps: 4, box: 6, inventory: STARTER, allSolutions: true });
   for (const route of all.routes) {
-    let head = { cell: [0, 0, 0], pose: 'UF' };
+    let head = { cell: startCell('DF'), pose: 'DF' };
     for (const type of route) head = step(head.cell, head.pose, type);
-    assert.deepEqual(head.cell, [0, 0, 0], shape(route));
-    assert.equal(head.pose, 'UF', shape(route));
+    assert.deepEqual(head.cell, startCell('DF'), shape(route));
+    assert.equal(head.pose, 'DF', shape(route));
   }
 });
 

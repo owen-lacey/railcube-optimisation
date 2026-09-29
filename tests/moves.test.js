@@ -3,9 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { step } from '../src/track.js';
-import { describeMove, trainCell } from '../site/src/lib/catalogue.js';
-import { pieceMove } from '../site/src/lib/scenes.js';
+import { POSES, isValidPose, startCell, step } from '../src/track.js';
+import { describeMove, describePose } from '../site/src/lib/catalogue.js';
+import { pieceMove, poseCycle, poseGhost } from '../site/src/lib/scenes.js';
 
 // Owen's wording, with his convention of digits and upwards/downwards.
 const CAPTIONS = {
@@ -24,8 +24,8 @@ test('every piece\'s caption is read off the model in the post\'s words', () => 
 test('the ghosts stand on the piece and on the head it hands on', () => {
   for (const type of Object.keys(CAPTIONS)) {
     const [before, after] = pieceMove(type).ghosts;
-    assert.deepEqual({ cell: before.cell, pose: before.pose }, { cell: [0, 0, 0], pose: 'UF' });
-    assert.deepEqual({ cell: after.cell, pose: after.pose }, step([0, 0, 0], 'UF', type));
+    assert.deepEqual({ cell: before.cell, pose: before.pose }, { cell: startCell('DF'), pose: 'DF' });
+    assert.deepEqual({ cell: after.cell, pose: after.pose }, step(startCell('DF'), 'DF', type));
     assert.deepEqual([before.tint, after.tint], ['before', 'after']);
     // Before rides the piece itself; after, the straight that would click in next.
     assert.deepEqual([before.type, after.type], [type, 'straight']);
@@ -35,9 +35,29 @@ test('the ghosts stand on the piece and on the head it hands on', () => {
 test('the lattice holds the piece and both ghosts\' train cells', () => {
   for (const type of Object.keys(CAPTIONS)) {
     const { pieces, ghosts, grid } = pieceMove(type);
-    const cells = [...pieces[0].material, ...ghosts.map(trainCell)];
+    const cells = [...pieces[0].material, ...ghosts.map(g => g.cell)];
     for (const cell of cells) {
       cell.forEach((v, a) => assert.ok(v >= grid.lo[a] && v <= grid.hi[a], `${type}: ${cell}`));
     }
   }
+});
+
+test('the pose cycle stands the train in one cell in every pose, floor by floor', () => {
+  const ghosts = POSES.map(poseGhost);
+  const { fill, grid } = poseCycle();
+  assert.equal(new Set(ghosts.map(g => g.pose)).size, 24);
+  for (const ghost of ghosts) {
+    assert.ok(isValidPose(ghost.pose), ghost.pose);
+    assert.deepEqual(ghost.cell, fill[0]);
+    assert.deepEqual([grid.lo, grid.hi], [ghost.cell, ghost.cell]);
+  }
+  // Four headings on each floor before moving on to the next.
+  assert.deepEqual(POSES.slice(0, 4).map(p => p[0]), ['U', 'U', 'U', 'U']);
+});
+
+test('a pose is worded as its face and heading, with its code', () => {
+  assert.equal(describePose('DF'), 'on the down face, heading forwards (DF)');
+  assert.equal(describePose('UR'), 'on the up face, heading right (UR)');
+  assert.equal(describePose('BD'), 'on the back face, heading down (BD)');
+  assert.equal(describePose('LU'), 'on the left face, heading up (LU)');
 });

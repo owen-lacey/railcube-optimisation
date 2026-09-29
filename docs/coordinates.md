@@ -33,7 +33,8 @@ right is x+1, one cube up is y+1, one cube forwards is z+1, and so on.
 (Internal notation only — the blog post says "two cubes to the right and one up" rather
 than (2, 1, 0).)
 
-The origin (0, 0, 0) is the cell the start cube occupies.
+The origin (0, 0, 0) is the cell the start cube occupies. The train starts in the cell
+on top of it, (0, 1, 0).
 
 ## The reader's axes
 
@@ -49,45 +50,52 @@ is written in this frame, so a cell one to the right of the start reads x = -1.
 
 ## Faces
 
-A cube's six faces are named by the direction each one points, using the same six
+A cell's six faces are named by the direction each one points, using the same six
 letters. The **up face** points up (the "top" in pieces.md), the **down face** points
 down (the "bottom"), and the **front face** points forwards — meaning it's the *far*
-side of the cube from the viewer, the way a car's front points the way it's travelling.
+side of the cell from the viewer, the way a car's front points the way it's travelling.
 
-## Pose: face + heading
+## Pose: floor + heading
 
-Position alone doesn't say how the track continues — a track arriving at the same cube
-can be riding on top of it or clinging to its side, and those have different legal next
-pieces. So the state of the track's open end is a position plus a **pose**.
+The train is always in a cell, facing some way *within* it. Position alone doesn't say
+which way — a train in a given cell can be riding along its floor or clinging to one of
+its walls, and those have different legal next pieces. So the state of the track's open
+end is a position plus a **pose**.
 
-The position is the **next empty cell** — the cell the next piece will click into, not
-the cube the last-placed piece occupies. The pose, written as two letters, says how the
-rail enters that cell:
+Both are read **once the train has finished travelling a piece**, never part-way along
+one. The position is the **cell the train is in** at that moment: the cell over the cube
+the next piece will click into. The pose, written as two letters, says how the train
+stands in that cell:
 
-1. **Face** — which face of the cube the rail is on
+1. **Floor** — which face of its cell the train is standing on. The next piece's cube
+   is on the other side of that face, and its rail is on the cube's opposite face.
 2. **Heading** — the absolute direction the train is travelling
 
 Examples:
 
 | Pose | Meaning |
 |---|---|
-| `UF` | on top of the cube, heading forwards — the ordinary case |
-| `FD` | on the front face, heading down — driving down the far wall |
-| `DR` | on the down face, heading right — hanging upside down, moving right |
-| `RU` | on the right face, heading up — climbing the right-hand wall |
+| `DF` | standing on the down face, heading forwards — the ordinary case, riding on top of a cube |
+| `BD` | standing on the back face, heading down — driving down the far side of a wall |
+| `UR` | standing on the up face, heading right — hanging upside down, moving right |
+| `LU` | standing on the left face, heading up — climbing a wall to its left |
+
+Reading positions and poses only between pieces is what keeps this simple. Part-way
+along a piece the train can pass through cells a pose would not describe — the inside
+curve's train runs through the hollow of its own arc — but nothing is ever stated about
+those moments.
 
 ### Validity rule
 
-The rail's direction of travel always lies flat along the face it's mounted on, so
-**the heading can never be the face letter or its opposite**. That rules out the pairs
-on the same axis:
+The train travels along its floor, so **the heading can never be the floor letter or
+its opposite**. That rules out the pairs on the same axis:
 
 - Same letter: `FF` `BB` `UU` `DD` `LL` `RR`
 - Opposites: `FB` `BF` `UD` `DU` `LR` `RL`
 
-Every face admits exactly the four headings perpendicular to it:
+Every floor admits exactly the four headings perpendicular to it:
 
-| Face | Valid headings |
+| Floor | Valid headings |
 |---|---|
 | U, D | F, B, L, R |
 | F, B | U, D, L, R |
@@ -101,40 +109,44 @@ and non-redundant (no two codes mean the same pose).
 
 The model uses both views of the same movement:
 
-- **Relative** — what one piece does: a displacement (how the position changes) and a
-  new pose. A piece's effect depends on the pose it's entered with: the same outside
-  curve carries an `UF` train over an edge into `FD`, but an `RU` train around a
+- **Relative** — what one piece does: a displacement (how the train's cell changes) and
+  a new pose. A piece's effect depends on the pose it's entered with: the same outside
+  curve carries a `DF` train over an edge into `BD`, but an `LU` train around a
   different edge entirely.
-- **Absolute** — where the track currently is: the running total of every displacement
-  so far, plus the current pose.
+- **Absolute** — where the track currently is: the train's starting cell plus the
+  running total of every displacement so far, and the current pose.
 
-The closed-loop constraint falls out of this directly. The head starts at (0, 0, 0)
-with the starting pose, and the start cube is the first piece clicked into it. The
-track is a closed loop when, after the last piece, the head is back at (0, 0, 0) with
-that same pose — every displacement summing to zero. Getting back to the start cell
-with the wrong face or heading doesn't close the loop — the last piece has to click
-into the first one exactly.
+The closed-loop constraint falls out of this directly. The start cube is at (0, 0, 0)
+and the train starts on top of it, at (0, 1, 0) facing `DF`; the start cube is the
+first piece clicked in under it. The track is a closed loop when, after the last piece,
+the train is back at (0, 1, 0) facing `DF` — every displacement summing to zero.
+Getting back to the start cell with the wrong floor or heading doesn't close the loop —
+the last piece has to click into the first one exactly.
 
 ## What each piece does
 
 The catalogue of relative moves. Each piece is shown in one concrete orientation —
-clicked into a head whose pose is `UF` (rail on top, heading forwards). Entered in any
-other pose, the piece is simply rotated, and its displacement and exit pose rotate
-with it.
+entered by a train facing `DF` (standing on the down face of its cell, heading
+forwards), so the piece's cube is the one below the train. Entered in any other pose,
+the piece is simply rotated, and its displacement and exit pose rotate with it.
 
-Displacements point at the **next empty cell** (the head convention above), not at the
-last cell the piece occupies. "Cells occupied" is the piece's bounding box — what must
-be empty to place it. The cells the *train* needs are a second, separate list, tabled
-under [what the train needs](#what-the-train-needs) below.
+Displacements are measured from the cell the train is in when it gets onto the piece
+to the cell it is in once it has finished travelling it. "Cells occupied" is the
+piece's bounding box — what must be empty to place it — measured from the same
+starting cell. The cells the *train* needs are a second, separate list, tabled under
+[what the train needs](#what-the-train-needs) below.
 
-| Piece | Next empty cell | (x, y, z) | Exit pose | Cells occupied |
+| Piece | Train moves | (x, y, z) | Exit pose | Cells occupied |
 |---|---|---|---|---|
-| Straight | 1 forwards | (0, 0, 1) | `UF` | its own cell |
-| Cross | 1 forwards | (0, 0, 1) | `UF` | its own cell |
-| Left curve | 1 forwards, 2 left | (−2, 0, 1) | `UL` | 2×2: own cell, 1 forwards, 1 left, 1 forwards+left |
-| Right curve | 1 forwards, 2 right | (2, 0, 1) | `UR` | 2×2, mirror of the left curve |
-| Inside curve | 1 forwards, 2 up | (0, 2, 1) | `BU` | 2×2: own cell, 1 forwards, 1 up, 1 forwards+up |
-| Outside curve | 1 down | (0, −1, 0) | `FD` | its own cell |
+| Straight | 1 forwards | (0, 0, 1) | `DF` | the cube below the train |
+| Cross | 1 forwards | (0, 0, 1) | `DF` | the cube below the train |
+| Left curve | 1 forwards, 2 left | (−2, 0, 1) | `DL` | 2×2 below the train: 1 down, 1 down+forwards, 1 down+left, 1 down+forwards+left |
+| Right curve | 1 forwards, 2 right | (2, 0, 1) | `DR` | 2×2, mirror of the left curve |
+| Inside curve | 1 up | (0, 1, 0) | `FU` | 2×2: 1 down, 1 down+forwards, the train's own cell, 1 forwards |
+| Outside curve | 1 forwards, 2 down | (0, −2, 1) | `BD` | the cube below the train |
+
+The inside curve is the one piece whose footprint includes the cell the train starts
+in: the train gets on inside the hollow of the arc it is about to climb.
 
 Two sanity checks:
 
@@ -142,22 +154,23 @@ Two sanity checks:
   rotated 90° from the last, sums to zero displacement — a closed loop — and the four
   2×2 footprints tile a 4×4 square exactly. That is the free-standing donut in the
   product photos.
-- **Rotation covers "up and over".** An outside curve entered at `BU` (climbing a wall)
-  is the same table row rotated: the displacement becomes 1 forwards and the exit pose
-  `UF` — the train crests the wall onto its top. No extra rows are needed; every entry
-  pose is a rotation of the row above.
+- **Rotation covers "up and over".** An outside curve entered at `FU` (climbing the
+  near side of a wall) is the same table row rotated: the train moves 2 forwards and
+  1 up, and the exit pose is `DF` — it crests the wall onto its top. No extra rows are
+  needed; every entry pose is a rotation of the row above.
 
 The vertical pair is asymmetric on purpose. The inside curve turns the train through
 the *inside* of a corner, so it needs a wide arc for the train to fit — hence the 2×2
 footprint. The outside curve wraps the train around the *outside* of a single cube's
-edge, so it can be as tight as the cube itself — no forwards progress at all; the next
-cube clicks in directly underneath.
+edge, so it can be as tight as the cube itself — no forwards progress for the cubes at
+all; the next cube clicks in directly underneath, and the train comes round the edge
+to face down its far side.
 
 ## What the train needs
 
 The train rides on the outside of the track, so it needs cells of its own on top of the
 ones the pieces occupy. **The rule: wherever the train is, it counts as filling the whole
-cell on the rail's face side** — the cell the rail's face points into, never the cube's
+cell it is in** — the cell on the far side of its floor from the cube, never the cube's
 own cell. It really only pokes a bit under half a cell past the surface, but a cell is
 the unit the model reasons in, and rounding up costs nothing: a cube in that cell would
 have its own surface right there to be hit.
@@ -165,19 +178,20 @@ have its own surface right there to be hit.
 So each piece claims two lists — the cells its **material** fills, and the cells its
 **train** needs — and the no-collision rule becomes: no cell is ever both.
 
-Same convention as the table above: piece entered at `UF`, everything else is this
-rotated.
+Same convention as the table above: piece entered at `DF`, offsets from the train's
+starting cell, everything else is this rotated.
 
 | Piece | Cells the train needs | Count |
 |---|---|---|
-| Straight | 1 up | 1 |
-| Cross | 1 up | 1 |
-| Left curve | the whole 2×2 layer one up from the footprint | 4 |
-| Right curve | 2×2 layer one up, mirror of the left curve | 4 |
+| Straight | its own cell | 1 |
+| Cross | its own cell | 1 |
+| Left curve | the whole 2×2 layer it is in: its cell, 1 forwards, 1 left, 1 forwards+left | 4 |
+| Right curve | the 2×2 layer it is in, mirror of the left curve | 4 |
 | Inside curve | none beyond the piece's own footprint | 0 |
-| Outside curve | 1 up, 1 up+1 forwards, 1 forwards | 3 |
+| Outside curve | its own cell, 1 forwards, 1 forwards+down | 3 |
 
-Four of the six read straight off "one cell up". The other two are the interesting ones:
+Four of the six read straight off "the cells the train is in". The other two are the
+interesting ones:
 
 - **The inside curve needs nothing extra.** Its rail is on the *concave* face, so the
   cell the rail faces into is a cell the arc's own 2×2 footprint already claims — the

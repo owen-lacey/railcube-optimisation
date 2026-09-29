@@ -21,7 +21,7 @@
 
 import * as CANNON from 'cannon-es';
 import { CUBE } from './render/dimensions.js';
-import { toWorld, poseRotation, through, add, sub } from './render/vec.js';
+import { cubePosition, poseRotation, through, add, sub } from './render/vec.js';
 import { BOXES, MASS, CENTROID } from './shapes.js';
 
 const GRAVITY = 900;      // scene units per second², ~9.8 m/s² with a cube as 22 cm
@@ -85,9 +85,9 @@ function bodyFor({ cell, type, pose }) {
   const body = new CANNON.Body({
     mass: MASS[type],
     // A body's position *is* its centre of mass, so it stands where that point
-    // is: the cell's origin, plus the centroid turned into the pose. Drawing it
+    // is: the cube's origin, plus the centroid turned into the pose. Drawing it
     // needs the inverse of this, which `originAt` in `shapes.js` is.
-    position: vec(add(toWorld(cell), through(basis, centroid))),
+    position: vec(add(cubePosition({ cell, pose }), through(basis, centroid))),
     quaternion: quaternionOf(basis),
     sleepSpeedLimit: SLEEP_SPEED,
     sleepTimeLimit: SLEEP_TIME,

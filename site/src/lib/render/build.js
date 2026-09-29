@@ -35,7 +35,7 @@
 // to a static one and nothing is baked twice.
 
 import { CUBE, ALARM, ALARM_FLASH, ALARM_PERIOD } from './dimensions.js';
-import { toWorld, poseRotation, axisAngle, compose, turnToward, add } from './vec.js';
+import { cubePosition, poseRotation, axisAngle, compose, turnToward, add } from './vec.js';
 import { createDriver } from './drive.js';
 import { originAt, comAt } from '../shapes.js';
 import { identify } from '../../../../src/layouts.js';
@@ -110,7 +110,7 @@ function slotsFor(stage, pieces, { beat = 0, lift = 0, flight = 0, delay = 0 } =
     // face, in that order — so the arrival is read straight off it and turns with
     // the piece: it slides in along its heading, tumbling about its own right.
     const basis = poseRotation(piece.pose);
-    const position = toWorld(piece.cell);
+    const position = cubePosition(piece);
     // Whether this is a pick-up is settled here, before anything is minted, so
     // every slot is judged against the stage as the collapse left it.
     const pickUp = stage.held(ids[i]);
@@ -242,7 +242,7 @@ function departuresFor(leaving, { beat, flight }) {
       from: { basis: cube.basis, position: cube.position },
       to: {
         basis: compose(axisAngle(basis[0], TILT), basis),
-        position: add(toWorld(piece.cell), scale(basis[1], STANDOFF * CUBE)),
+        position: add(cubePosition(piece), scale(basis[1], STANDOFF * CUBE)),
       },
       at: i * beat,
       ends: i * beat + flight,

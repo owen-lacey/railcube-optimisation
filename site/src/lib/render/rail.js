@@ -2,13 +2,13 @@
 //
 // railMap(u, w, s) is the point `u` to the right of the rail and `w` above it,
 // `s` of the way through the piece (0 at the entry mouth, 1 at the exit), in
-// the piece's canonical UF frame. The curves reuse the very sweep maps their
+// the piece's canonical DF frame. The curves reuse the very sweep maps their
 // geometry is built from, so the train cannot drift off the metal strip.
 
-import { MOVES, poseLetters, delta } from '../../../../src/track.js';
+import { MOVES, OPPOSITE, cubeOf, poseLetters, delta } from '../../../../src/track.js';
 import { CUBE, RAIL, CHANNEL_D } from './dimensions.js';
 import { ARC_MAP, EDGE_R, OUT_C } from './pieces.js';
-import { DIR, add, sub, len, unit, cross, through, toWorld, poseRotation } from './vec.js';
+import { DIR, add, sub, len, unit, cross, through, toWorld, poseRotation, cubePosition } from './vec.js';
 
 const OUT_RF = EDGE_R - CHANNEL_D;                  // rail radius round the rounded edge
 const OUT_LEGS = [CUBE / 2 + OUT_C, OUT_RF * Math.PI / 2]; // flat top run, then the arc
@@ -62,10 +62,13 @@ export function assertRailMouths() {
   const MOUTH = [0, -CUBE / 2, RAIL];
   for (const [type, move] of Object.entries(MOVES)) {
     const exit = poseRotation(move.exit);
+    // The next piece's cube, relative to this one's: `disp` runs between the
+    // train's cells, and each cube is the one under its train.
+    const next = sub(cubeOf(delta(poseLetters('DF'), move.disp), move.exit), cubeOf([0, 0, 0], 'DF'));
     const want = {
-      pos: add(toWorld(delta(poseLetters('UF'), move.disp)), through(exit, MOUTH)),
+      pos: add(toWorld(next), through(exit, MOUTH)),
       fwd: DIR[move.exit[1]],
-      up: DIR[move.exit[0]],
+      up: DIR[OPPOSITE[move.exit[0]]],
     };
     const ends = { 0: { pos: MOUTH, fwd: DIR.F, up: DIR.U }, 1: want };
     for (const [s, expected] of Object.entries(ends)) {
@@ -91,7 +94,7 @@ assertRailMouths();
 // loop the polyline closes too.
 export function trackPath(placed, samples = 24) {
   return placed.flatMap(({ cell, type, pose }) => {
-    const basis = poseRotation(pose), origin = toWorld(cell);
+    const basis = poseRotation(pose), origin = cubePosition({ cell, pose });
     return Array.from({ length: samples }, (_, k) => {
       const { pos, fwd, up } = railFrame(type, k / samples);
       return {
@@ -104,14 +107,14 @@ export function trackPath(placed, samples = 24) {
 }
 
 // Where a train stands to be looked at rather than driven: on a `type` piece at
-// `cell` and `pose`, half a cube along its rail from the entry — the middle of a
+// the head `cell` and `pose`, half a cube along its rail from the entry — the middle of a
 // straight, and still inside the first cube of a curve — lying along the rail
 // there the way the driver lays it. The basis is the driver's, `[right, fwd, up]`.
 export function trainAt(type, cell, pose) {
   const { pos, fwd, up } = railFrame(type, alongRail(type, CUBE / 2));
   const turn = poseRotation(pose);
   const [f, u] = [fwd, up].map(v => through(turn, v));
-  return { basis: [cross(f, u), f, u], position: add(toWorld(cell), through(turn, pos)) };
+  return { basis: [cross(f, u), f, u], position: add(cubePosition({ cell, pose }), through(turn, pos)) };
 }
 
 // How far through a piece (0..1) the rail has run `distance` from its entry,

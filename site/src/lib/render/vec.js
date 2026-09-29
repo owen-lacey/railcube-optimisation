@@ -4,6 +4,7 @@
 // Y=forwards, Z=up). Grid placement: PolyCSS position = cell × CUBE.
 
 import { CUBE } from './dimensions.js';
+import { cubeOf } from '../../../../src/track.js';
 
 /** World (PolyCSS) direction of each project-frame letter. */
 export const DIR = {
@@ -28,17 +29,23 @@ export const toWorld = ([x, y, z]) => [x * CUBE, z * CUBE, y * CUBE];
 /** PolyCSS position → the project cell it falls in. */
 export const toCell = ([x, y, z]) => [x, z, y].map(v => Math.round(v / CUBE));
 
-// Pieces are authored in the canonical pose (rail on top face, heading
-// forwards). The rotation maps local up onto the pose's face direction and
-// local forwards onto its heading; the third axis follows from
-// right-handedness.
+// Pieces are authored in the canonical pose (the train standing on the down
+// face of its cell, heading forwards: rail on the cube's top face). The rotation
+// maps local up onto the way out of the pose's floor and local forwards onto its
+// heading; the third axis follows from right-handedness.
 export function poseRotation(pose) {
-  const [face, heading] = [DIR[pose[0]], DIR[pose[1]]];
-  if (face.some((v, k) => Math.abs(v) === Math.abs(heading[k]) && v !== 0)) {
-    throw new Error(`invalid pose ${pose}: heading must be perpendicular to face`);
+  const [up, heading] = [DIR[pose[0]].map(v => -v), DIR[pose[1]]];
+  if (up.some((v, k) => Math.abs(v) === Math.abs(heading[k]) && v !== 0)) {
+    throw new Error(`invalid pose ${pose}: heading must be perpendicular to floor`);
   }
-  return [cross(heading, face), heading, face]; // images of local X, Y (forwards), Z (up)
+  return [cross(heading, up), heading, up]; // images of local X, Y (forwards), Z (up)
 }
+
+/**
+ * Where a piece is drawn. Its geometry is authored about its own cube, and a
+ * head names the train's cell, so this is the cube under the train there.
+ */
+export const cubePosition = ({ cell, pose }) => toWorld(cubeOf(cell, pose));
 
 /**
  * A turn of `degrees` about `axis`, as a rotation basis. Rodrigues' formula,

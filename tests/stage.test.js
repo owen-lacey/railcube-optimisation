@@ -27,7 +27,7 @@ import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from
 import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
-import { toWorld, poseRotation, through, add } from '../site/src/lib/render/vec.js';
+import { toWorld, cubePosition, poseRotation, through, add } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 
@@ -106,8 +106,8 @@ function fakeClock() {
 
 const piecesOf = shape => paint(chainTrack(routeOf(shape)));
 
-/** Where a piece's mesh belongs when it has landed: its cell, in world units. */
-const restingPlace = piece => toWorld(piece.cell);
+/** Where a piece's mesh belongs when it has landed: its cube, in world units. */
+const restingPlace = piece => cubePosition(piece);
 
 const SET = 'LIRIROSOLORLLSORII';
 const OTHER = 'LRRIIOOSRLLOOLSRII';   // the same 18 cubes, arranged differently
@@ -910,8 +910,8 @@ test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', (
   const ghosts = () => handles.filter(h => h.classes.has(GHOST_CLASS));
 
   stage.setGhosts([
-    { type: 'straight', cell: [0, 0, 0], pose: 'UF', tint: 'before' },
-    { type: 'straight', cell: [0, -1, 0], pose: 'FD', tint: 'after' },
+    { type: 'straight', cell: [0, 1, 0], pose: 'DF', tint: 'before' },
+    { type: 'straight', cell: [0, -1, 1], pose: 'BD', tint: 'after' },
   ]);
   const first = ghosts();
   assert.equal(first.length, 2);
@@ -925,7 +925,7 @@ test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', (
   stage.clear();
   assert.ok(first.every(h => !h.disposed), 'clearing the cubes took the ghosts');
 
-  stage.setGhosts([{ type: 'straight', cell: [0, 0, 1], pose: 'UF', tint: 'after' }]);
+  stage.setGhosts([{ type: 'straight', cell: [0, 1, 1], pose: 'DF', tint: 'after' }]);
   assert.ok(first.every(h => h.disposed), 'replaced ghosts were left behind');
   stage.setGhosts([]);
   assert.ok(ghosts().every(h => h.disposed));

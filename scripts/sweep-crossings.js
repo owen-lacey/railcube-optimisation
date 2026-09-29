@@ -81,7 +81,7 @@ const tight = !process.argv.includes('--no-tight');
 // A sweep file holds one question. The fingerprint goes on every line so a file
 // of two inventories — a file of incomparable layouts — is caught on sight.
 const config = { inventory: INVENTORY, steps: STEPS, box: BOX, minY: 0,
-                 startPose: 'UF', tightCrossings: tight };
+                 startPose: 'DF', tightCrossings: tight };
 const fingerprint = JSON.stringify(config);
 
 const already = existsSync(out)

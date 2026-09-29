@@ -25,7 +25,7 @@
 // which re-lights it, so the settled pile everyone actually looks at is correct.
 // The approximation exists only while something is mid-air.
 
-import { poseRotation, toWorld } from './vec.js';
+import { poseRotation, cubePosition } from './vec.js';
 import { createWorld, basisOf, isAsleep } from '../physics.js';
 import { originAt } from '../shapes.js';
 import { identify } from '../../../../src/layouts.js';
@@ -71,7 +71,7 @@ export function tumblePhase(stage, pieces, { drop = 3, limit = SETTLE_LIMIT, kee
       type: piece.type,
       color: piece.color,
       basis,
-      position: toWorld(piece.cell),
+      position: cubePosition(piece),
     });
     return { id: ids[i], body, cube, resting: true };
   });

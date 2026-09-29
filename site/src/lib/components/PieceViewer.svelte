@@ -5,7 +5,7 @@
   let {
     type,
     poses = false,
-    pose = 'UF',
+    pose = 'DF',
     scale = 1,
     aspect = poses ? '16 / 9' : '5 / 4',
     interactive = false,

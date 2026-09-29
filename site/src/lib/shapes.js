@@ -10,12 +10,12 @@
 // So: shapes and masses here, with no dependency on cannon. The world next door.
 //
 // Everything is in the renderer's world frame (right, forwards, up; one cube =
-// CUBE units) and in the canonical UF pose, same as the drawn geometry.
+// CUBE units) and in the canonical DF pose, same as the drawn geometry.
 
 import { CUBE } from './render/dimensions.js';
 import { ARC_MAP, ARC_R } from './render/pieces.js';
 import { toWorld, add, sub, unit, cross, through } from './render/vec.js';
-import { MOVES, cellsFor } from '../../../src/track.js';
+import { MOVES, cellsFor, startCell } from '../../../src/track.js';
 
 const SEGMENTS = 6;       // collision boxes per quarter arc
 const DENSITY = 1 / 4000; // arbitrary: only mass *ratios* between pieces matter
@@ -72,7 +72,7 @@ function arcBoxes(map) {
 const CUBE_BOX = [{ centre: [0, 0, 0], half: [CUBE / 2, CUBE / 2, CUBE / 2], basis: null }];
 
 /**
- * The collision shape of each piece type, in the canonical UF pose. The outside
+ * The collision shape of each piece type, in the canonical DF pose. The outside
  * curve is in with the cubes on purpose: it *is* one cube, with one edge rounded
  * off, and a box is a truer shape for it than anything more elaborate.
  */
@@ -161,7 +161,7 @@ const FOOTPRINT_SLOP = CUBE / 10;
  */
 export function assertFootprints() {
   for (const type of Object.keys(BOXES)) {
-    const cells = cellsFor(type, 'UF', [0, 0, 0]).material.map(toWorld);
+    const cells = cellsFor(type, 'DF', startCell('DF')).material.map(toWorld);
     const bound = pick => [0, 1, 2].map(a => pick(...cells.map(c => c[a])));
     const lo = bound(Math.min).map(v => v - CUBE / 2);
     const hi = bound(Math.max).map(v => v + CUBE / 2);

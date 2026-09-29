@@ -4,11 +4,10 @@
 // `drive` marks the scenes that are a real route, and so can have a train run
 // on them: a single piece and the pose gallery are catalogues, not tracks.
 
-import { chainTrack, chainOpen, cellsFor, step, SCORES } from '../../../src/track.js';
+import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step, SCORES } from '../../../src/track.js';
 import { routeOf, identify } from '../../../src/layouts.js';
 import { COLORS, ALARM } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
-import { trainCell } from './catalogue.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
 export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[piece.type] }));
@@ -26,7 +25,7 @@ export const scoreOf = pieces =>
  * per scene does not scale — this reads the pieces instead.
  */
 export function frame(pieces, extra = {}) {
-  const cells = pieces.flatMap(p => p.material ?? [p.cell]);
+  const cells = pieces.flatMap(p => p.material ?? [cubeOf(p.cell, p.pose)]);
   const axis = a => cells.map(c => c[a]);
   const lo = [0, 1, 2].map(a => Math.min(...axis(a)));
   const hi = [0, 1, 2].map(a => Math.max(...axis(a)));
@@ -96,7 +95,8 @@ export function openScene(letters) {
   // ID would be null and the alarm would go nowhere.
   const at = fault === null ? -1 : fault.index;
   const blamed = at >= 0 && kept[at].revisit
-    ? kept.findIndex(p => !p.revisit && p.cell.join(',') === kept[at].cell.join(','))
+    ? kept.findIndex(p => !p.revisit
+      && cubeOf(p.cell, p.pose).join(',') === cubeOf(kept[at].cell, kept[at].pose).join(','))
     : at;
 
   const pieces = paint(kept).map((piece, i) => (i === blamed ? { ...piece, color: ALARM } : piece));
@@ -122,7 +122,7 @@ export function tumbleScene(route, { drop = 3 } = {}) {
 
 /** The box of cells a set of pieces occupies. */
 export const boundsOf = pieces => {
-  const cells = pieces.flatMap(p => p.material ?? [p.cell]);
+  const cells = pieces.flatMap(p => p.material ?? [cubeOf(p.cell, p.pose)]);
   const bound = pick => [0, 1, 2].map(a => pick(...cells.map(c => c[a])));
   return { lo: bound(Math.min), hi: bound(Math.max) };
 };
@@ -133,7 +133,7 @@ export const boundsOf = pieces => {
  * about where cubes are; the train rides a cell above them and has to be inside.
  */
 export const extentOf = pieces => {
-  const cells = pieces.flatMap(p => [...(p.material ?? [p.cell]), ...(p.train ?? [])]);
+  const cells = pieces.flatMap(p => [...(p.material ?? [cubeOf(p.cell, p.pose)]), ...(p.train ?? [])]);
   const bound = pick => [0, 1, 2].map(a => pick(...cells.map(c => c[a])));
   return { lo: bound(Math.min), hi: bound(Math.max) };
 };
@@ -244,7 +244,8 @@ export function poseGallery(type) {
   const pieces = FACES.flatMap((face, row) =>
     FACES.filter(h => DIR[h].every((v, k) => v === 0 || DIR[face][k] === 0))
       .map((heading, col) => ({
-        cell: [col * gap, 0, -row * gap],
+        // The head goes wherever puts the cube on the gallery's grid.
+        cell: startCell(face + heading).map((v, k) => v + [col * gap, 0, -row * gap][k]),
         type,
         pose: face + heading,
         color: COLORS[type],
@@ -262,12 +263,13 @@ export function poseGallery(type) {
  * One piece on its own, framed close — for the component library. `pose` defaults
  * to the canonical one; `scale` multiplies the zoom, for a view with no room to spare.
  */
-export function singlePiece(type, { pose = 'UF', scale = 1 } = {}) {
+export function singlePiece(type, { pose = 'DF', scale = 1 } = {}) {
   // The arc pieces fill a 2×2 footprint, so centring on the one cell the piece
   // is keyed to puts it half out of shot. Ask the model which cells it really
   // occupies and let `frame` do the arithmetic, exactly as it does for a layout.
-  const { material } = cellsFor(type, pose, [0, 0, 0]);
-  const pieces = [{ cell: [0, 0, 0], type, pose, color: COLORS[type], material }];
+  const cell = startCell(pose);
+  const { material } = cellsFor(type, pose, cell);
+  const pieces = [{ cell, type, pose, color: COLORS[type], material }];
   // `frame`'s zoom is capped at 8, which is fine for layouts but flattens the
   // difference between a single cube and a 2×2 arc — both hit the cap, so the
   // arcs come out cropped. One piece is the subject of its own card, so the
@@ -297,10 +299,10 @@ export function singlePiece(type, { pose = 'UF', scale = 1 } = {}) {
  * a scene this small hits it every time and comes out drawn at half the size.
  */
 export function pieceMove(type) {
-  const before = { cell: [0, 0, 0], pose: 'UF' };
+  const before = { cell: startCell('DF'), pose: 'DF' };
   const after = step(before.cell, before.pose, type);
   const pieces = [{ ...before, type, color: COLORS[type], ...cellsFor(type, before.pose, before.cell) }];
-  const grid = extentOf([...pieces, { material: [], train: [before, after].map(trainCell) }]);
+  const grid = extentOf([...pieces, { material: [], train: [before.cell, after.cell] }]);
   const diagonal = Math.hypot(...[0, 1, 2].map(a => grid.hi[a] - grid.lo[a] + 1));
   return {
     pieces,
@@ -313,3 +315,27 @@ export function pieceMove(type) {
     camera: { ...frameTight(grid), zoom: 42 / diagonal },
   };
 }
+
+// ---- Every pose inside one cell --------------------------------------------
+
+/**
+ * One cell with nothing in it, lattice and fill, for a train to be shown in each
+ * of its 24 poses in turn — see `poseGhost`. Framed like `pieceMove`, on the cell.
+ */
+export function poseCycle() {
+  const grid = { lo: [0, 0, 0], hi: [0, 0, 0] };
+  return {
+    pieces: [],
+    drive: false,
+    grid,
+    fill: [grid.lo],
+    camera: { ...frameTight(grid), zoom: 42 / Math.sqrt(3) },
+  };
+}
+
+/**
+ * The train in `pose` inside `poseCycle`'s cell: standing on the straight that
+ * pose would click into next, so it is centred in the cell on that pose's floor.
+ * The straight itself is not drawn.
+ */
+export const poseGhost = pose => ({ type: 'straight', cell: [0, 0, 0], pose, tint: 'after' });

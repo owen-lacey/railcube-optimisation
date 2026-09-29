@@ -23,9 +23,10 @@ const cross3 = (a, b) => [
 const letterOf = v => FACES.find(k => PROJ[k].every((c, i) => c === v[i]));
 
 /**
- * A pose is FACE + HEADING. The rail's direction of travel lies flat along the
- * face it is mounted on, so the heading can never be the face letter or its
- * opposite — 24 valid poses out of 36 (coordinates.md:63-82).
+ * A pose is FLOOR + HEADING, read from inside the cell the train is in: which of
+ * that cell's faces the train stands on, and which way it is going. The train
+ * travels along its floor, so the heading can never be the floor letter or its
+ * opposite — 24 valid poses out of 36 (docs/coordinates.md, "Pose").
  */
 export const isValidPose = pose =>
   typeof pose === 'string' && pose.length === 2 &&
@@ -38,21 +39,35 @@ export const POSES = FACES.flatMap(face =>
 
 /**
  * A pose as a letter → letter substitution: where each direction of a piece
- * authored in the canonical UF pose ends up once the piece is turned. Letters
+ * authored in the canonical DF pose ends up once the piece is turned. Letters
  * name physical directions, so rotating a move is pure substitution.
  *
  * The cross product needs care. The project frame is LEFT-handed — with x=right
  * and y=up, right × up points at the viewer, but z is forwards, away from them.
- * So the train's right hand is `face × heading` here. Write it the other way
- * round (as a right-handed frame would) and every pose's right becomes left:
- * all curves mirror, every route still closes, and nothing throws.
+ * So the train's right hand is `overhead × heading` here, overhead being the
+ * floor's opposite. Write it the other way round (as a right-handed frame would)
+ * and every pose's right becomes left: all curves mirror, every route still
+ * closes, and nothing throws.
  */
 export function poseLetters(pose) {
-  if (!isValidPose(pose)) throw new Error(`invalid pose ${pose}: heading must be perpendicular to face`);
-  const map = { U: pose[0], F: pose[1], R: letterOf(cross3(PROJ[pose[0]], PROJ[pose[1]])) };
-  for (const k of ['U', 'F', 'R']) map[OPPOSITE[k]] = OPPOSITE[map[k]];
+  if (!isValidPose(pose)) throw new Error(`invalid pose ${pose}: heading must be perpendicular to floor`);
+  const overhead = PROJ[OPPOSITE[pose[0]]];
+  const map = { D: pose[0], F: pose[1], R: letterOf(cross3(overhead, PROJ[pose[1]])) };
+  for (const k of ['D', 'F', 'R']) map[OPPOSITE[k]] = OPPOSITE[map[k]];
   return map;
 }
+
+/**
+ * The cube under the train: the cell on the far side of its floor. That is the
+ * cube a piece entered here clicks into, and the one its rail is on.
+ */
+export const cubeOf = (cell, pose) => cell.map((v, k) => v + PROJ[pose[0]][k]);
+
+/**
+ * Where the train starts. The start cube is the origin, so the train is in the
+ * cell on the other side of that cube's rail face.
+ */
+export const startCell = pose => PROJ[OPPOSITE[pose[0]]];
 
 /**
  * Sum a set of letter weights (e.g. {L: 2, F: 1}) into a project-frame offset,
@@ -62,52 +77,54 @@ export const delta = (map, weights) => Object.entries(weights).reduce(
   (acc, [letter, n]) => acc.map((v, i) => v + n * PROJ[map[letter]][i]), [0, 0, 0]);
 
 /**
- * The piece catalogue (coordinates.md:114-121 and :155-162), every row given for
- * a piece entered at UF. Entered in any other pose the row is simply rotated.
+ * The piece catalogue (coordinates.md, "What each piece does" and "What the train
+ * needs"), every row given for a piece entered at DF: the train standing on the
+ * down face of its cell, heading forwards, so the piece's own cube is the one
+ * below it. Entered in any other pose the row is simply rotated.
  *
- *   disp  — where the next empty cell is; the head convention, not the last cell
- *   exit  — the pose the next piece enters with
- *   foot  — the cells the piece's material fills, as offsets from its own cell
+ *   disp  — the cell the train is in once it has finished travelling the piece
+ *   exit  — its pose there, which is the pose the next piece enters with
+ *   foot  — the cells the piece's material fills, as offsets from the train's cell
  *   train — the cells the train needs, same offsets. The rule is that the train
- *           fills the whole cell on the rail's face side, never the cube's own.
+ *           fills the whole cell on the far side of the rail from the cube.
  */
 export const MOVES = {
   straight: {
-    disp: { F: 1 }, exit: 'UF',
-    foot: [{}],
-    train: [{ U: 1 }],
+    disp: { F: 1 }, exit: 'DF',
+    foot: [{ D: 1 }],
+    train: [{}],
   },
   cross: {
     // Two rails on one face, but one train: both traversals want the same cell.
-    disp: { F: 1 }, exit: 'UF',
-    foot: [{}],
-    train: [{ U: 1 }],
+    disp: { F: 1 }, exit: 'DF',
+    foot: [{ D: 1 }],
+    train: [{}],
   },
   leftCurve: {
-    disp: { L: 2, F: 1 }, exit: 'UL',
-    foot: [{}, { F: 1 }, { L: 1 }, { L: 1, F: 1 }],
+    disp: { L: 2, F: 1 }, exit: 'DL',
+    foot: [{ D: 1 }, { D: 1, F: 1 }, { D: 1, L: 1 }, { D: 1, L: 1, F: 1 }],
     // All four cells of the layer above, not three: the body is wider than the
     // rail, so its inner flank passes over the inside of the bend.
-    train: [{ U: 1 }, { U: 1, F: 1 }, { U: 1, L: 1 }, { U: 1, L: 1, F: 1 }],
+    train: [{}, { F: 1 }, { L: 1 }, { L: 1, F: 1 }],
   },
   rightCurve: {
-    disp: { R: 2, F: 1 }, exit: 'UR',
-    foot: [{}, { F: 1 }, { R: 1 }, { R: 1, F: 1 }],
-    train: [{ U: 1 }, { U: 1, F: 1 }, { U: 1, R: 1 }, { U: 1, R: 1, F: 1 }],
+    disp: { R: 2, F: 1 }, exit: 'DR',
+    foot: [{ D: 1 }, { D: 1, F: 1 }, { D: 1, R: 1 }, { D: 1, R: 1, F: 1 }],
+    train: [{}, { F: 1 }, { R: 1 }, { R: 1, F: 1 }],
   },
   insideCurve: {
-    disp: { U: 2, F: 1 }, exit: 'BU',
-    foot: [{}, { F: 1 }, { U: 1 }, { U: 1, F: 1 }],
+    disp: { U: 1 }, exit: 'FU',
+    foot: [{ D: 1 }, { D: 1, F: 1 }, {}, { F: 1 }],
     // Nothing extra: the rail is on the concave face, so the train runs through
     // the hollow the arc's own 2×2 already claims.
     train: [],
   },
   outsideCurve: {
-    disp: { D: 1 }, exit: 'FD',
-    foot: [{}],
+    disp: { D: 2, F: 1 }, exit: 'BD',
+    foot: [{ D: 1 }],
     // The train wraps the outside of the edge, sweeping the rest of the 2×2
     // around it: above, in front, and diagonally across the corner between.
-    train: [{ U: 1 }, { U: 1, F: 1 }, { F: 1 }],
+    train: [{}, { F: 1 }, { D: 1, F: 1 }],
   },
 };
 
@@ -148,7 +165,7 @@ export function cellsFor(type, pose, cell) {
   return { material: move.foot.map(at), train: move.train.map(at) };
 }
 
-/** Where the head goes after clicking `type` into it: the next empty cell and its pose. */
+/** Where the head goes after clicking `type` into it: the train's cell and pose once it has travelled the piece. */
 export function step(cell, pose, type) {
   const move = MOVES[type];
   if (!move) throw new Error(`unknown piece type ${type}`);
@@ -231,6 +248,9 @@ export function createClaims() {
  * Is this step the train coming back through a cross it has already been
  * through — the same cross, on the same face, crossing its own path?
  *
+ * `placedAt` is keyed by cube, not by the train's cell: two pieces can share a
+ * train cell (train cells may coincide), but never a cube.
+ *
  * A cross is one piece with two rails, so the train passes over it twice. The
  * second pass places nothing: it is the same cube. The headings must be
  * perpendicular, because two visits on the same or opposite headings would be
@@ -245,7 +265,7 @@ export function createClaims() {
  */
 export function isRevisit(type, cell, pose, placedAt) {
   if (type !== 'cross') return false;
-  const already = placedAt.get(cell.join(','));
+  const already = placedAt.get(cubeOf(cell, pose).join(','));
   return Boolean(already)
     && already.type === 'cross'
     && already.pose[0] === pose[0]
@@ -268,7 +288,7 @@ export function isRevisit(type, cell, pose, placedAt) {
  * second pass — and a rail's two ends already click into two neighbours, so the
  * train cannot run it again.
  */
-export function chainTrack(route, startPose = 'UF') {
+export function chainTrack(route, startPose = 'DF') {
   const { placed, head, closed, faults } = chainOpen(route, startPose);
   // The order is the one this has always had, and it is not the route's order.
   //
@@ -281,7 +301,8 @@ export function chainTrack(route, startPose = 'UF') {
   if (overCrossed) throw new Error(overCrossed.message);
   if (!closed) {
     throw new Error(
-      `route does not close: head at ${head.cell.join(',')} pose ${head.pose}, wanted 0,0,0 ${startPose}`);
+      `route does not close: head at ${head.cell.join(',')} pose ${head.pose}, `
+      + `wanted ${startCell(startPose).join(',')} ${startPose}`);
   }
   if (faults.length) throw new Error(faults[0].message);
   return placed;
@@ -297,7 +318,7 @@ export function chainTrack(route, startPose = 'UF') {
  * reports rather than a precondition it enforces:
  *
  *   placed   every piece the route lays down, in order
- *   head     where the route has got to: the next cell and pose
+ *   head     where the route has got to: the train's cell and pose
  *   closed   whether that head is back at the start, cell *and* pose
  *   faults   what is wrong with it, in route order — empty if nothing is
  *
@@ -311,8 +332,9 @@ export function chainTrack(route, startPose = 'UF') {
  * still perfectly well defined, and it is the caller's business how much of the
  * route to keep.
  */
-export function chainOpen(route, startPose = 'UF') {
-  let cell = [0, 0, 0], pose = startPose;
+export function chainOpen(route, startPose = 'DF') {
+  const home = startCell(startPose);
+  let cell = home, pose = startPose;
   const placedAt = new Map();
   const crossedAt = new Set();
   const claims = createClaims();
@@ -321,7 +343,7 @@ export function chainOpen(route, startPose = 'UF') {
   const note = (index, kind, message) => faults.push({ index, kind, message });
 
   const placed = route.map((type, index) => {
-    const at = cell.join(',');
+    const at = cubeOf(cell, pose).join(',');
     const revisit = isRevisit(type, cell, pose, placedAt);
     const claimed = revisit ? { material: [], train: [] } : cellsFor(type, pose, cell);
     const piece = { cell, pose, type, revisit, ...claimed };
@@ -348,7 +370,7 @@ export function chainOpen(route, startPose = 'UF') {
   return {
     placed,
     head: { cell, pose },
-    closed: cell.every(v => v === 0) && pose === startPose,
+    closed: cell.every((v, k) => v === home[k]) && pose === startPose,
     faults: faults.sort((a, b) => a.index - b.index),
   };
 }
@@ -438,7 +460,7 @@ export function countPieces(placed) {
  * null. Counts physical pieces, so it chains the route — which means the route
  * has to be a legal closed track.
  */
-export function overflowingPool(route, inventory, startPose = 'UF') {
+export function overflowingPool(route, inventory, startPose = 'DF') {
   const used = countPieces(chainTrack(route, startPose));
   return POOLS.find(pool => used[pool] > (inventory[pool] ?? 0)) ?? null;
 }

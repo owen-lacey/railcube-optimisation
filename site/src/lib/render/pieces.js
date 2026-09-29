@@ -1,5 +1,6 @@
 // The piece geometry: one generator per piece type, all authored in the
-// canonical UF pose (rail on the top face, heading forwards).
+// canonical DF pose (train on the down face of its cell, so rail on the cube's top
+// face, heading forwards).
 //
 // Everything is generated as Polygon[] chamfered cuboids (6 inset faces + 12
 // bevel strips + 8 corner triangles). PolyCSS shades each polygon by its
@@ -159,7 +160,7 @@ export function crossCube(color) {
 // The outside curve: single cube whose whole top-front edge is rounded off
 // (matching the physical piece), the channel wrapping over the rounding —
 // in from the back edge across the top, over the crest, down the front and
-// out through the bottom edge (canonical UF entry → FD exit, next cube
+// out through the bottom edge (canonical DF entry → BD exit, next cube
 // directly underneath). Around the edge everything is concentric arcs about
 // the same centre: the hull rounding at EDGE_R, its chamfer band at
 // EDGE_R − BEVEL (which lands exactly on the side faces' inset boundary),
@@ -344,7 +345,7 @@ export function insideCurve(color) {
   return sweepPiece(ARC_MAP.insideCurve, (u, w) => ARC_R - w, color, [0, -1, 0], [0, 0, 1]);
 }
 
-/** Geometry generator per piece type, all authored in the canonical UF pose. */
+/** Geometry generator per piece type, all authored in the canonical DF pose. */
 export const GEOMETRY = {
   straight: channeledCube,
   cross: crossCube,
