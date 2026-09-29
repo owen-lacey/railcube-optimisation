@@ -53,6 +53,9 @@
     // Trains that stand still, `{ type, cell, pose, tint }` each, tinted by the stylesheet
     // below. See `setGhosts` in stage.js.
     ghosts = [],
+    // Cells, `[x, y, z]` each, filled see-through in the train cell's paint whether
+    // or not a train is driving. See `setFill` in stage.js.
+    fill = [],
     // Told the cell the train is in, `[x, y, z]`, each time it enters a new one, and
     // `null` when the train goes. Read once, at mount.
     onTrainCell = undefined,
@@ -272,6 +275,7 @@
       cancelAnimationFrame(labelFrame);
       labelFrame = 0;
       stage?.setGhosts([]);
+      stage?.setFill([]);
       stage?.clear();
       stage = null;
     };
@@ -329,6 +333,15 @@
     if (!ready || !stage || key === ghostKey) return;
     stage.setGhosts(ghosts);
     ghostKey = key;
+  });
+
+  // The filled cells, keyed the same way.
+  let fillKey = null;
+  $effect(() => {
+    const key = fill.join('|');
+    if (!ready || !stage || key === fillKey) return;
+    stage.setFill(fill);
+    fillKey = key;
   });
 
   // Framing. In sequencing mode this deliberately does *not* read `pieces` or

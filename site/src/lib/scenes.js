@@ -336,6 +336,6 @@ export function poseCycle() {
 /**
  * The train in `pose` inside `poseCycle`'s cell: standing on the straight that
  * pose would click into next, so it is centred in the cell on that pose's floor.
- * The straight itself is not drawn.
+ * The straight itself is not drawn. Untinted, so the train is solid.
  */
-export const poseGhost = pose => ({ type: 'straight', cell: [0, 0, 0], pose, tint: 'after' });
+export const poseGhost = pose => ({ type: 'straight', cell: [0, 0, 0], pose });

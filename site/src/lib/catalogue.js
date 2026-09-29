@@ -109,6 +109,6 @@ export function describeMove(type) {
 const FACE_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'front', B: 'back' };
 const HEADING_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'forwards', B: 'backwards' };
 
-/** A pose as the post words it: `DL` is "on the down face, heading left (DL)". */
+/** A pose as the post words it: `DL` is "down face, heading left (DL)". */
 export const describePose = pose =>
-  `on the ${FACE_WORD[pose[0]]} face, heading ${HEADING_WORD[pose[1]]} (${pose})`;
+  `${FACE_WORD[pose[0]]} face, heading ${HEADING_WORD[pose[1]]} (${pose})`;

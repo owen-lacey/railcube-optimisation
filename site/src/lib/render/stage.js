@@ -365,12 +365,13 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
   // next frame, and one that never finishes keeps the loop running for a picture
   // that does not move. So they are an overlay like the lattice — `clear()` leaves
   // them, and whoever set them takes them down with `setGhosts([])`. Each is tagged
-  // `GHOST_CLASS` and `ghost-<tint>` for the viewer's stylesheet to paint.
+  // `GHOST_CLASS` and `ghost-<tint>` for the viewer's stylesheet to paint; one with
+  // no tint is left in the train's own colours, solid.
 
   let ghosts = [];
 
   /**
-   * Replace the ghost trains with these, `{ type, cell, pose, tint }` each: a train
+   * Replace the ghost trains with these, `{ type, cell, pose, tint? }` each: a train
    * standing on a piece of that type placed there — see `trainAt`. The piece need
    * not be drawn.
    */
@@ -380,8 +381,27 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
       const { basis, position } = trainAt(type, cell, pose);
       const mesh = movingMesh(scene, trainBody(), basis, position);
       mesh.handle.element.classList.add(GHOST_CLASS);
-      mesh.handle.element.classList.add(`${GHOST_CLASS}-${tint}`);
+      if (tint) mesh.handle.element.classList.add(`${GHOST_CLASS}-${tint}`);
       return mesh;
+    });
+  }
+
+  // ---- Filled cells ---------------------------------------------------------
+  //
+  // Cells picked out whether or not a train is driving, in the train cell's own
+  // paint — for a picture of one cell rather than a track going through it. An
+  // overlay like the ghosts: `clear()` leaves them, and `setFill([])` takes them down.
+
+  let fills = [];
+
+  /** Fill these cells, `[x, y, z]` each, replacing any filled before. */
+  function setFill(cells) {
+    for (const handle of fills) handle.dispose();
+    fills = cells.map(cell => {
+      const handle = scene.add(meshLike(cellBox(TRAIN_CELL_INSET)), {});
+      handle.setTransform({ position: toWorld(cell), rotation: [0, 0, 0] });
+      handle.element.classList.add(TRAIN_CELL_CLASS);
+      return handle;
     });
   }
 
@@ -405,6 +425,7 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
     setOrigin,
     originTips,
     setGhosts,
+    setFill,
     markTrainCell,
   };
 }
