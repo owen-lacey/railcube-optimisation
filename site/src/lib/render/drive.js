@@ -20,8 +20,9 @@ import { cross, add, sub, len, unit, toCell } from './vec.js';
 // eye reads as the train's speed. Matches where `trainBody` puts the shell.
 const BODY_REF = BODY_Z + TRAIN_H / 2;
 
-// The train's polygons are authored facing forwards, and its orientation is
-// baked afresh every frame anyway, so it is mounted turned by nothing.
+// The train's polygons are authored facing forwards, and it is mounted turned by
+// nothing, so every per-frame `place` below is a delta from that authored pose —
+// whose lighting it therefore carries for the whole lap.
 const UNTURNED = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
 /** Bind a train to a live stage. It has no mesh until it has a route. */
@@ -93,12 +94,15 @@ export function createDriver(stage) {
     const raw = blend(a.up, b.up);
     const dot = raw.reduce((acc, v, i) => acc + v * fwd[i], 0);
     const up = unit(raw.map((v, i) => v - dot * fwd[i])); // square up against the heading
-    // The one mesh that bakes every frame. `meshes.js` says not to, and means it
-    // for the pieces — but the train is fifty polygons rather than eighteen
-    // hundred, and it is the thing being watched, so it is worth its own lighting
-    // being right in every frame rather than only when it stops.
+    // Placed, never baked. The train used to be the one mesh that baked every
+    // frame — fifty polygons, and the thing being watched, so its lighting was
+    // worth keeping right. Profiled on a throttled phone, that bake was about
+    // half the main thread: `setPolygons` re-runs PolyCSS's whole mesh optimiser
+    // per call, not fifty matrix writes. Placing it instead holds 60fps (29
+    // before), at the cost `meshes.js` names — the train carries the lighting of
+    // its authored pose round the lap.
     const pos = blend(a.pos, b.pos);
-    mesh.bake([cross(fwd, up), fwd, up], pos);
+    mesh.place([cross(fwd, up), fwd, up], pos);
     // The lattice cell is the one the body is in, not the wheels: the body is what
     // is seen, and it rides clear of the cube, in the cell the model books as train.
     stage.markTrainCell(toCell(add(pos, up.map(v => v * BODY_REF))));

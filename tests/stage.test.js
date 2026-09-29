@@ -506,7 +506,8 @@ test('a held train stays put, and a whole lap on is where it started', () => {
   stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => held, onTrainAt: f => told.push(f) })]);
   stage.start();
   const train = handles.at(-1);
-  const pose = () => JSON.stringify(train.polygons);
+  // The train is placed, never baked, so where it is lives in its last transform.
+  const pose = () => JSON.stringify(train.transforms.at(-1));
 
   clock.run(0.05);
   const first = pose();

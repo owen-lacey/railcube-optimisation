@@ -561,8 +561,13 @@ piece is ~110 polygons, so eighteen of them is ~2,000 matrices a frame and the f
 visibly collapses — measured, having first shipped the tumbler that way. `meshes.js` is the
 whole of the rule: `movingMesh(...).bake` puts an orientation in the *vertices* and is for
 orientations that will be held; `.place` puts it on the container with one `setTransform` and
-is for orientations that change. The train is the one deliberate exception, and `drive.js`
-says why — fifty polygons, and it is the thing being looked at.
+is for orientations that change. The train used to be a deliberate exception — fifty
+polygons, and the thing being looked at, so its lighting was kept right every frame — and
+is not any more: profiled on a CPU-throttled phone emulation, its per-frame bake was ~half
+the main thread (29fps), because `setPolygons` re-runs PolyCSS's whole mesh-optimisation
+pipeline per call rather than costing fifty matrix writes. The train is `place`d now
+(60fps) and carries the lighting of its authored pose round the lap — Owen's call, over
+`{ merge: false }` on the bake (43fps, lighting kept) and a low-rate re-bake hybrid.
 
 **What `place` costs is lighting, and the two animations pay differently.** PolyCSS shades
 each polygon from its normal and a CSS rotation cannot recompute a normal, so a `place`d
