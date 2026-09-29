@@ -11,8 +11,8 @@
 // Here a viewer might be a 320px card or a full-width hero, so the zoom has to
 // be scaled by how wide it actually is, or a layout framed to fit is cropped on
 // every card.
-const REFERENCE_WIDTH = 900;
-const REFERENCE_HEIGHT = 700;
+export const REFERENCE_WIDTH = 900;
+export const REFERENCE_HEIGHT = 700;
 // A little slack so a layout framed to exactly fill the box does not touch the
 // edges — the framing measures cubes, and a train riding on the outside of the
 // top ones sits proud of that.

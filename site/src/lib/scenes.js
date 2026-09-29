@@ -8,6 +8,7 @@ import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step, SCORES } from
 import { routeOf, identify } from '../../../src/layouts.js';
 import { COLORS, ALARM } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
+import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT } from './render/camera.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
 export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[piece.type] }));
@@ -190,6 +191,46 @@ export function growBox(pieces, box = SKETCH_FLOOR) {
  * size it could be. Same trick as `frameBox` — one piece made of two corners.
  */
 export const frameTight = ({ lo, hi }) => frame([{ material: [lo, hi] }]);
+
+const rad = d => d * Math.PI / 180;
+
+/**
+ * Where a world point lands on screen at zoom 1 under the default camera, as
+ * `[across, down]` — PolyCSS's camera transform (see `slid` in controls.js), which
+ * swaps a point's first two components on the way in.
+ */
+function onScreen([a, b, c]) {
+  const [turn, tilt] = [rad(CAMERA['rot-y']), rad(CAMERA['rot-x'])];
+  const [x, y] = [b * Math.cos(turn) - a * Math.sin(turn), b * Math.sin(turn) + a * Math.cos(turn)];
+  return [x, y * Math.cos(tilt) - c * Math.sin(tilt)];
+}
+
+/** The world displacement that moves the screen by `[dx, dy]` at zoom 1: `onScreen` inverted, across the screen. */
+function offScreen([dx, dy]) {
+  const [turn, tilt] = [rad(CAMERA['rot-y']), rad(CAMERA['rot-x'])];
+  const [c, s, q] = [Math.cos(turn), Math.sin(turn), Math.cos(tilt)];
+  return [-dx * s + dy * q * c, dx * c + dy * q * s, -dy * Math.sin(tilt)];
+}
+
+/**
+ * A camera that fits `points` (world units) as they land on screen, from the
+ * default angle. `frame` backs off by a box's diagonal, which is room for any
+ * angle; a viewer that is only ever seen from one can have that room back.
+ */
+export function frameFit(points) {
+  const shown = points.map(onScreen);
+  const span = a => [Math.min(...shown.map(p => p[a])), Math.max(...shown.map(p => p[a]))];
+  const [across, down] = [span(0), span(1)];
+  const zoom = Math.min(REFERENCE_WIDTH / (across[1] - across[0]), REFERENCE_HEIGHT / (down[1] - down[0]));
+  const mid = [0, 1, 2].map(a => (Math.min(...points.map(p => p[a])) + Math.max(...points.map(p => p[a]))) / 2);
+  const [cx, cy] = onScreen(mid);
+  const shift = offScreen([(across[0] + across[1]) / 2 - cx, (down[0] + down[1]) / 2 - cy]);
+  return { zoom, target: mid.map((v, a) => v + shift[a]).join(',') };
+}
+
+/** The eight outer corners of a box of cells, in world units. */
+export const cornersOf = ({ lo, hi }) =>
+  [0, 1, 2, 3, 4, 5, 6, 7].map(k => toWorld([0, 1, 2].map(a => (k >> a) & 1 ? hi[a] + 0.5 : lo[a] - 0.5)));
 
 /**
  * How far from the start cell the frame reaches, in cells — and therefore the

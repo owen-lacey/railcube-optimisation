@@ -1,8 +1,8 @@
 <script>
   import TrackViewer from './TrackViewer.svelte';
   import PlayPause from './PlayPause.svelte';
-  import { AXIS_GAP } from '$lib/render/dimensions.js';
-  import { openScene, frame, extentOf, frameTight } from '$lib/scenes.js';
+  import { axisAnchor, LABEL_SPOTS } from '$lib/render/axes.js';
+  import { openScene, frame, extentOf, frameFit, cornersOf } from '$lib/scenes.js';
 
   let {
     shape = '',
@@ -47,9 +47,6 @@
   // forwards, z up (docs/coordinates.md): the last two swap and x is negated.
   const readerFrame = ([right, up, forwards]) => [0 - right, forwards, up];
 
-  // How far past the box's low corner the arrows and their labels reach, in cells.
-  const AXIS_REACH = Math.ceil(AXIS_GAP + 0.5);
-
   const letters = $derived(shape.trim().toUpperCase());
 
   // The shape is re-derived through `chainOpen`, which reports rather than
@@ -62,11 +59,13 @@
     try {
       const { pieces, closed, offender } = openScene(letters);
       const box = grid || origin ? extentOf(pieces) : null;
-      // The arrows stand outside the box's low corner, so the frame has to reach them.
-      const framed = origin
-        ? { lo: [box.lo[0], box.lo[1] - AXIS_REACH, box.lo[2] - AXIS_REACH], hi: [box.hi[0] + AXIS_REACH, box.hi[1], box.hi[2]] }
-        : box;
-      const camera = framed ? frameTight(framed) : frame(pieces);
+      // The arrows stand outside the box's low corner, so the frame has to reach
+      // them — their corner and each label, which is past each tip.
+      const anchor = origin ? axisAnchor(box) : null;
+      const arrows = origin
+        ? [anchor, ...LABEL_SPOTS.map(({ position }) => position.map((v, a) => v + anchor[a]))]
+        : [];
+      const camera = box ? frameFit([...cornersOf(box), ...arrows]) : frame(pieces);
       return { state: 'ok', pieces, closed, offender, box, camera };
     } catch (error) {
       return { state: 'invalid', message: error.message };
