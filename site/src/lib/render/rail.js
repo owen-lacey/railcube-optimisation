@@ -8,7 +8,7 @@
 import { MOVES, poseLetters, delta } from '../../../../src/track.js';
 import { CUBE, RAIL, CHANNEL_D } from './dimensions.js';
 import { ARC_MAP, EDGE_R, OUT_C } from './pieces.js';
-import { DIR, add, sub, len, unit, through, toWorld, poseRotation } from './vec.js';
+import { DIR, add, sub, len, unit, cross, through, toWorld, poseRotation } from './vec.js';
 
 const OUT_RF = EDGE_R - CHANNEL_D;                  // rail radius round the rounded edge
 const OUT_LEGS = [CUBE / 2 + OUT_C, OUT_RF * Math.PI / 2]; // flat top run, then the arc
@@ -101,4 +101,31 @@ export function trackPath(placed, samples = 24) {
       };
     });
   });
+}
+
+// Where a train stands to be looked at rather than driven: on a `type` piece at
+// `cell` and `pose`, half a cube along its rail from the entry — the middle of a
+// straight, and still inside the first cube of a curve — lying along the rail
+// there the way the driver lays it. The basis is the driver's, `[right, fwd, up]`.
+export function trainAt(type, cell, pose) {
+  const { pos, fwd, up } = railFrame(type, alongRail(type, CUBE / 2));
+  const turn = poseRotation(pose);
+  const [f, u] = [fwd, up].map(v => through(turn, v));
+  return { basis: [cross(f, u), f, u], position: add(toWorld(cell), through(turn, pos)) };
+}
+
+// How far through a piece (0..1) the rail has run `distance` from its entry,
+// measured along the rail itself rather than by the parameter, which runs at
+// different rates on different pieces.
+function alongRail(type, distance, samples = 240) {
+  let run = 0;
+  let last = RAIL_MAPS[type](0, 0, 0);
+  for (let k = 1; k <= samples; k++) {
+    const next = RAIL_MAPS[type](0, 0, k / samples);
+    const gap = len(sub(next, last));
+    if (run + gap >= distance) return (k - 1 + (distance - run) / gap) / samples;
+    run += gap;
+    last = next;
+  }
+  throw new Error(`the ${type} rail is shorter than ${distance}`);
 }

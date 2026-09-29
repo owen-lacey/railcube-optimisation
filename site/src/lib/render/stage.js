@@ -36,12 +36,17 @@ import { createCamera } from './camera.js';
 import { cellBox } from './grid.js';
 import { TRAIN_CELL_INSET } from './dimensions.js';
 import { toWorld } from './vec.js';
+import { trainAt } from './rail.js';
+import { trainBody } from './train.js';
 
 /** The class the lattice's mesh carries, for the stylesheet to find it by. */
 export const GRID_CLASS = 'cell-grid';
 
 /** The class the train's cell carries, for the same reason. */
 export const TRAIN_CELL_CLASS = 'train-cell';
+
+/** The class a ghost train carries; its tint is `ghost-<tint>` beside it. */
+export const GHOST_CLASS = 'ghost';
 
 /**
  * Two or more phases as one, advancing together off the same clock and finishing
@@ -299,6 +304,33 @@ export function createStage(cameraEl, sceneEl) {
     showTrainCell();
   }
 
+  // ---- Ghost trains -------------------------------------------------------
+  //
+  // Trains that stand still, to show where a train *would* be: before a piece and
+  // after it. Not cubes and not a phase's: a phase that finishes is disposed on the
+  // next frame, and one that never finishes keeps the loop running for a picture
+  // that does not move. So they are an overlay like the lattice — `clear()` leaves
+  // them, and whoever set them takes them down with `setGhosts([])`. Each is tagged
+  // `GHOST_CLASS` and `ghost-<tint>` for the viewer's stylesheet to paint.
+
+  let ghosts = [];
+
+  /**
+   * Replace the ghost trains with these, `{ type, cell, pose, tint }` each: a train
+   * standing on a piece of that type placed there — see `trainAt`. The piece need
+   * not be drawn.
+   */
+  function setGhosts(list) {
+    for (const ghost of ghosts) ghost.dispose();
+    ghosts = list.map(({ type, cell, pose, tint }) => {
+      const { basis, position } = trainAt(type, cell, pose);
+      const mesh = movingMesh(scene, trainBody(), basis, position);
+      mesh.handle.element.classList.add(GHOST_CLASS);
+      mesh.handle.element.classList.add(`${GHOST_CLASS}-${tint}`);
+      return mesh;
+    });
+  }
+
   return {
     scene,
     cubes,
@@ -316,6 +348,7 @@ export function createStage(cameraEl, sceneEl) {
     stop: loop.stop,
     clear,
     setGrid,
+    setGhosts,
     markTrainCell,
   };
 }

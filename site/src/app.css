@@ -3,3 +3,11 @@ html {
      to scroll sideways because one of them overflowed. */
   overflow-x: hidden;
 }
+
+:root {
+  /* The ghost trains' tints, here rather than in the viewer because a legend
+     outside the viewer has to name them in the same colours. */
+  --ghost-before: #b4bfcd;
+  --ghost-after: #6b7a90;
+  --ghost-opacity: 0.6;
+}

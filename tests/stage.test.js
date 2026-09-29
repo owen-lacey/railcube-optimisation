@@ -20,15 +20,15 @@ import assert from 'node:assert/strict';
 
 import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
-import { createStage, together, GRID_CLASS, TRAIN_CELL_CLASS } from '../site/src/lib/render/stage.js';
+import { createStage, together, GRID_CLASS, TRAIN_CELL_CLASS, GHOST_CLASS } from '../site/src/lib/render/stage.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
 import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W, TRAIN_CELL_INSET } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
-import { toWorld, poseRotation, through } from '../site/src/lib/render/vec.js';
+import { toWorld, poseRotation, through, add } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
-import { CUBE } from '../site/src/lib/render/dimensions.js';
+import { CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 
 // ---- The fake scene --------------------------------------------------------
 
@@ -854,6 +854,33 @@ test('the lattice is one mesh, which clearing the cubes leaves standing', () => 
   assert.equal(second.disposed, true);
   // Tagged for the stylesheet to repaint as an overlay, and nothing else is.
   assert.deepEqual(handles.filter(h => h.classes.has(GRID_CLASS)), [first, second]);
+});
+
+test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', () => {
+  const { handles, cameraEl, sceneEl } = fakeScene();
+  const stage = createStage(cameraEl, sceneEl);
+  const ghosts = () => handles.filter(h => h.classes.has(GHOST_CLASS));
+
+  stage.setGhosts([
+    { type: 'straight', cell: [0, 0, 0], pose: 'UF', tint: 'before' },
+    { type: 'straight', cell: [0, -1, 0], pose: 'FD', tint: 'after' },
+  ]);
+  const first = ghosts();
+  assert.equal(first.length, 2);
+  assert.ok(first[0].classes.has(`${GHOST_CLASS}-before`));
+  assert.ok(first[1].classes.has(`${GHOST_CLASS}-after`));
+  // Half a cube along a straight is its middle: the body is in its train cell.
+  const [x, y, z] = first[0].transforms.at(-1).position;
+  [x, y, z].forEach((v, k) => assert.ok(Math.abs(v - [0, 0, RAIL][k]) < 1e-9, `${[x, y, z]}`));
+
+  stage.run([trackPhase(stage, piecesOf(RING), { drive: false })]);
+  stage.clear();
+  assert.ok(first.every(h => !h.disposed), 'clearing the cubes took the ghosts');
+
+  stage.setGhosts([{ type: 'straight', cell: [0, 0, 1], pose: 'UF', tint: 'after' }]);
+  assert.ok(first.every(h => h.disposed), 'replaced ghosts were left behind');
+  stage.setGhosts([]);
+  assert.ok(ghosts().every(h => h.disposed));
 });
 
 test('the lattice fills the cell the train is in, and moves the fill rather than redrawing it', () => {

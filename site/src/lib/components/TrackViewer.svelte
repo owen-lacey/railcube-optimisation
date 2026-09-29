@@ -47,6 +47,9 @@
     // A box of cells, `{ lo, hi }`, to draw the model's cell lattice around; null
     // draws none. See `render/grid.js`.
     grid = null,
+    // Trains that stand still, `{ type, cell, pose, tint }` each, tinted by the stylesheet
+    // below. See `setGhosts` in stage.js.
+    ghosts = [],
   } = $props();
 
   // How long the collapse is simulated for at the outside.
@@ -252,6 +255,7 @@
       controls?.destroy();
       controls = null;
       stage?.setGrid(null);
+      stage?.setGhosts([]);
       stage?.clear();
       stage = null;
     };
@@ -271,6 +275,15 @@
     if (!ready || !stage || key === gridKey) return;
     stage.setGrid(grid ? gridLines(grid) : null);
     gridKey = key;
+  });
+
+  // The ghost trains, keyed on what they are for the same reason as the lattice.
+  let ghostKey = null;
+  $effect(() => {
+    const key = ghosts.map(g => `${g.type}${g.cell}${g.pose}${g.tint}`).join('|');
+    if (!ready || !stage || key === ghostKey) return;
+    stage.setGhosts(ghosts);
+    ghostKey = key;
   });
 
   // Framing. In sequencing mode this deliberately does *not* read `pieces` or
@@ -355,6 +368,17 @@
   .viewer :global(.train-cell > *) {
     color: var(--grid-color) !important;
     opacity: var(--grid-opacity);
+  }
+
+  /* Ghost trains, flat and see-through the same way, one tint before and one after. */
+  .viewer :global(.ghost-before > *) {
+    color: var(--ghost-before) !important;
+    opacity: var(--ghost-opacity);
+  }
+
+  .viewer :global(.ghost-after > *) {
+    color: var(--ghost-after) !important;
+    opacity: var(--ghost-opacity);
   }
 
   .failed {

@@ -4,6 +4,7 @@
 // forwards/backwards, never coordinates.
 
 import { COLORS } from './render/dimensions.js';
+import { step, poseLetters, delta } from '../../../src/track.js';
 
 export const PIECES = [
   {
@@ -74,3 +75,37 @@ export const PIECES = [
       + 'starter set has none; the deluxe set has two.',
   },
 ].map(p => ({ ...p, hex: COLORS[p.type] }));
+
+// ---- What a piece does to the train, in words -------------------------------
+
+/**
+ * Where the train rides for a head `{ cell, pose }`: the cell on the rail-face side
+ * of it, which is the cell `MOVES` books as train for a piece clicked in there.
+ */
+export const trainCell = ({ cell, pose }) =>
+  cell.map((v, k) => v + delta(poseLetters(pose), { U: 1 })[k]);
+
+// The order a move is read out in, and the word for each way round.
+const AXES = [
+  { axis: 2, more: 'forwards', less: 'backwards' },
+  { axis: 0, more: 'right', less: 'left' },
+  { axis: 1, more: 'up', less: 'down' },
+];
+const FACING = { L: 'left', R: 'right', U: 'upwards', D: 'downwards', B: 'backwards' };
+
+/**
+ * What one piece does to the train, entered at the start pose: how far it moves
+ * between riding over the piece and riding over the next one, and which way it
+ * faces afterwards if that has changed. Read off the model, never written out.
+ */
+export function describeMove(type) {
+  const before = { cell: [0, 0, 0], pose: 'UF' };
+  const after = step(before.cell, before.pose, type);
+  const [from, to] = [before, after].map(trainCell);
+  const moved = AXES
+    .map(({ axis, more, less }) => ({ n: to[axis] - from[axis], more, less }))
+    .filter(({ n }) => n !== 0)
+    .map(({ n, more, less }) => `${Math.abs(n)} ${n > 0 ? more : less}`);
+  const facing = after.pose[1] === 'F' ? '' : `, facing ${FACING[after.pose[1]]}`;
+  return `Train moves ${moved.join(' and ')}${facing}`;
+}

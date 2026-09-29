@@ -4,10 +4,11 @@
 // `drive` marks the scenes that are a real route, and so can have a train run
 // on them: a single piece and the pose gallery are catalogues, not tracks.
 
-import { chainTrack, chainOpen, cellsFor, SCORES } from '../../../src/track.js';
+import { chainTrack, chainOpen, cellsFor, step, SCORES } from '../../../src/track.js';
 import { routeOf, identify } from '../../../src/layouts.js';
 import { COLORS, ALARM } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
+import { trainCell } from './catalogue.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
 export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[piece.type] }));
@@ -278,5 +279,42 @@ export function singlePiece(type, { pose = 'UF', scale = 1 } = {}) {
     pieces,
     drive: false,
     camera: { target, zoom: scale * 30 / diagonal, 'rot-x': 62, 'rot-y': 45 },
+  };
+}
+
+// ---- What one piece does to the train --------------------------------------
+
+/**
+ * The turn that puts forwards *away* from the reader, up and to the right, so the
+ * train sets off from the bottom left. The usual isometric turn has it coming at
+ * them instead, down and to the right.
+ */
+const FROM_THE_READER = -45;
+
+/**
+ * One piece at the start, with a ghost train on it where the train is before, and
+ * another where it is after — the head `step` hands the next piece, standing on
+ * the straight that would click in there. Each is half a cube along its piece, so
+ * the after ghost stands over an empty cell. The lattice reaches both ghosts'
+ * cells and no further.
+ *
+ * Framed on the lattice with `frame`'s zoom cap lifted: the cap is for layouts, and
+ * a scene this small hits it every time and comes out drawn at half the size.
+ */
+export function pieceMove(type) {
+  const before = { cell: [0, 0, 0], pose: 'UF' };
+  const after = step(before.cell, before.pose, type);
+  const pieces = [{ ...before, type, color: COLORS[type], ...cellsFor(type, before.pose, before.cell) }];
+  const grid = extentOf([...pieces, { material: [], train: [before, after].map(trainCell) }]);
+  const diagonal = Math.hypot(...[0, 1, 2].map(a => grid.hi[a] - grid.lo[a] + 1));
+  return {
+    pieces,
+    drive: false,
+    ghosts: [
+      { ...before, type, tint: 'before' },
+      { ...after, type: 'straight', tint: 'after' },
+    ],
+    grid,
+    camera: { ...frameTight(grid), zoom: 42 / diagonal, 'rot-y': FROM_THE_READER },
   };
 }
