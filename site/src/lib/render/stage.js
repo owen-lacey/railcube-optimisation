@@ -491,14 +491,14 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   let floors = [];   // the patch of floor under each ghost, one geometry apiece
 
   /**
-   * Replace the ghost trains with these, `{ type, cell, pose, tint? }` each: a train
-   * standing on a piece of that type placed there — see `trainAt`. The piece need
-   * not be drawn.
+   * Replace the ghost trains with these, `{ type, cell, pose, tint?, floor? }` each: a
+   * train standing on a piece of that type placed there — see `trainAt`. The piece need
+   * not be drawn. The face it stands on is marked unless `floor` is `false`.
    */
   function setGhosts(list) {
     remove(ghosts, { owned: false });
     remove(floors);
-    floors = list.map(({ cell, pose, tint }) => fixedMesh(
+    floors = list.filter(({ floor = true }) => floor).map(({ cell, pose, tint }) => fixedMesh(
       soupGeometry(cellFace(PROJ[pose[0]], TRAIN_CELL_INSET)), tint ? paint[tint] : paint.fill,
       { name: `${OVERLAY.ghost}-floor-${tint ?? 'solid'}`, order: ORDER.ghost, at: toWorld(cell) },
     ));

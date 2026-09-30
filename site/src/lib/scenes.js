@@ -350,7 +350,7 @@ export function pieceMove(type) {
     drive: false,
     ghosts: [
       { ...before, type, tint: 'before' },
-      { ...after, type: 'straight', tint: 'after' },
+      { ...after, type: 'straight', tint: 'after', floor: false },
     ],
     grid,
     camera: { ...frameTight(grid), zoom: 42 / diagonal },
