@@ -101,7 +101,7 @@
   <LayoutViewer
     {shape}
     reach={config.sweep.question.box}
-    sequence={animate}
+    change={animate ? 'tumble' : 'none'}
     aspect={narrow.current ? '4 / 3' : '16 / 10'}
   />
 {/key}

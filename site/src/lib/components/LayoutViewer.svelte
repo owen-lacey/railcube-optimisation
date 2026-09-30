@@ -7,10 +7,11 @@
   let {
     shape = '',
     aspect = '16 / 10',
-    // Off, a shape change is an instant redraw framed tight on that layout —
-    // the trade the front page makes on a phone, where the fixed frame's empty
-    // room costs more scale than the rearrangement is worth.
-    sequence = true,
+    // What a shape change looks like. 'none' is an instant redraw framed tight on
+    // that layout — the trade the front page makes on a phone, where the fixed
+    // frame's empty room costs more scale than a rearrangement is worth. 'tumble'
+    // collapses the old layout and builds the new one out of the pieces that fall.
+    change = 'none',
     drive = true,
     interactive = false,
     pace = 0.04,
@@ -78,7 +79,7 @@
     pieces={result.pieces}
     camera={result.camera}
     drive={drive && result.closed}
-    {sequence}
+    sequence={change === 'tumble'}
     {pace}
     {speed}
     {handover}
@@ -94,7 +95,7 @@
     trainAt={scrub ? () => (held ? lap : null) : undefined}
     onTrainAt={scrub ? f => { if (!held) lap = f; } : undefined}
   />
-  {#if scrub && drive && result.closed && !sequence}
+  {#if scrub && drive && result.closed && change === 'none'}
     <div class="scrubber">
       <PlayPause bind:playing={() => !held, playing => (held = !playing)} label="the train" />
       <input

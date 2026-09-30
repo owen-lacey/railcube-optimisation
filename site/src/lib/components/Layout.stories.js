@@ -28,11 +28,12 @@ export default {
     trainCaption: { control: 'boolean' },
     origin: { control: 'boolean' },
     scrub: { control: 'boolean' },
+    change: { control: 'inline-radio', options: ['none', 'tumble'] },
   },
 };
 
 export const Default = {
-  args: { shape: 'RIORIROIRSLSISOILIOLSISLSSSI', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
+  args: { shape: 'RIORIROIRSLSISOILIOLSISLSSSI', change: 'tumble', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
   parameters: {
     docs: {
       description: {
@@ -48,7 +49,7 @@ export const Default = {
 
 export const Rearranged = {
   name: 'The same cubes, twice',
-  args: { shape: 'LIRIROSOLORLLSORII', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
+  args: { shape: 'LIRIROSOLORLLSORII', change: 'tumble', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
   parameters: {
     docs: {
       description: {
@@ -81,7 +82,7 @@ export const Rearranged = {
 
 export const Grid = {
   name: 'In its grid',
-  args: { shape: 'LLLL', grid: true, sequence: false, interactive: true },
+  args: { shape: 'LLLL', grid: true, interactive: true },
   parameters: {
     docs: {
       description: {
@@ -98,7 +99,7 @@ export const Scrubbed = {
   name: 'Train on a slider',
   args: {
     shape: 'SLLIOOILLSSS', grid: true, trainCaption: true, origin: true, scrub: true,
-    sequence: false, interactive: true,
+    interactive: true,
   },
   parameters: {
     docs: {

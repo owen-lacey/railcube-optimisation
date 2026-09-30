@@ -16,7 +16,7 @@
 
 <p>This is a Rail Cube track:</p>
 
-<LayoutViewer shape="SIOLLOISLL" sequence={false} interactive={true} />
+<LayoutViewer shape="SIOLLOISLL" interactive={true} />
 
 <p>
 	It uses two straights, two inner loops, two outer, and four right turns. It
@@ -27,7 +27,6 @@
 
 <LayoutViewer
 	shape="XSSLISISSOIILSRISSXSISSOSOIRRSROILSL"
-	sequence={false}
 	interactive={true}
 />
 
@@ -35,7 +34,6 @@
 
 <LayoutViewer
 	shape="ILSSXOSSSSSIISLRSISOORSOIRRSXIILSLSI"
-	sequence={false}
 	interactive={true}
 />
 
@@ -75,7 +73,6 @@
 
 <LayoutViewer
 	shape="SSSSLLIOOILL"
-	sequence={false}
 	grid={true}
 	trainCaption={true}
 	origin={true}

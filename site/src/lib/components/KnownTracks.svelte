@@ -66,7 +66,6 @@
 <figure bind:this={host}>
   <LayoutViewer
     shape={shapes[index].shape}
-    sequence={false}
     interactive={true}
     paused={!playing}
     {aspect}
