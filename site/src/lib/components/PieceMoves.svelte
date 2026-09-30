@@ -4,6 +4,7 @@
   // button per piece type under it. Nothing moves — it is a picture of one step.
   import { Tabs } from 'bits-ui';
   import TrackViewer from './TrackViewer.svelte';
+  import LayoutCard from './LayoutCard.svelte';
   import { PIECES, describeMove } from '$lib/catalogue.js';
   import { pieceMove } from '$lib/scenes.js';
 
@@ -16,24 +17,28 @@
 </script>
 
 <Tabs.Root bind:value={active} class="piece-moves">
-  <!-- One panel whose value follows the tab, so there is one viewer and a tab
-       change redraws it rather than mounting another. -->
-  <Tabs.Content value={active}>
-    <TrackViewer
-      pieces={scene.pieces}
-      camera={scene.camera}
-      grid={scene.grid}
-      ghosts={scene.ghosts}
-      {aspect}
-      label="The {piece.name.toLowerCase()}, with the train before and after it"
-    />
-    <p class="caption">{describeMove(active)}</p>
-    <p class="legend">
-      <span class="swatch before"></span>before
-      <span class="swatch after"></span>after
-    </p>
-  </Tabs.Content>
+  <LayoutCard footer={keys}>
+    <!-- One panel whose value follows the tab, so there is one viewer and a tab
+         change redraws it rather than mounting another. -->
+    <Tabs.Content value={active}>
+      <TrackViewer
+        pieces={scene.pieces}
+        camera={scene.camera}
+        grid={scene.grid}
+        ghosts={scene.ghosts}
+        {aspect}
+        label="The {piece.name.toLowerCase()}, with the train before and after it"
+      />
+    </Tabs.Content>
+  </LayoutCard>
+</Tabs.Root>
 
+{#snippet keys()}
+  <p class="caption">{describeMove(active)}</p>
+  <p class="legend">
+    <span class="swatch before"></span>before
+    <span class="swatch after"></span>after
+  </p>
   <Tabs.List class="keys" aria-label="Track pieces">
     {#each PIECES as { type, name, letter, hex } (type)}
       <Tabs.Trigger value={type} class="key" style="--piece: {hex}" aria-label={name} title={name}>
@@ -41,7 +46,7 @@
       </Tabs.Trigger>
     {/each}
   </Tabs.List>
-</Tabs.Root>
+{/snippet}
 
 <style>
   :global(.piece-moves) {
@@ -54,7 +59,6 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: 0.5rem;
-    margin-top: 0.75rem;
   }
 
   :global(.piece-moves .key) {
@@ -79,14 +83,12 @@
   }
 
   .caption {
-    margin: 0.5rem 0 0.25rem;
-    text-align: center;
+    margin: 0;
     font-weight: 600;
   }
 
   .legend {
     margin: 0;
-    text-align: center;
     font-size: 0.85rem;
   }
 

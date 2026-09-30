@@ -70,21 +70,22 @@
     paused={!playing}
     {aspect}
     {drive}
-  />
-  <figcaption>
-    <label>
-      Track #<input
-        type="number"
-        min="1"
-        max={shapes.length}
-        value={index + 1}
-        onfocus={hold}
-        onblur={choose}
-        aria-label="Track number, 1 to {shapes.length}"
-      />
-    </label>
-    <PlayPause bind:playing label="the tracks" />
-  </figcaption>
+  >
+    {#snippet footer()}
+      <label>
+        Track #<input
+          type="number"
+          min="1"
+          max={shapes.length}
+          value={index + 1}
+          onfocus={hold}
+          onblur={choose}
+          aria-label="Track number, 1 to {shapes.length}"
+        />
+      </label>
+      <PlayPause bind:playing label="the tracks" />
+    {/snippet}
+  </LayoutViewer>
 </figure>
 
 <style>
@@ -92,12 +93,7 @@
     margin: 0 0 1.25rem;
   }
 
-  figcaption {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 0.75rem;
+  label {
     font-variant-numeric: tabular-nums;
   }
 

@@ -6,6 +6,7 @@
 	import { describePose } from "$lib/catalogue.js";
 	import { poseCycle, poseGhost } from "$lib/scenes.js";
 	import PlayPause from "./PlayPause.svelte";
+	import LayoutCard from "./LayoutCard.svelte";
 
 	let { interval = 1, aspect = "3 / 2" } = $props();
 
@@ -23,7 +24,7 @@
 	});
 </script>
 
-<figure class="pose-cycle">
+<LayoutCard footer={controls}>
 	<TrackViewer
 		pieces={scene.pieces}
 		camera={scene.camera}
@@ -32,36 +33,21 @@
 		{aspect}
 		label="The train inside one cube, in each of its 24 poses in turn"
 	/>
-	<span class="readout position">Pose {index + 1}/{POSES.length}</span>
+</LayoutCard>
+
+{#snippet controls()}
+	<PlayPause bind:playing label="the poses" />
+	<span class="readout">Pose {index + 1}/{POSES.length}</span>
 	<span class="readout facing">{describePose(pose)}</span>
-	<span class="control"><PlayPause bind:playing label="the poses" /></span>
-</figure>
+{/snippet}
 
 <style>
-	.pose-cycle {
-		position: relative;
-		margin: 0 0 1.25rem;
-	}
-
 	.readout {
-		position: absolute;
-		left: 0.75rem;
 		font-family: ui-monospace, monospace;
 		font-weight: 600;
-		pointer-events: none;
-	}
-
-	.control {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.75rem;
-	}
-
-	.position {
-		top: 0.5rem;
 	}
 
 	.facing {
-		bottom: 0.5rem;
+		margin-left: auto;
 	}
 </style>

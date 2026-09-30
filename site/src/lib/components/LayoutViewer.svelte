@@ -1,6 +1,7 @@
 <script>
   import TrackViewer from './TrackViewer.svelte';
   import PlayPause from './PlayPause.svelte';
+  import LayoutCard from './LayoutCard.svelte';
   import { axisAnchor, LABEL_SPOTS } from '$lib/render/axes.js';
   import { openScene, frame, extentOf, frameFit, cornersOf } from '$lib/scenes.js';
 
@@ -26,6 +27,9 @@
     // Draw the model's cell lattice around the layout and its train, framed tight
     // on that box rather than on the cubes alone.
     grid = false,
+    // Lay a blueprint's floor of dots under the layout, reaching every edge of the
+    // canvas. It does not change the framing.
+    blueprint = false,
     // Caption the cell the train is in, `(x, y, z)` from the start cube.
     trainCaption = false,
     // Draw the origin's axis arrows, so the caption's x, y, z have a direction each.
@@ -36,6 +40,8 @@
     scrub = false,
     // Hold the train where it is, and anything else moving.
     paused = false,
+    // Extra controls for the card's footer, after the scrubber and caption.
+    footer = undefined,
   } = $props();
 
   // How far round the lap the train is, 0 to 1, and whether the slider has it.
@@ -61,45 +67,26 @@
     if (!letters) return { state: 'empty' };
     try {
       const { pieces, closed, offender } = openScene(letters);
-      const box = grid || origin ? extentOf(pieces) : null;
+      const box = grid || origin || blueprint ? extentOf(pieces) : null;
       // The arrows stand outside the box's low corner, so the frame has to reach
       // them — their corner and each label, which is past each tip.
       const anchor = origin ? axisAnchor(box) : null;
       const arrows = origin
         ? [anchor, ...LABEL_SPOTS.map(({ position }) => position.map((v, a) => v + anchor[a]))]
         : [];
-      const camera = box ? frameFit([...cornersOf(box), ...arrows]) : frame(pieces);
+      const camera = grid || origin ? frameFit([...cornersOf(box), ...arrows]) : frame(pieces);
       return { state: 'ok', pieces, closed, offender, box, camera };
     } catch (error) {
       return { state: 'invalid', message: error.message };
     }
   });
+
+  const showScrub = $derived(result.state === 'ok' && scrub && drive && result.closed && change === 'none');
+  const showCaption = $derived(result.state === 'ok' && trainCaption && drive && result.closed);
 </script>
 
-{#if result.state === 'ok'}
-  <TrackViewer
-    pieces={result.pieces}
-    camera={result.camera}
-    drive={drive && result.closed}
-    sequence={change === 'tumble'}
-    build={change === 'build'}
-    {pace}
-    {speed}
-    {handover}
-    {drop}
-    {reach}
-    grid={grid ? result.box : null}
-    {aspect}
-    {interactive}
-    {paused}
-    label="The layout {letters}"
-    origin={origin ? result.box : null}
-    onTrainCell={cell => (trainCell = cell)}
-    trainAt={scrub ? () => (held ? lap : null) : undefined}
-    onTrainAt={scrub ? f => { if (!held) lap = f; } : undefined}
-  />
-  {#if scrub && drive && result.closed && change === 'none'}
-    <div class="scrubber">
+{#snippet controls()}
+  {#if showScrub}
       <PlayPause bind:playing={() => !held, playing => (held = !playing)} label="the train" />
       <input
         class="scrub"
@@ -111,23 +98,50 @@
         oninput={() => (held = true)}
         aria-label="Where the train is round the lap"
       />
-    </div>
   {/if}
-  {#if trainCaption && drive && result.closed}
+  {#if showCaption}
     <p class="caption">
       Train in cell {trainCell ? `(${readerFrame(trainCell).join(', ')})` : '—'}
     </p>
   {/if}
-{:else}
-  <div class="empty" style:aspect-ratio={aspect}>
-    {#if result.state === 'invalid'}
-      <p class="failed">Not a legal track: {result.message}.</p>
-      <p class="shape">{letters}</p>
-    {:else}
-      <p>Nothing to draw yet — give it a shape string.</p>
-    {/if}
-  </div>
-{/if}
+  {@render footer?.()}
+{/snippet}
+
+<LayoutCard footer={showScrub || showCaption || footer ? controls : undefined}>
+  {#if result.state === 'ok'}
+    <TrackViewer
+      pieces={result.pieces}
+      camera={result.camera}
+      drive={drive && result.closed}
+      sequence={change === 'tumble'}
+      build={change === 'build'}
+      {pace}
+      {speed}
+      {handover}
+      {drop}
+      {reach}
+      grid={grid ? result.box : null}
+      blueprint={blueprint ? result.box : null}
+      {aspect}
+      {interactive}
+      {paused}
+      label="The layout {letters}"
+      origin={origin ? result.box : null}
+      onTrainCell={cell => (trainCell = cell)}
+      trainAt={scrub ? () => (held ? lap : null) : undefined}
+      onTrainAt={scrub ? f => { if (!held) lap = f; } : undefined}
+    />
+  {:else}
+    <div class="empty" style:aspect-ratio={aspect}>
+      {#if result.state === 'invalid'}
+        <p class="failed">Not a legal track: {result.message}.</p>
+        <p class="shape">{letters}</p>
+      {:else}
+        <p>Nothing to draw yet — give it a shape string.</p>
+      {/if}
+    </div>
+  {/if}
+</LayoutCard>
 
 <style>
   .empty {
@@ -142,16 +156,11 @@
   }
 
   .caption {
+    margin: 0;
     text-align: center;
     font-family: ui-monospace, monospace;
     font-variant-numeric: tabular-nums;
     color: var(--grid-color);
-  }
-
-  .scrubber {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
   }
 
   /* The play/pause's outline colour, so the two read as one control. */
