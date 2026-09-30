@@ -10,7 +10,9 @@
     // What a shape change looks like. 'none' is an instant redraw framed tight on
     // that layout — the trade the front page makes on a phone, where the fixed
     // frame's empty room costs more scale than a rearrangement is worth. 'tumble'
-    // collapses the old layout and builds the new one out of the pieces that fall.
+    // collapses the old layout and builds the new one out of the pieces that fall;
+    // 'build' empties the stage and assembles the new one from off the edge of the
+    // frame, framed tight like 'none'.
     change = 'none',
     drive = true,
     interactive = false,
@@ -80,6 +82,7 @@
     camera={result.camera}
     drive={drive && result.closed}
     sequence={change === 'tumble'}
+    build={change === 'build'}
     {pace}
     {speed}
     {handover}

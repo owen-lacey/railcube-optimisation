@@ -28,7 +28,7 @@ export default {
     trainCaption: { control: 'boolean' },
     origin: { control: 'boolean' },
     scrub: { control: 'boolean' },
-    change: { control: 'inline-radio', options: ['none', 'tumble'] },
+    change: { control: 'inline-radio', options: ['none', 'tumble', 'build'] },
   },
 };
 

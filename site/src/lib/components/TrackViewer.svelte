@@ -18,6 +18,11 @@
     // that fall — see `show`. Off by default: a catalogue card showing one piece
     // has nothing to rearrange.
     sequence = false,
+    // A new layout is *built from scratch*: the stage is emptied and every piece
+    // comes in from off the edge of the frame, in route order. `sequence` is this
+    // with a collapse in front of it; without one there is nothing to pick up, so
+    // every piece is a mint. Framed on `camera`, as a static track is.
+    build = false,
     // A new layout *extends* the one that is there: whatever the two have in common
     // is left standing and only the rest arrives. This is what a track being typed
     // needs, and it is the one mode whose camera moves — see `showGrown`.
@@ -107,7 +112,16 @@
   const keyOf = ps => ps.map(pieceKey).join('|');
 
   /**
-   * Show a layout, by whichever of the three routes this viewer is set to.
+   * Show the layout again from the start, which for a build is assembling it anew.
+   */
+  export function replay() {
+    if (!ready || !shown) return;
+    shownKey = null;
+    show(shown);
+  }
+
+  /**
+   * Show a layout, by whichever of the four routes this viewer is set to.
    */
   function show(next) {
     const key = keyOf(next);
@@ -115,6 +129,7 @@
 
     if (grow) showGrown(next);
     else if (sequence && shown && tumblePhase && !reduced) showSequenced(next);
+    else if (build && !reduced) showBuilt(next);
     else showStatic(next);
 
     shown = next;
@@ -173,6 +188,12 @@
     stage.run([trackPhase(stage, next, { drive, trainAt, onTrainAt })]);
   }
 
+  /** Empty the stage and click the whole layout together, every piece a mint. */
+  function showBuilt(next) {
+    stage.clear();
+    stage.run([buildPhase(stage, next, { pace: Number(pace), speed: Number(speed), drive })]);
+  }
+
   /**
    * Collapse what is there and build the new layout out of the pieces that fall:
    * the same cubes, rearranged.
@@ -224,7 +245,7 @@
         // rAF loop for ever is the one thing that would make this unusable on a
         // phone; a still viewer costs nothing. A sequencing or growing viewer needs
         // frames with no train on it, since the assembly is the animation.
-        if ((drive || sequence || grow) && !reduced) {
+        if ((drive || sequence || build || grow) && !reduced) {
           const io = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting && !document.hidden) stage?.start();
             else stage?.stop();
