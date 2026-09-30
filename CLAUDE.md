@@ -421,6 +421,14 @@ and `threejs-fidelity-spike` hold the measurements.
   the solids in the order lattice → ghosts → fill by `renderOrder`; that matched PolyCSS to
   the pixel. The lattice stays prisms (`gridLines`), not `LineSegments`, which are one pixel
   wide at any zoom. Overlay meshes carry `OVERLAY` names so tests can find them.
+- **The blueprint** (`blueprint` prop: on by default in `LayoutViewer`, off in
+  `TrackViewer`, so piece cards never get it) is a sheet of isometric dots behind a
+  viewer, edge to edge, so it is plain where the handle-able area begins and ends. It is
+  a CSS background on `TrackViewer`, not in the scene: `stage.backdrop()` (`backdropOf`
+  in `blueprint.js`) gives the spacing — a cell's edge at the applied zoom — and the
+  canvas pixel one dot is pinned to, the frame's own target, so it follows zoom and pan
+  and ignores the orbit. A floor of dots fixed to the world was built first and replaced
+  on Owen's call: side-on it is a line, so the view most in need of a boundary had none.
 - **One difference from PolyCSS is a correction**: a ghost inside a filled cell has the
   fill's near face drawn over it where the face really is nearer (the pose cycle's
   upside-down poses), which PolyCSS's depth sorting got wrong.

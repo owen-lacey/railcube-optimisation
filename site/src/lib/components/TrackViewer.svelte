@@ -50,6 +50,9 @@
     // A box of cells, `{ lo, hi }`, to draw the model's cell lattice around; null
     // draws none. See `render/grid.js`.
     grid = null,
+    // Draw the viewer on a sheet of dots that follows the camera's zoom and pan, so
+    // its edges are plain to see. See `render/blueprint.js`.
+    blueprint = false,
     // Outline the origin cell and stand the axis arrows (x right, y forwards, z up)
     // at this box's corner, `{ lo, hi }`; null draws neither. See `render/axes.js`.
     origin = null,
@@ -229,7 +232,10 @@
         stage = createStage(canvas, {
           theme: readTheme(host),
           onTrainCell: cell => onTrainCell?.(cell),
-          onCamera: () => origin && scheduleAxisLabels(),
+          onCamera: () => {
+            if (origin) scheduleAxisLabels();
+            if (blueprint) placeSheet();
+          },
         });
         stage.setPaused(paused);
         if (interactive) controls = attachControls(host, stage);
@@ -313,6 +319,21 @@
     gridKey = key;
   });
 
+  // The blueprint's sheet: where the stage says its dots sit, re-read on every
+  // camera write, and handed to the stylesheet below as custom properties.
+  let sheet = $state(null);
+
+  function placeSheet() {
+    sheet = stage?.backdrop() ?? null;
+  }
+
+  $effect(() => {
+    const on = blueprint;
+    if (!ready || !stage) return;
+    if (on) placeSheet();
+    else sheet = null;
+  });
+
   // The origin's axes. A boolean, so there is nothing to key. The letters are HTML
   // over the scene, found by asking the stage where each one's speck landed — after
   // the camera has moved, and at most once a frame however many writes it took.
@@ -376,6 +397,10 @@
 <div
   class="viewer"
   class:interactive
+  class:blueprint
+  style:--dot-s={sheet && `${sheet.spacing}px`}
+  style:--dot-x={sheet && `${sheet.x}px`}
+  style:--dot-y={sheet && `${sheet.y}px`}
   bind:this={host}
   style:aspect-ratio={aspect}
   role={label ? 'img' : undefined}
@@ -399,6 +424,21 @@
     overflow: hidden;
     display: grid;
     place-items: center;
+  }
+
+  /* The blueprint: an isometric sheet of dots, pinned where the stage says. The
+     rows are √3/2 of a spacing apart and every other one is shifted half a dot, so
+     each dot has six neighbours; that is two layers of the same dot, one per row. */
+  .viewer.blueprint {
+    --blueprint-dot: color-mix(in srgb, var(--grid-color) 50%, transparent);
+    --dot-r: 1px;
+    --dot-h: calc(var(--dot-s) * 0.866);
+    --dot: radial-gradient(circle, var(--blueprint-dot) var(--dot-r), transparent calc(var(--dot-r) + 0.75px));
+    background-image: var(--dot), var(--dot);
+    background-size: var(--dot-s) calc(2 * var(--dot-h));
+    background-position:
+      calc(var(--dot-x) - var(--dot-s) / 2) calc(var(--dot-y) - var(--dot-h)),
+      var(--dot-x) var(--dot-y);
   }
 
   /* Orbiting and page-scrolling fight over the same drag on a touch screen.

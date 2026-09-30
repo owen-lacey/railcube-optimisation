@@ -25,6 +25,7 @@ export default {
     drop: { control: { type: 'range', min: 0, max: 6, step: 1 } },
     aspect: { control: 'text' },
     grid: { control: 'boolean' },
+    blueprint: { control: 'boolean' },
     trainCaption: { control: 'boolean' },
     origin: { control: 'boolean' },
     scrub: { control: 'boolean' },
@@ -90,6 +91,22 @@ export const Grid = {
           + 'curve fills a 2×2 block of them, and the train needs the cells on the rail '
           + 'side of each piece. The lattice covers every cell the cubes *and* the train '
           + 'touch, empty ones included. Drag to orbit.',
+      },
+    },
+  },
+};
+
+export const Blueprint = {
+  name: 'On a blueprint',
+  args: { shape: 'LIRIROSOLORLLSORII', interactive: true },
+  parameters: {
+    docs: {
+      description: {
+        story: 'The viewer drawn on a sheet of dots, edge to edge, so it is plain where '
+          + 'the part that can be handled begins and ends. The sheet lies flat on the '
+          + 'screen, so no angle loses it, but it follows the camera\'s zoom and pan — '
+          + 'scroll or pinch and the dots spread, shift-drag and they slide with the '
+          + 'track. Orbiting leaves it still, as a sheet of paper would.',
       },
     },
   },

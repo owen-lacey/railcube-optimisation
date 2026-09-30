@@ -30,6 +30,7 @@ import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
 import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
+import { orbit, slid, zoomed } from '../site/src/lib/render/controls.js';
 
 // ---- The watched stage -----------------------------------------------------
 
@@ -1079,6 +1080,34 @@ test('the stage reports each cell the train enters once, lattice or not, and nul
 
   stage.run([tumblePhase(stage, pieces, { drop: 1, limit: 1 })]);
   assert.equal(reported.at(-1), null, 'the train went and nobody was told');
+});
+
+test('the blueprint\'s sheet zooms and pans with the camera, and ignores the orbit', () => {
+  const { stage } = staged();
+  stage.frameTo({ zoom: 2, target: '40,-20,10' });
+  const close = (a, b, what) => assert.ok(Math.abs(a - b) < 1e-6, `${what}: ${a} is not ${b}`);
+  const at = () => stage.backdrop();
+
+  // Untouched, one dot is pinned to the frame's target, which is the canvas's middle,
+  // and the dots are a cell's edge apart at the zoom applied.
+  close(at().x, 450, 'pinned across');
+  close(at().y, 350, 'pinned down');
+  close(at().spacing, stage.zoom() * CUBE, 'spacing');
+
+  // An orbit turns the scene about that same point, so the sheet does not move.
+  stage.adjust(orbit(stage.view(), 120, -40));
+  close(at().x, 450, 'orbited across');
+  close(at().y, 350, 'orbited down');
+
+  // A pan slides the scene under the pointer, and the sheet slides with it.
+  stage.adjust(slid(stage.view(), 30, -12, stage.zoom()));
+  close(at().x, 480, 'panned across');
+  close(at().y, 338, 'panned down');
+
+  // A zoom spreads the dots by as much as it spreads the scene.
+  const before = at().spacing;
+  stage.adjust(zoomed(stage.view(), stage.view().zoomBy * 2));
+  close(at().spacing, before * 2, 'zoomed spacing');
 });
 
 test('the origin\'s outline and arrows are overlays that clear() leaves and setOrigin(null) takes away', () => {

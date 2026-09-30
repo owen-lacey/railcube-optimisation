@@ -27,9 +27,10 @@
     // Draw the model's cell lattice around the layout and its train, framed tight
     // on that box rather than on the cubes alone.
     grid = false,
-    // Lay a blueprint's floor of dots under the layout, reaching every edge of the
-    // canvas. It does not change the framing.
-    blueprint = false,
+    // Draw the viewer on a blueprint's sheet of dots, reaching every edge of the
+    // canvas. It does not change the framing. On for every layout; a single piece
+    // is drawn by `PieceViewer`, which leaves it off.
+    blueprint = true,
     // Caption the cell the train is in, `(x, y, z)` from the start cube.
     trainCaption = false,
     // Draw the origin's axis arrows, so the caption's x, y, z have a direction each.
@@ -67,14 +68,14 @@
     if (!letters) return { state: 'empty' };
     try {
       const { pieces, closed, offender } = openScene(letters);
-      const box = grid || origin || blueprint ? extentOf(pieces) : null;
+      const box = grid || origin ? extentOf(pieces) : null;
       // The arrows stand outside the box's low corner, so the frame has to reach
       // them — their corner and each label, which is past each tip.
       const anchor = origin ? axisAnchor(box) : null;
       const arrows = origin
         ? [anchor, ...LABEL_SPOTS.map(({ position }) => position.map((v, a) => v + anchor[a]))]
         : [];
-      const camera = grid || origin ? frameFit([...cornersOf(box), ...arrows]) : frame(pieces);
+      const camera = box ? frameFit([...cornersOf(box), ...arrows]) : frame(pieces);
       return { state: 'ok', pieces, closed, offender, box, camera };
     } catch (error) {
       return { state: 'invalid', message: error.message };
@@ -121,7 +122,7 @@
       {drop}
       {reach}
       grid={grid ? result.box : null}
-      blueprint={blueprint ? result.box : null}
+      {blueprint}
       {aspect}
       {interactive}
       {paused}

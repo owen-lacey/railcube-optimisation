@@ -37,6 +37,7 @@ import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
 import { sharedRenderer } from './renderer.js';
 import { cellBox, cellFace } from './grid.js';
+import { backdropOf } from './blueprint.js';
 import { PROJ } from '../../../../src/track.js';
 import { originCell, axisArrows, axisAnchor, LABEL_SPOTS } from './axes.js';
 import { TRAIN_CELL_INSET, LIGHT } from './dimensions.js';
@@ -157,6 +158,12 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   const {
     frameTo: applyDescription, applyCamera, view, adjust, applied,
   } = createCamera(camera, size, () => { invalidate(); onCamera?.(); });
+
+  /** Where the blueprint's sheet of dots sits under the camera now — see `backdropOf`. */
+  const backdrop = () => {
+    const { width, height } = size();
+    return backdropOf(camera, applied(), view().offset, width, height);
+  };
 
   // The cubes, by piece ID (`1L` is the first left curve — see `identify` in
   // src/layouts.js). This is the registry object constancy is made of: a phase
@@ -544,6 +551,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     panTo,
     applyCamera,
     applied,
+    backdrop,
     zoom: () => applied().zoom,
     view,
     adjust,
