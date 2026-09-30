@@ -990,7 +990,8 @@ test('the lattice is one mesh, which clearing the cubes leaves standing', () => 
 
 test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', () => {
   const { handles, stage } = staged();
-  const ghosts = () => handles.filter(h => h.name.startsWith(OVERLAY.ghost));
+  const ghosts = () => handles.filter(h => h.name.startsWith(OVERLAY.ghost) && !h.name.includes('-floor-'));
+  const floors = () => handles.filter(h => h.name.includes(`${OVERLAY.ghost}-floor-`));
 
   stage.setGhosts([
     { type: 'straight', cell: [0, 1, 0], pose: 'DF', tint: 'before' },
@@ -1000,6 +1001,7 @@ test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', (
   assert.equal(first.length, 2);
   assert.equal(first[0].name, `${OVERLAY.ghost}-before`);
   assert.equal(first[1].name, `${OVERLAY.ghost}-after`);
+  assert.equal(floors().length, 2, 'each ghost marks the face it stands on');
   assert.notEqual(first[0].mesh.material.color.getHex(), first[1].mesh.material.color.getHex(),
     'the two tints are one colour');
   // Half a cube along a straight is its middle: the body is in its train cell.
@@ -1012,8 +1014,11 @@ test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', (
 
   stage.setGhosts([{ type: 'straight', cell: [0, 1, 1], pose: 'DF', tint: 'after' }]);
   assert.ok(first.every(h => h.disposed), 'replaced ghosts were left behind');
+  stage.setGhosts([{ type: 'straight', cell: [0, 0, 0], pose: 'DF' }]);
+  assert.equal(floors().filter(h => !h.disposed).length, 1, 'an untinted train marks its face too');
   stage.setGhosts([]);
   assert.ok(ghosts().every(h => h.disposed));
+  assert.ok(floors().every(h => h.disposed), 'floor patches were left behind');
 });
 
 test('the lattice fills the cell the train is in, and moves the fill rather than redrawing it', () => {

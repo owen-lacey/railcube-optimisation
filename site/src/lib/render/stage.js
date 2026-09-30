@@ -36,7 +36,8 @@ import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js
 import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
 import { sharedRenderer } from './renderer.js';
-import { cellBox } from './grid.js';
+import { cellBox, cellFace } from './grid.js';
+import { PROJ } from '../../../../src/track.js';
 import { originCell, axisArrows, axisAnchor, LABEL_SPOTS } from './axes.js';
 import { TRAIN_CELL_INSET, LIGHT } from './dimensions.js';
 import { toWorld } from './vec.js';
@@ -484,8 +485,10 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   // that does not move. So they are an overlay like the lattice — `clear()` leaves
   // them, and whoever set them takes them down with `setGhosts([])`. A tinted ghost
   // is flat and see-through in its tint; one with no tint is the train itself, lit.
+  // Either way the face it stands on is marked, in its tint or the lattice's paint.
 
   let ghosts = [];
+  let floors = [];   // the patch of floor under each ghost, one geometry apiece
 
   /**
    * Replace the ghost trains with these, `{ type, cell, pose, tint? }` each: a train
@@ -494,6 +497,12 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
    */
   function setGhosts(list) {
     remove(ghosts, { owned: false });
+    remove(floors);
+    floors = list.map(({ cell, pose, tint }) => fixedMesh(
+      soupGeometry(cellFace(PROJ[pose[0]], TRAIN_CELL_INSET)), tint ? paint[tint] : paint.fill,
+      { name: `${OVERLAY.ghost}-floor-${tint ?? 'solid'}`, order: ORDER.ghost, at: toWorld(cell) },
+    ));
+    for (const mesh of floors) scene.add(mesh);
     ghosts = list.map(({ type, cell, pose, tint }) => {
       const { basis, position } = trainAt(type, cell, pose);
       const { mesh } = movingMesh(scene, standingTrain(), tint ? paint[tint] : paint.solid, basis, position);

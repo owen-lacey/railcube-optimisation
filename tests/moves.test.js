@@ -44,12 +44,11 @@ test('the lattice holds the piece and both ghosts\' train cells', () => {
 
 test('the pose cycle stands the train in one cell in every pose, floor by floor', () => {
   const ghosts = POSES.map(poseGhost);
-  const { fill, grid } = poseCycle();
+  const { grid } = poseCycle();
   assert.equal(new Set(ghosts.map(g => g.pose)).size, 24);
   for (const ghost of ghosts) {
     assert.ok(isValidPose(ghost.pose), ghost.pose);
-    assert.deepEqual(ghost.cell, fill[0]);
-    assert.deepEqual([grid.lo, grid.hi], [ghost.cell, ghost.cell]);
+        assert.deepEqual([grid.lo, grid.hi], [ghost.cell, ghost.cell]);
   }
   // Four headings on each floor before moving on to the next.
   assert.deepEqual(POSES.slice(0, 4).map(p => p[0]), ['U', 'U', 'U', 'U']);

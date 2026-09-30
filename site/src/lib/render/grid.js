@@ -108,3 +108,23 @@ export function cellBox(inset) {
     };
   }));
 }
+
+/**
+ * One face of the cell centred on `[0, 0, 0]` — the one on the `dir` side, a
+ * project-frame unit vector — `inset` units inside the cell like `cellBox`. Wound
+ * both ways, so it shows from either side; it is a patch of paint, not a solid.
+ */
+export function cellFace(dir, inset) {
+  const axis = dir.findIndex(v => v !== 0);
+  const [u, v] = [0, 1, 2].filter(k => k !== axis);
+  const h = 0.5 - inset / CUBE;
+  const corner = (du, dv) => {
+    const p = [0, 0, 0];
+    p[axis] = dir[axis] * h;
+    p[u] = du * h;
+    p[v] = dv * h;
+    return toWorld(p);
+  };
+  const quad = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  return [{ vertices: quad }, { vertices: [...quad].reverse() }];
+}

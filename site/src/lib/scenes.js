@@ -360,7 +360,7 @@ export function pieceMove(type) {
 // ---- Every pose inside one cell --------------------------------------------
 
 /**
- * One cell with nothing in it, lattice and fill, for a train to be shown in each
+ * One cell with nothing in it, lattice only, for a train to be shown in each
  * of its 24 poses in turn — see `poseGhost`. Framed like `pieceMove`, on the cell.
  */
 export function poseCycle() {
@@ -369,7 +369,6 @@ export function poseCycle() {
     pieces: [],
     drive: false,
     grid,
-    fill: [grid.lo],
     camera: { ...frameTight(grid), zoom: 42 / Math.sqrt(3) },
   };
 }
