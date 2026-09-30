@@ -1,106 +1,126 @@
-// The animations, driven against a fake PolyCSS scene and a hand-cranked clock.
+// The animations, driven against a real three.js scene and a hand-cranked clock.
 //
 // This is the promotion of a throwaway script. The build animation was verified
-// last session by a Node file that did exactly what is below — a scene that only
-// records what it is asked to draw, and a `requestAnimationFrame` stepped by hand
-// — and it earned its keep immediately: two of its assertions failed when first
-// written, and *both times the assertion was wrong rather than the code*. It was
-// then deleted, so this session started by rewriting it.
+// by a Node file that did exactly what is below — a scene nothing draws, and a
+// `requestAnimationFrame` stepped by hand — and it earned its keep immediately:
+// two of its assertions failed when first written, and *both times the assertion
+// was wrong rather than the code*. It was then deleted, so it lives here now.
 //
 // A sequenced tumble-then-build has strictly more ordering to get wrong than a
 // build alone, and it has a property no eye can check reliably: that the cube
-// arriving here is the *same object* as the one that was over there. So the script
-// lives in the suite now.
+// arriving here is the *same object* as the one that was over there.
 //
-// Nothing here needs a DOM. `cannon-es` and `@layoutit/polycss` are both runtime
-// dependencies, so this belongs in the fast tier.
+// The scene is three's own `Scene`, and every mesh the stage mounts is watched as
+// it is added: each write to its matrix is recorded, and its removal. The one
+// thing faked is the renderer, which only counts what it is asked to draw. Nothing
+// here needs a DOM or WebGL, and `three` and `cannon-es` are runtime dependencies,
+// so this belongs in the fast tier.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
-import { createStage, together, GRID_CLASS, ORIGIN_CLASS, TRAIN_CELL_CLASS, GHOST_CLASS } from '../site/src/lib/render/stage.js';
+import { createStage, together, OVERLAY } from '../site/src/lib/render/stage.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
-import { ALARM, ALARM_FLASH, ALARM_PERIOD, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET } from '../site/src/lib/render/dimensions.js';
+import { ALARM_PERIOD, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
-import { toWorld, cubePosition, poseRotation, through, add } from '../site/src/lib/render/vec.js';
+import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
-import { CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 
-// ---- The fake scene --------------------------------------------------------
+// ---- The watched stage -----------------------------------------------------
+
+const THEME = { grid: '#4f75b8', gridOpacity: 0.22, ghostBefore: '#b4bfcd', ghostAfter: '#6b7a90', ghostOpacity: 0.6 };
+
+/** What a matrix says: where the mesh is, and the images of its local axes. */
+const transformOf = ({ elements: e }) => ({
+  position: [e[12], e[13], e[14]],
+  basis: [[e[0], e[1], e[2]], [e[4], e[5], e[6]], [e[8], e[9], e[10]]],
+});
+
+// Every mesh a stage has ever mounted, by the three object, so a cube can be
+// asked for its record.
+const HANDLES = new WeakMap();
+
+/** The record of what has been written to a stage cube's mesh. */
+const handleOf = cube => HANDLES.get(cube.mesh.mesh);
 
 /**
- * A stand-in for a PolyCSS scene that draws nothing and remembers everything.
- *
- * `movingMesh` only ever calls `scene.add`, then `setPolygons`, `setTransform` and
- * `dispose` on what comes back, so this is the whole of the surface the renderer
- * touches. Recording the calls is what lets the ordering assertions below be about
- * what was actually drawn rather than about internal state.
+ * Watch a mesh from the moment it is added: its mounting transform, then every
+ * matrix write after it — `setPosition` ends a placement and `makeTranslation` is
+ * a fixed overlay's move — and whether it has been taken away.
  */
-function fakeScene(now = () => 0) {
-  const handles = [];
-  const scene = {
-    add(mesh) {
-      const handle = {
-        mesh,
-        bakes: 0,
-        bakeAt: [],
-        transforms: [],
-        disposed: false,
-        classes: new Set(),
-        element: { classList: { add: name => handle.classes.add(name) } },
-        setPolygons(polygons) {
-          handle.bakes += 1;
-          handle.bakeAt.push(now());
-          handle.painted = new Set(polygons.map(p => p.color));
-          handle.polygons = polygons;
-        },
-        setTransform(t) { handle.transforms.push(t); },
-        dispose() { handle.disposed = true; },
-      };
-      handles.push(handle);
-      return handle;
-    },
+function watch(mesh) {
+  const handle = {
+    mesh,
+    transforms: [],
+    disposed: false,
+    get name() { return mesh.name; },
   };
-  return { handles, cameraEl: fakeCamera(), sceneEl: { getScene: () => scene } };
+  const record = () => handle.transforms.push(transformOf(mesh.matrix));
+  record();
+  for (const method of ['setPosition', 'makeTranslation']) {
+    const original = mesh.matrix[method];
+    mesh.matrix[method] = function write(...args) {
+      const out = original.apply(this, args);
+      record();
+      return out;
+    };
+  }
+  HANDLES.set(mesh, handle);
+  return handle;
 }
 
-/** `createCamera` reads two sizes off the element and writes attributes to it. */
-const fakeCamera = () => ({
-  clientWidth: 900,
-  clientHeight: 700,
-  attributes: {},
-  setAttribute(name, value) { this.attributes[name] = value; },
-});
+/**
+ * A stage on a 900×700 stand-in canvas, drawing through a renderer that only
+ * counts. `handles` is every mesh ever mounted, in order; lights are not meshes.
+ */
+function staged(options = {}) {
+  const renderer = { draws: 0, draw() { renderer.draws += 1; } };
+  const canvas = { clientWidth: 900, clientHeight: 700 };
+  const stage = createStage(canvas, { theme: THEME, renderer, ...options });
+  const handles = [];
+  stage.scene.addEventListener('childadded', ({ child }) => {
+    if (child.isMesh) handles.push(watch(child));
+  });
+  stage.scene.addEventListener('childremoved', ({ child }) => {
+    const handle = HANDLES.get(child);
+    if (handle) handle.disposed = true;
+  });
+  return { stage, handles, renderer };
+}
 
 /**
  * A clock that only moves when told to. `loop.js` caps a single delta at 0.1 s, so
  * the step has to be under that or the loop silently runs slower than the caller
  * thinks — which is the same trap that makes headless screenshotting useless here.
+ *
+ * It holds every frame asked for, since the stage's loop and its on-demand draw
+ * each ask for their own.
  */
 function fakeClock() {
   let now = 0;
-  let pending = null;
-  globalThis.requestAnimationFrame = cb => { pending = cb; return 1; };
-  globalThis.cancelAnimationFrame = () => { pending = null; };
+  let next = 1;
+  let pending = new Map();
+  globalThis.requestAnimationFrame = cb => { pending.set(next, cb); return next++; };
+  globalThis.cancelAnimationFrame = id => { pending.delete(id); };
   return {
     /** Run `seconds` of animation in 16 ms frames, calling `onFrame` after each. */
     run(seconds, onFrame = () => {}) {
       for (let i = 0; i < Math.round(seconds / 0.016); i++) {
-        if (!pending) return;               // the loop stopped of its own accord
-        const cb = pending;
-        pending = null;
+        if (!pending.size) return;          // nothing asked for another frame
+        const due = [...pending.values()];
+        pending = new Map();
         now += 16;
-        cb(now);
+        for (const cb of due) cb(now);
         onFrame(now / 1000);
       }
     },
     at: () => now / 1000,
-    running: () => pending !== null,
+    running: () => pending.size > 0,
   };
 }
 
@@ -109,15 +129,51 @@ const piecesOf = shape => paint(chainTrack(routeOf(shape)));
 /** Where a piece's mesh belongs when it has landed: its cube, in world units. */
 const restingPlace = piece => cubePosition(piece);
 
+/** How far apart two rotation bases are, entry by entry. */
+const gap = (a, b) => Math.max(...a.flatMap((col, c) => col.map((v, r) => Math.abs(v - b[c][r]))));
+
 const SET = 'LIRIROSOLORLLSORII';
 const OTHER = 'LRRIIOOSRLLOOLSRII';   // the same 18 cubes, arranged differently
 const RING = 'LLLL';
 
+// ---- Drawing on demand ----------------------------------------------------
+
+test('a still track is drawn once, and a moving one once a frame', () => {
+  const clock = fakeClock();
+  const still = staged();
+  still.stage.run([trackPhase(still.stage, piecesOf(SET), { drive: false })]);
+  still.stage.start();
+  clock.run(1);
+  // Eighteen cubes mounted, the phase run and finished, and one picture for all of it.
+  assert.equal(still.renderer.draws, 1, `${still.renderer.draws} draws of a picture that does not move`);
+  assert.equal(clock.running(), false, 'a still track kept asking for frames');
+
+  const moving = staged();
+  moving.stage.run([trackPhase(moving.stage, piecesOf(SET), { drive: true })]);
+  moving.stage.start();
+  const frames = [];
+  clock.run(1, () => frames.push(moving.renderer.draws));
+  // One draw per frame the loop ran, however many writes the frame made.
+  frames.slice(1).forEach((n, i) => assert.ok(n - frames[i] <= 1, 'a frame was drawn twice'));
+  assert.ok(frames.at(-1) > 50, `only ${frames.at(-1)} draws in a second of driving`);
+});
+
+test('a camera move on a still stage is drawn', () => {
+  const clock = fakeClock();
+  const { stage, renderer } = staged();
+  stage.run([trackPhase(stage, piecesOf(RING), { drive: false })]);
+  stage.start();
+  clock.run(1);
+  const drawn = renderer.draws;
+  stage.frameTo({ zoom: 2 });
+  clock.run(1);
+  assert.equal(renderer.draws, drawn + 1, 'a reframe was not drawn, or drawn more than once');
+});
+
 // ---- A finished track -----------------------------------------------------
 
 test('a track phase draws every cube at once, in its place', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
+  const { handles, stage } = staged();
   const pieces = piecesOf(SET);
 
   stage.run([trackPhase(stage, pieces, { drive: false })]);
@@ -133,12 +189,15 @@ test('a track phase draws every cube at once, in its place', () => {
     const cube = stage.cubes.get(id);
     assert.deepEqual(cube.position, restingPlace(cubes[i]), `${id} is misplaced`);
     assert.deepEqual(cube.basis, poseRotation(cubes[i].pose), `${id} is misposed`);
+    // And the mesh is where the cube says it is.
+    const { position, basis } = handleOf(cube).transforms.at(-1);
+    assert.deepEqual(position, restingPlace(cubes[i]), `${id}'s mesh is misplaced`);
+    assert.ok(gap(basis, poseRotation(cubes[i].pose)) < 1e-12, `${id}'s mesh is misposed`);
   }
 });
 
 test('a crossed cross is one cube drawn once', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
+  const { handles, stage } = staged();
   const pieces = piecesOf('XSLLLSXSRRRS');   // the figure of eight
 
   stage.run([trackPhase(stage, pieces, { drive: false })]);
@@ -151,9 +210,8 @@ test('a crossed cross is one cube drawn once', () => {
 // ---- A cold build ---------------------------------------------------------
 
 test('a build mints one piece per beat and lands each one exactly', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { handles, stage } = staged();
   const pieces = piecesOf(SET);
   const cubes = pieces.filter(p => !p.revisit);
   const ids = identify(pieces);
@@ -179,23 +237,15 @@ test('a build mints one piece per beat and lands each one exactly', () => {
     const cube = stage.cubes.get(id);
     assert.deepEqual(cube.position, restingPlace(cubes[i]), `${id} landed off its cell`);
     assert.deepEqual(cube.basis, poseRotation(cubes[i].pose), `${id} landed mispose`);
-    // A landed piece has nothing on its container, and `polyRotation` of the
-    // identity emits no transform at all — so the last thing written to it is a
-    // rotation that PolyCSS will throw away.
-    const last = cube.mesh.handle.transforms.at(-1);
-    assert.ok(Math.max(...last.rotation.map(Math.abs)) < 1e-9, `${id} landed turned`);
-    // A minted piece has its polygons written once, by `scene.add`, in the pose it
-    // will land in — so `setPolygons` is never called on it at all. Any bake here
-    // would be a piece being re-lit mid-flight, which is the per-frame
-    // `setPolygons` that collapsed the frame rate the first time round.
-    assert.equal(cube.mesh.handle.bakes, 0, `${id} was re-baked in flight`);
+    // The last thing written to the mesh is its pose exactly, not nearly.
+    assert.ok(gap(handleOf(cube).transforms.at(-1).basis, poseRotation(cubes[i].pose)) < 1e-12,
+      `${id} landed turned`);
   }
 });
 
 test('a minted arrival is a straight line down the connector axis', () => {
-  const { cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { stage } = staged();
   const pieces = piecesOf(RING);
   const cubes = pieces.filter(p => !p.revisit);
   const ids = identify(pieces);
@@ -210,7 +260,7 @@ test('a minted arrival is a straight line down the connector axis', () => {
     const heading = poseRotation(cubes[i].pose)[1];
     const home = restingPlace(cubes[i]);
     let frames = 0;
-    for (const { position } of cube.mesh.handle.transforms) {
+    for (const { position } of handleOf(cube).transforms) {
       const offset = position.map((v, k) => v - home[k]);
       // The offset must be a multiple of the heading and nothing else. Two of the
       // three axes are therefore *exactly* zero, not nearly: an arrival that drifts
@@ -235,17 +285,14 @@ test('a minted arrival is a straight line down the connector axis', () => {
  */
 function sequence(shapeFrom, shapeTo, { handover = 0.7, pace = PACE, limit = 2.5 } = {}) {
   const clock = fakeClock();
-  const { handles, cameraEl, sceneEl } = fakeScene(clock.at);
-  const stage = createStage(cameraEl, sceneEl);
+  const { handles, stage } = staged();
   const from = piecesOf(shapeFrom);
   const to = piecesOf(shapeTo);
 
   stage.run([trackPhase(stage, from, { drive: false })]);
-  const before = new Map([...stage.cubes].map(([id, cube]) => [id, cube.mesh.handle]));
+  const before = new Map([...stage.cubes].map(([id, cube]) => [id, handleOf(cube)]));
 
-  const collapse = tumblePhase(stage, from, {
-    drop: 1, limit, keep: new Set(identify(to)),
-  });
+  const collapse = tumblePhase(stage, from, { drop: 1, limit });
   const taken = [];
   stage.run([together(collapse, buildPhase(stage, to, {
     pace,
@@ -265,13 +312,13 @@ test('the build picks up the cubes the tumble dropped', () => {
   clock.run(6);
 
   // The point of the whole exercise: not one new mesh, not one disposed. `2L` in
-  // the new layout is the very object that was `2L` in the old one.
-  // Not one new mesh and not one disposed: eighteen cubes in, eighteen cubes out.
-  // Nothing is drawn for the floor, so this is the whole scene.
+  // the new layout is the very object that was `2L` in the old one. Eighteen cubes
+  // in, eighteen cubes out, and nothing is drawn for the floor, so this is the
+  // whole scene.
   assert.equal(handles.length, 18, 'a mesh was created or destroyed');
   assert.equal(stage.cubes.size, 18);
   for (const [id, mesh] of before) {
-    assert.equal(stage.cubes.get(id).mesh.handle, mesh, `${id} is not the same cube`);
+    assert.equal(handleOf(stage.cubes.get(id)), mesh, `${id} is not the same cube`);
     assert.equal(mesh.disposed, false, `${id} was disposed`);
   }
 
@@ -280,7 +327,7 @@ test('the build picks up the cubes the tumble dropped', () => {
     const cube = stage.cubes.get(id);
     assert.deepEqual(cube.position, restingPlace(cubes[i]), `${id} landed off its cell`);
     assert.deepEqual(cube.basis, poseRotation(cubes[i].pose), `${id} landed mispose`);
-    assert.ok(Math.max(...cube.mesh.handle.transforms.at(-1).rotation.map(Math.abs)) < 1e-9,
+    assert.ok(gap(handleOf(cube).transforms.at(-1).basis, poseRotation(cubes[i].pose)) < 1e-12,
       `${id} landed turned`);
   }
 });
@@ -327,25 +374,6 @@ test('a cube not yet picked up keeps falling instead of freezing', () => {
     `${last} moved on only ${moved} of ${seen.length} frames after the handover`);
 });
 
-test('a picked-up cube is baked when it is picked up, and never again', () => {
-  const { clock, to, before, taken } = sequence(SET, OTHER);
-  const claimed = new Set(identify(to));
-  clock.run(10);
-
-  const when = new Map(taken.map(t => [t.id, t.at]));
-  for (const [id, mesh] of before) {
-    if (!claimed.has(id)) continue;
-    // The re-bake at pick-up puts the final pose in the vertices, so the piece is
-    // lit correctly the moment it lands. Anything after it would be a piece re-lit
-    // mid-flight — the per-frame `setPolygons` that collapsed the frame rate the
-    // first time round.
-    const after = mesh.bakeAt.filter(t => t > when.get(id) + 0.02);
-    assert.equal(after.length, 0, `${id} was re-baked ${after.length} times in flight`);
-    assert.ok(mesh.bakeAt.some(t => Math.abs(t - when.get(id)) < 0.02),
-      `${id} was not baked at its pick-up`);
-  }
-});
-
 test('a cube the new layout has no use for finishes falling and stays put', () => {
   // `SSRRIIRRLLIISSSLLS` holds six straights where the model set holds two, so most
   // of the set's cubes have a slot and several have none.
@@ -364,12 +392,13 @@ test('a cube the new layout has no use for finishes falling and stays put', () =
     // Nothing ever picks it up — it is not flown anywhere, it is just dropped.
     assert.ok(!lifted.has(id), `${id} was picked up despite having nowhere to go`);
     assert.deepEqual(stage.cubes.get(id).position, resting.get(id), `${id} is still moving`);
-    assert.equal(stage.cubes.get(id).mesh.handle.disposed, false, `${id} was disposed`);
+    assert.equal(handleOf(stage.cubes.get(id)).disposed, false, `${id} was disposed`);
   }
 });
 
 test('a slot with no cube on the floor is minted from off-frame', () => {
   const { stage, clock, to, before } = sequence(SET, 'SSRRIIRRLLIISSSLLS');
+  const cubes = to.filter(p => !p.revisit);
   const ids = identify(to);
   const minted = ids.filter(id => !before.has(id));
 
@@ -377,9 +406,10 @@ test('a slot with no cube on the floor is minted from off-frame', () => {
   assert.ok(minted.length > 0, 'this layout was supposed to need new cubes');
   for (const id of minted) {
     assert.ok(stage.cubes.has(id), `${id} was never made`);
-    // A mint's polygons go in through `scene.add`, already in the pose it will
-    // land in, so it is never baked at all — same as on a cold build.
-    assert.equal(stage.cubes.get(id).mesh.handle.bakes, 0, `${id} was re-baked`);
+    const handle = handleOf(stage.cubes.get(id));
+    assert.ok(![...before.values()].includes(handle), `${id} reused a cube from the floor`);
+    assert.ok(handle.transforms.length > 1, `${id} did not fly`);
+    assert.deepEqual(stage.cubes.get(id).position, restingPlace(cubes[ids.indexOf(id)]), `${id} landed off its cell`);
   }
 });
 
@@ -435,9 +465,8 @@ test('speed scales the whole build, and only its duration', () => {
   // faster rather than a differently-shaped one. Two things to hold: it really is
   // proportional end to end, and it changes nothing about where a piece ends up.
   const finish = speed => {
-    const { cameraEl, sceneEl } = fakeScene();
-    const stage = createStage(cameraEl, sceneEl);
     const clock = fakeClock();
+    const { stage } = staged();
     const pieces = piecesOf(SET);
     const cubes = pieces.filter(p => !p.revisit);
     const ids = identify(pieces);
@@ -473,9 +502,8 @@ test('a replaced phase takes its train off the track with it', () => {
   // one thing that can be abandoned — and a phase whose queue is replaced mid-lap
   // used to leave it hanging in mid-air over the collapsing track for ever. Which
   // it did, visibly, and which counting meshes is the way to keep pinned.
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { handles, stage } = staged();
   const from = piecesOf(SET);
   const to = piecesOf(OTHER);
   const alive = () => handles.filter(h => !h.disposed).length;
@@ -484,7 +512,7 @@ test('a replaced phase takes its train off the track with it', () => {
   assert.equal(alive(), 19, '18 cubes and a train');
 
   stage.run([
-    tumblePhase(stage, from, { drop: 1, limit: 1.2, keep: new Set(identify(to)) }),
+    tumblePhase(stage, from, { drop: 1, limit: 1.2 }),
     buildPhase(stage, to, { pace: PACE, drive: true }),
   ]);
   assert.equal(alive(), 18, 'just the cubes: the first train has gone');
@@ -497,16 +525,14 @@ test('a replaced phase takes its train off the track with it', () => {
 });
 
 test('a held train stays put, and a whole lap on is where it started', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { handles, stage } = staged();
   let held = 0.3;
   const told = [];
 
   stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => held, onTrainAt: f => told.push(f) })]);
   stage.start();
   const train = handles.at(-1);
-  // The train is placed, never baked, so where it is lives in its last transform.
   const pose = () => JSON.stringify(train.transforms.at(-1));
 
   clock.run(0.05);
@@ -527,9 +553,8 @@ test('a held train stays put, and a whole lap on is where it started', () => {
 });
 
 test('a hold let go drives on from where it held the train', () => {
-  const { cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { stage } = staged();
   let held = null;
   const told = [];
 
@@ -546,9 +571,8 @@ test('a hold let go drives on from where it held the train', () => {
 });
 
 test('a driving train reports how far round the lap it is', () => {
-  const { cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { stage } = staged();
   const told = [];
 
   stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => null, onTrainAt: f => told.push(f) })]);
@@ -563,9 +587,8 @@ test('a driving train reports how far round the lap it is', () => {
 });
 
 test('a paused stage draws one still frame, stops, and carries on from there', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { handles, stage } = staged();
   const told = [];
 
   stage.run([trackPhase(stage, piecesOf(RING), { onTrainAt: f => told.push(f) })]);
@@ -590,9 +613,8 @@ test('a paused stage draws one still frame, stops, and carries on from there', (
 });
 
 test('a track shown while paused gets its train, standing still', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { handles, stage } = staged();
   const told = [];
 
   stage.setPaused(true);
@@ -629,7 +651,7 @@ test('a picked-up cube also finishes down the connector axis', () => {
       return Math.max(...offset.map((v, k) => Math.abs(v - along * heading[k])));
     };
 
-    const flight = stage.cubes.get(id).mesh.handle.transforms;
+    const flight = handleOf(stage.cubes.get(id)).transforms;
     let onAxis = 0;
     while (onAxis < flight.length && offAxis(flight.at(-1 - onAxis)) < 1e-9) onAxis += 1;
 
@@ -669,13 +691,12 @@ test('a pick-up carries a cube by its centre of mass, not by a corner', () => {
 // build picks it up off the floor and carries it, this leaves it alone. A piece
 // already down must not so much as twitch when the next letter is typed, and
 // "leaves it alone" is a claim about writes rather than about pixels — which is
-// exactly what the fake scene can settle.
+// exactly what watching the meshes can settle.
 
 /** Type a shape onto a stage, one growth at a time, and run each out. */
-function typing(shapes, { pace = 0.1 } = {}) {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
+function typing({ pace = 0.1 } = {}) {
   const clock = fakeClock();
+  const { handles, stage } = staged();
   let shown = [];
 
   const type = shape => {
@@ -705,7 +726,7 @@ function typing(shapes, { pace = 0.1 } = {}) {
 }
 
 test('growing a track does not touch a single piece already standing', () => {
-  const { handles, clock, type } = typing(['LIRIROSOL']);
+  const { handles, clock, type } = typing();
 
   type('LIRIROSOL');
   clock.run(4);
@@ -713,7 +734,7 @@ test('growing a track does not touch a single piece already standing', () => {
 
   // Exactly what has been written to each of them, before the next letter.
   const writes = handles.map(h => h.transforms.length);
-  const bakes = handles.map(h => h.bakes);
+  const shapes = handles.map(h => h.mesh.geometry);
 
   type('LIRIROSOLO');
   clock.run(4);
@@ -721,34 +742,30 @@ test('growing a track does not touch a single piece already standing', () => {
 
   for (const [i, handle] of handles.slice(0, 9).entries()) {
     assert.equal(handle.transforms.length, writes[i], `cube ${i} was moved by the next letter`);
-    assert.equal(handle.bakes, bakes[i], `cube ${i} was re-lit by the next letter`);
+    assert.equal(handle.mesh.geometry, shapes[i], `cube ${i} was repainted by the next letter`);
     assert.equal(handle.disposed, false, `cube ${i} was thrown away and remade`);
   }
 });
 
-test('a new piece is minted in flight and never baked', () => {
-  const { handles, stage, clock, type } = typing([]);
+test('a new piece is minted in flight', () => {
+  const { handles, stage, clock, type } = typing();
 
   type('LI');
   clock.run(4);
   const arrival = handles.at(-1);
-  // A mint's polygons go in through `scene.add`, in the pose it will land in, so
-  // `setPolygons` is never called on it at all. This is the assertion that was
-  // wrong the first three times it was written.
-  assert.equal(arrival.bakes, 0, 'a mint was baked');
   assert.ok(arrival.transforms.length > 1, 'a mint did not fly');
   assert.deepEqual(stage.cubes.get('1I').position, restingPlace(openScene('LI').pieces[1]));
 });
 
 test('backspace slides one cube off and leaves the rest standing', () => {
-  const { handles, stage, clock, type, alive } = typing([]);
+  const { handles, stage, clock, type, alive } = typing();
 
   type('LIRI');
   clock.run(4);
   assert.equal(alive(), 4);
-  const kept = ['1L', '1I', '1R'].map(id => stage.cubes.get(id).mesh.handle);
+  const kept = ['1L', '1I', '1R'].map(id => handleOf(stage.cubes.get(id)));
   const writes = kept.map(h => h.transforms.length);
-  const leaving = stage.cubes.get('2I').mesh.handle;
+  const leaving = handleOf(stage.cubes.get('2I'));
   const moved = leaving.transforms.length;
   const [last] = openScene('LIRI').pieces.slice(-1);
 
@@ -761,7 +778,6 @@ test('backspace slides one cube off and leaves the rest standing', () => {
 
   assert.equal(alive(), 3, 'exactly one cube came off');
   assert.equal(leaving.disposed, true, 'the removed piece was never taken away');
-  assert.equal(leaving.bakes, 0, 'a leaving piece was re-lit');
   // It went back out the way a piece comes in: along its own heading, to the
   // standoff behind its slot.
   const out = leaving.transforms.at(-1).position.map((v, k) => v - restingPlace(last)[k]);
@@ -778,11 +794,11 @@ test('backspace slides one cube off and leaves the rest standing', () => {
 });
 
 test('a piece put back while its predecessor is leaving is a new cube', () => {
-  const { handles, stage, clock, type, alive } = typing([]);
+  const { handles, stage, clock, type, alive } = typing();
 
   type('LIRI');
   clock.run(4);
-  const old = stage.cubes.get('2I').mesh.handle;
+  const old = handleOf(stage.cubes.get('2I'));
 
   type('LIR');
   clock.run(FLIGHT / 3);        // part-way out
@@ -790,7 +806,7 @@ test('a piece put back while its predecessor is leaving is a new cube', () => {
   assert.equal(old.disposed, true, 'the leaving cube outlived the phase that owned it');
   clock.run(4);
 
-  const now = stage.cubes.get('2I').mesh.handle;
+  const now = handleOf(stage.cubes.get('2I'));
   assert.notEqual(now, old, 'the put-back piece reused the one that was leaving');
   assert.deepEqual(stage.cubes.get('2I').position, restingPlace(openScene('LIRI').pieces[3]));
   assert.equal(alive(), 4);
@@ -798,25 +814,25 @@ test('a piece put back while its predecessor is leaving is a new cube', () => {
 });
 
 test('a piece still arriving when the next is added carries on home', () => {
-  const { stage, clock, type } = typing([]);
+  const { stage, clock, type } = typing();
 
   type('L');
   clock.run(FLIGHT / 3);        // the first piece is part-way down its lane
   const flying = stage.cubes.get('1L');
   assert.notDeepEqual(flying.position, restingPlace(openScene('L').pieces[0]), 'it had already landed');
-  const handle = flying.mesh.handle;
+  const handle = handleOf(flying);
 
   type('LL');
   clock.run(4);
 
-  assert.equal(stage.cubes.get('1L').mesh.handle, handle, 'it was replaced rather than carried on');
+  assert.equal(handleOf(stage.cubes.get('1L')), handle, 'it was replaced rather than carried on');
   assert.deepEqual(stage.cubes.get('1L').position, restingPlace(openScene('L').pieces[0]),
     'it was left frozen where it had got to');
   assert.deepEqual(stage.cubes.get('1L').basis, poseRotation(openScene('L').pieces[0].pose));
 });
 
 test('there is no train until the loop closes, and then there is one', () => {
-  const { clock, type, alive } = typing([]);
+  const { clock, type, alive } = typing();
 
   type('LLL');
   clock.run(4);
@@ -829,7 +845,7 @@ test('there is no train until the loop closes, and then there is one', () => {
 });
 
 test('a piece with nowhere to go is drawn there, and pulses', () => {
-  const { stage, clock, type } = typing([]);
+  const { stage, clock, type } = typing();
 
   // Four left curves close a ring, so a fifth is asked to go where the first is.
   const view = type('LLLLL');
@@ -838,20 +854,24 @@ test('a piece with nowhere to go is drawn there, and pulses', () => {
   assert.equal(view.closed, false);
 
   clock.run(1);
-  const offender = stage.cubes.get('5L').mesh.handle;
-  const others = ['1L', '2L', '3L', '4L'].map(id => stage.cubes.get(id).mesh.handle);
+  const offender = handleOf(stage.cubes.get('5L'));
+  const others = ['1L', '2L', '3L', '4L'].map(id => handleOf(stage.cubes.get(id)));
+  const shapes = others.map(h => h.mesh.geometry);
 
   // It lands in ALARM — `openScene` paints it — so the first repaint due is the
-  // pale one, half a period after it lands, and they alternate from there.
-  const before = offender.bakes;
-  clock.run(ALARM_PERIOD * 2);
-  const flashes = offender.bakes - before;
+  // pale one, half a period after it lands, and they alternate from there. A
+  // repaint is a swap of the mesh's geometry, so that is what is counted.
+  let flashes = 0;
+  let showing = offender.mesh.geometry;
+  clock.run(ALARM_PERIOD * 2, () => {
+    if (offender.mesh.geometry !== showing) flashes += 1;
+    showing = offender.mesh.geometry;
+  });
   assert.ok(flashes >= 3 && flashes <= 5, `${flashes} repaints over two periods`);
 
-  // One mesh, about twice a second. Nothing else is repainted at all — a track
-  // being re-lit every frame is the thing this whole file exists to catch.
+  // One mesh, about twice a second. Nothing else is repainted at all.
   for (const [i, handle] of others.entries()) {
-    assert.equal(handle.bakes, 0, `cube ${i} was repainted by the alarm`);
+    assert.equal(handle.mesh.geometry, shapes[i], `cube ${i} was repainted by the alarm`);
   }
 
   // And it really is drawn on top of the first curve rather than off to one side.
@@ -859,7 +879,7 @@ test('a piece with nowhere to go is drawn there, and pulses', () => {
 });
 
 test('a stuck track keeps asking for frames, and an unstuck one stops', () => {
-  const { clock, type } = typing([]);
+  const { clock, type } = typing();
 
   type('LLLLL');
   clock.run(3);
@@ -877,20 +897,19 @@ test('a stuck track keeps asking for frames, and an unstuck one stops', () => {
 // ---- The camera that grows ------------------------------------------------
 
 test('the frame only ever grows, and eases rather than snapping', () => {
-  const { cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { stage } = staged();
 
   // The first shot is not a move: there is nothing to pan from.
   stage.panTo({ zoom: 4, target: '0,0,0' });
-  assert.equal(Number(cameraEl.attributes.zoom).toFixed(3), (4 * 0.88).toFixed(3));
+  assert.equal(stage.zoom().toFixed(3), (4 * 0.88).toFixed(3));
 
   stage.run([{ advance: () => undefined }]);
   stage.start();
   stage.panTo({ zoom: 2, target: '20,0,0' }, 0.4);
 
   const zooms = [];
-  clock.run(0.6, () => zooms.push(Number(cameraEl.attributes.zoom)));
+  clock.run(0.6, () => zooms.push(stage.zoom()));
 
   // It arrives, and it gets there by moving rather than by jumping.
   assert.equal(zooms.at(-1).toFixed(3), (2 * 0.88).toFixed(3));
@@ -903,9 +922,8 @@ test('a pan outlives the phase that asked for it', () => {
   // The loop stops when the queue empties, and the pan is not in the queue — so a
   // keystroke that adds nothing but reaches new ground would otherwise leave the
   // camera stranded part-way there.
-  const { cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { stage } = staged();
 
   stage.frameTo({ zoom: 4, target: '0,0,0' });
   stage.run([{ advance: () => false }]);        // finished on its first frame
@@ -913,7 +931,7 @@ test('a pan outlives the phase that asked for it', () => {
   stage.start();
   clock.run(1);
 
-  assert.equal(Number(cameraEl.attributes.zoom).toFixed(3), (2 * 0.88).toFixed(3));
+  assert.equal(stage.zoom().toFixed(3), (2 * 0.88).toFixed(3));
   assert.equal(clock.running(), false, 'the loop ran on after the pan finished');
 });
 
@@ -948,8 +966,7 @@ test('the lattice is one prism per line, and stays on the cell boundaries', () =
 });
 
 test('the lattice is one mesh, which clearing the cubes leaves standing', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
+  const { handles, stage } = staged();
   const pieces = piecesOf(RING);
 
   stage.setGrid(gridLines(extentOf(pieces)));
@@ -965,14 +982,15 @@ test('the lattice is one mesh, which clearing the cubes leaves standing', () => 
 
   stage.setGrid(null);
   assert.equal(second.disposed, true);
-  // Tagged for the stylesheet to repaint as an overlay, and nothing else is.
-  assert.deepEqual(handles.filter(h => h.classes.has(GRID_CLASS)), [first, second]);
+  // Painted as an overlay, and nothing else is.
+  assert.deepEqual(handles.filter(h => h.name === OVERLAY.grid), [first, second]);
+  assert.equal(first.mesh.material.transparent, true);
+  assert.equal(first.mesh.material.depthWrite, false);
 });
 
 test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
-  const ghosts = () => handles.filter(h => h.classes.has(GHOST_CLASS));
+  const { handles, stage } = staged();
+  const ghosts = () => handles.filter(h => h.name.startsWith(OVERLAY.ghost));
 
   stage.setGhosts([
     { type: 'straight', cell: [0, 1, 0], pose: 'DF', tint: 'before' },
@@ -980,8 +998,10 @@ test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', (
   ]);
   const first = ghosts();
   assert.equal(first.length, 2);
-  assert.ok(first[0].classes.has(`${GHOST_CLASS}-before`));
-  assert.ok(first[1].classes.has(`${GHOST_CLASS}-after`));
+  assert.equal(first[0].name, `${OVERLAY.ghost}-before`);
+  assert.equal(first[1].name, `${OVERLAY.ghost}-after`);
+  assert.notEqual(first[0].mesh.material.color.getHex(), first[1].mesh.material.color.getHex(),
+    'the two tints are one colour');
   // Half a cube along a straight is its middle: the body is in its train cell.
   const [x, y, z] = first[0].transforms.at(-1).position;
   [x, y, z].forEach((v, k) => assert.ok(Math.abs(v - [0, 0, RAIL][k]) < 1e-9, `${[x, y, z]}`));
@@ -997,11 +1017,10 @@ test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', (
 });
 
 test('the lattice fills the cell the train is in, and moves the fill rather than redrawing it', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
   const clock = fakeClock();
+  const { handles, stage } = staged();
   const pieces = piecesOf(SET);
-  const marks = () => handles.filter(h => h.classes.has(TRAIN_CELL_CLASS));
+  const marks = () => handles.filter(h => h.name === OVERLAY.trainCell);
 
   stage.run([trackPhase(stage, pieces, { drive: true })]);
   stage.start();
@@ -1013,8 +1032,9 @@ test('the lattice fills the cell the train is in, and moves the fill rather than
   assert.equal(marks().length, 1);
   clock.run(20);
 
+  // Still one mesh: moved, never remounted.
+  assert.equal(marks().length, 1, 'the mark was remounted rather than moved');
   const [mark] = marks();
-  assert.equal(mark.bakes, 0, 'the mark was redrawn rather than moved');
   // Round the whole loop: into a train cell of every piece that books any. Not
   // every one — the model books a curve's whole 2×2 block, and the arc cuts a
   // corner of it. And only cells of the track: an inside curve books no train
@@ -1036,10 +1056,9 @@ test('the lattice fills the cell the train is in, and moves the fill rather than
 });
 
 test('the stage reports each cell the train enters once, lattice or not, and null when it goes', () => {
-  const { cameraEl, sceneEl } = fakeScene();
-  const reported = [];
-  const stage = createStage(cameraEl, sceneEl, { onTrainCell: cell => reported.push(cell) });
   const clock = fakeClock();
+  const reported = [];
+  const { stage } = staged({ onTrainCell: cell => reported.push(cell) });
   const pieces = piecesOf(SET);
 
   stage.run([trackPhase(stage, pieces, { drive: true })]);
@@ -1057,10 +1076,9 @@ test('the stage reports each cell the train enters once, lattice or not, and nul
   assert.equal(reported.at(-1), null, 'the train went and nobody was told');
 });
 
-test('the origin\'s outline and arrows are class-tagged overlays that clear() leaves and setOrigin(null) takes away', () => {
-  const { handles, cameraEl, sceneEl } = fakeScene();
-  const stage = createStage(cameraEl, sceneEl);
-  const axes = () => handles.filter(h => h.classes.has(ORIGIN_CLASS));
+test('the origin\'s outline and arrows are overlays that clear() leaves and setOrigin(null) takes away', () => {
+  const { handles, stage } = staged();
+  const axes = () => handles.filter(h => h.name === OVERLAY.origin);
 
   stage.setOrigin({ lo: [0, 0, 0], hi: [2, 2, 2] });
   assert.equal(axes().length, 2);
@@ -1070,10 +1088,33 @@ test('the origin\'s outline and arrows are class-tagged overlays that clear() le
   assert.ok(axes().every(h => h.disposed));
 });
 
+test('each axis label is projected to where its spot lands on the canvas', () => {
+  // The canvas sits at (100, 50) on the page, and a label is placed in client pixels.
+  const canvas = {
+    clientWidth: 900,
+    clientHeight: 700,
+    getBoundingClientRect: () => ({ left: 100, top: 50, width: 900, height: 700 }),
+  };
+  const stage = createStage(canvas, { theme: THEME, renderer: { draw() {} } });
+  stage.frameTo({ zoom: 4, target: '0,0,0' });
+  stage.setOrigin({ lo: [0, 0, 0], hi: [2, 2, 2] });
+  const tips = stage.originTips();
+  assert.deepEqual(tips.map(t => t.name), ['x', 'y', 'z']);
+
+  // Up is up the screen: the z label stands above the other two, and the reader's
+  // x (left) is left of their y (forwards, away up and to the right).
+  const [x, y, z] = tips;
+  assert.ok(z.y < Math.min(x.y, y.y), 'the z label is not the highest');
+  assert.ok(x.x < y.x, 'x is not to the left of y');
+  for (const { x: px, y: py } of tips) {
+    assert.ok(px > 100 && px < 1000 && py > 50 && py < 750, `a label is off the canvas at ${px}, ${py}`);
+  }
+});
+
 test('the arrows stand outside the box\'s corner and reach left, forwards and up, in the reader\'s frame', () => {
   const polys = axisArrows();
   assert.ok(polys.every(p => p.vertices.length >= 3 && p.vertices.flat().every(Number.isFinite)));
-  // PolyCSS is X right, Y forwards, Z up; the reader's x is left, so it runs toward -X.
+  // The world is X right, Y forwards, Z up; the reader's x is left, so it runs toward -X.
   const dirs = [-1, 1, 1];
   const along = k => polys.flatMap(p => p.vertices.map(v => v[k] * dirs[k]));
   for (const k of [0, 1, 2]) {

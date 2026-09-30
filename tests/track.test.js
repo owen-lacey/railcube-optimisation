@@ -1,6 +1,6 @@
 // Rung 1: the pure track model. Every test here traces to a line in
 // docs/coordinates.md — the doc is the specification, this file is its executable
-// form. Nothing in here touches the solver or PolyCSS.
+// form. Nothing in here touches the solver or the renderer.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -55,7 +55,7 @@ test('every face admits exactly four headings', () => {
   }
 });
 
-// The renderer works in the PolyCSS frame, where R=x, F=y, U=z — right-handed,
+// The renderer works in the world frame, where R=x, F=y, U=z — right-handed,
 // so it takes `heading × overhead`. src/track.js works in the project frame, which
 // is left-handed, so it takes `overhead × heading`. Different maps, different
 // operand order, and they must agree on all 24 poses or the model and the picture

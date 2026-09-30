@@ -3,11 +3,8 @@
 // face, heading forwards).
 //
 // Everything is generated as Polygon[] chamfered cuboids (6 inset faces + 12
-// bevel strips + 8 corner triangles). PolyCSS shades each polygon by its
-// normal, so the bevels read as moulded plastic edges. Building cuboids from
-// raw vertices also sidesteps the `poly-box` scale X/Y swap gotcha — poly-box
-// applies a scale whose X and Y are transposed, which the old probe.html spike
-// existed to demonstrate.
+// bevel strips + 8 corner triangles). Each polygon is shaded by its normal, so
+// the bevels read as moulded plastic edges.
 //
 // The rail is a channel recessed into the face, exactly as wide as the metal
 // strip that forms its floor.
@@ -146,7 +143,8 @@ export function crossCube(color) {
   channel(true);
   // The metal floor: both channels share the same depth, so the two strips
   // merge into a plus shape — centre square plus four arms. (Five convex
-  // rects, not one 12-gon: PolyCSS renders concave polygons wrongly.)
+  // rects, not one 12-gon: a polygon is fan-triangulated, which gets a concave
+  // one wrong.)
   const rect = (x0, x1, y0, y1) => polys.push({
     vertices: windToward([[x0, y0, floor], [x1, y0, floor], [x1, y1, floor], [x0, y1, floor]], [0, 0, 1]),
     color: METAL,
@@ -266,7 +264,7 @@ const PROFILE = (() => {
     metalEdge: 10, // (-wc, floor) → (wc, floor): the channel floor
     // End caps are the profile's area — concave (the notch), so decomposed
     // into three convex pieces: the columns either side of the channel and
-    // the slab underneath it. (PolyCSS renders concave polygons wrongly.)
+    // the slab underneath it. (Fan triangulation gets concave polygons wrong.)
     caps: [
       [[-wc, h], [-i, h], [-h, i], [-h, -i], [-i, -h], [-wc, -h]],
       [[wc, h], [wc, -h], [i, -h], [h, -i], [h, i], [i, h]],

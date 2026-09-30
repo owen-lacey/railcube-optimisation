@@ -99,7 +99,7 @@ const volumeOf = box => 8 * box.half[0] * box.half[1] * box.half[2];
  * corner of its bounding box.
  *
  * Both uses need the same conversion, and it is worth writing down once:
- * PolyCSS rotates a mesh about its geometry origin, and the geometry here is
+ * a mesh turns about its geometry origin, and the geometry here is
  * always keyed to the piece's cell. So to draw a piece whose *centre of mass* is
  * at `com` under orientation `basis`, put the mesh at
  * `sub(com, through(basis, CENTROID[type]))` — see `originAt` below.

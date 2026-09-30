@@ -1,12 +1,12 @@
-// Vector helpers and the one place the project's frame is mapped onto PolyCSS's.
+// Vector helpers and the one place the project's frame is mapped onto the renderer's.
 //
-// Axis mapping: project (x=right, y=up, z=forwards) → PolyCSS (X=right,
-// Y=forwards, Z=up). Grid placement: PolyCSS position = cell × CUBE.
+// Axis mapping: project (x=right, y=up, z=forwards) → world (X=right,
+// Y=forwards, Z=up). Grid placement: world position = cell × CUBE.
 
 import { CUBE } from './dimensions.js';
 import { cubeOf } from '../../../../src/track.js';
 
-/** World (PolyCSS) direction of each project-frame letter. */
+/** World direction of each project-frame letter. */
 export const DIR = {
   U: [0, 0, 1], D: [0, 0, -1],
   F: [0, 1, 0], B: [0, -1, 0],
@@ -23,10 +23,10 @@ export const add = (a, b) => a.map((v, k) => v + b[k]);
 export const len = a => Math.hypot(...a);
 export const unit = a => { const n = len(a); return a.map(v => v / n); };
 
-/** project cell → PolyCSS position. */
+/** project cell → world position. */
 export const toWorld = ([x, y, z]) => [x * CUBE, z * CUBE, y * CUBE];
 
-/** PolyCSS position → the project cell it falls in. */
+/** World position → the project cell it falls in. */
 export const toCell = ([x, y, z]) => [x, z, y].map(v => Math.round(v / CUBE));
 
 // Pieces are authored in the canonical pose (the train standing on the down
@@ -49,13 +49,13 @@ export const cubePosition = ({ cell, pose }) => toWorld(cubeOf(cell, pose));
 
 /**
  * A turn of `degrees` about `axis`, as a rotation basis. Rodrigues' formula,
- * written out columnwise because that is the form `rotate` and `compose` take:
- * column c is the image of local axis c.
+ * written out columnwise because that is the form `compose` takes: column c is
+ * the image of local axis c.
  *
  * The poses are all made of quarter- and half-turns, so this is not what puts a
  * piece in its place — it is for turns that are not: the tilt a piece carries
  * while it flies into position, and the arbitrary orientations the rotation test
- * checks `polyRotation` against.
+ * checks `turnToward` against.
  */
 export function axisAngle(axis, degrees) {
   const [x, y, z] = unit(axis);
@@ -89,9 +89,8 @@ export const transpose = basis => [0, 1, 2].map(c => [0, 1, 2].map(r => basis[r]
  * the eigenvector with eigenvalue 1. Reading it off the antisymmetric part is
  * the cheap way to get it, and it is exactly the way that fails at a half-turn,
  * where the antisymmetric part vanishes — so that gets the symmetric branch
- * below rather than a fudge. Same care as `polyRotation`'s clamped `asin`, and
- * for the same reason: the poses here are made of quarter- and half-turns, so
- * the awkward cases are the common ones and not edge cases at all.
+ * below rather than a fudge. The poses here are made of quarter- and half-turns,
+ * so the awkward cases are the common ones and not edge cases at all.
  */
 export function turnToward(from, to, t) {
   const d = compose(to, transpose(from));   // the turn still to be made, in world terms
@@ -118,53 +117,10 @@ export function turnToward(from, to, t) {
   return compose(axisAngle(axis, angle * t * 180 / Math.PI), from);
 }
 
-/**
- * A rotation basis as PolyCSS's `rotation` transform: three Euler angles in
- * degrees, which is the only shape `setTransform` accepts.
- *
- * Two conversions are stacked here, and both are facts about PolyCSS rather than
- * choices. First, `translate3d(y, x, z)` — the CSS frame is the world frame with
- * right and forwards swapped, so a world rotation appears there conjugated by
- * that swap. Second, the transform PolyCSS emits is
- * `rotateY(−r₀) rotateX(−r₁) rotateZ(−r₂)`, applied in that order, so the
- * decomposition has to be Y-X-Z and the angles come back negated. Both were read
- * off `buildPolyMeshTransform`, which the package exports, and the result is
- * checked against the string it emits rather than against this reasoning.
- *
- * In world terms the three angles turn out to be about right, about forwards and
- * about up, in that order.
- */
-export function polyRotation(basis) {
-  // basis[c][r] is row r of column c, so this is the same matrix with rows and
-  // columns 0 and 1 exchanged — the conjugation by the swap.
-  const swap = i => (i === 0 ? 1 : i === 1 ? 0 : 2);
-  const m = (r, c) => basis[swap(c)][swap(r)];
-  const deg = 180 / Math.PI;
-  const sine = -m(1, 2);
-  // Clamped because a rotation that is exactly square on can come out of the
-  // physics as 1.0000000000000002, and `asin` of that is NaN — which would put
-  // the piece nowhere at all rather than merely in the wrong place.
-  const pitch = Math.asin(Math.max(-1, Math.min(1, sine))) * deg;
-  // Square on, the first and third turns are about the same axis and only their
-  // sum is determined, so all of it is given to the first.
-  if (Math.abs(sine) > 1 - 1e-9) {
-    return [-Math.atan2(-m(2, 0), m(0, 0)) * deg, -pitch, 0];
-  }
-  return [
-    -Math.atan2(m(0, 2), m(2, 2)) * deg,
-    -pitch,
-    -Math.atan2(m(1, 0), m(1, 1)) * deg,
-  ];
-}
-
-export const rotate = (polys, [mx, my, mz]) =>
-  polys.map(p => ({ ...p, vertices: p.vertices.map(([x, y, z]) =>
-    [x * mx[0] + y * my[0] + z * mz[0], x * mx[1] + y * my[1] + z * mz[1], x * mx[2] + y * my[2] + z * mz[2]]) }));
-
 export const translate = (polys, [tx, ty, tz]) =>
   polys.map(p => ({ ...p, vertices: p.vertices.map(([x, y, z]) => [x + tx, y + ty, z + tz]) }));
 
-/** Send a local direction or point through a pose's rotation (as `rotate` does). */
+/** Send a local direction or point through a pose's rotation. */
 export const through = ([mx, my, mz], [x, y, z]) =>
   [0, 1, 2].map(k => x * mx[k] + y * my[k] + z * mz[k]);
 

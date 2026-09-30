@@ -1,21 +1,15 @@
 // A viewer you can handle: drag to turn it, pinch or scroll to zoom, two fingers
 // (or a right- or shift-drag) to slide it about.
 //
-// PolyCSS has orbit controls of its own, and they were what `interactive` meant
-// until they had to work on a phone. They follow one pointer only, so there is no
-// pinch and no two-finger pan; and they keep their camera in the element's state
-// rather than its attributes, so the next attribute the stage writes — a resize, a
-// `frameTo`, every frame of a `panTo` — puts the camera back where the stage had it.
-//
-// So the gestures come from `@use-gesture`, and what they do goes through
+// The gestures come from `@use-gesture`, and what they do goes through
 // `stage.adjust` as a hand-moved *view* composed on top of whatever the stage has
 // described (see `adjusted` in camera.js). The stage can go on framing and panning
 // as it likes, and the turn, the zoom and the pan are kept through all of it.
 
 import { Gesture } from '@use-gesture/vanilla';
 
-// PolyCSS's own orbit rate and tilt range: a quarter of a degree per pixel, and
-// from straight down (0) to not quite side-on (89).
+// A quarter of a degree per pixel, and a tilt from straight down (0) to not quite
+// side-on (89).
 const DEGREES_PER_PIXEL = 0.25;
 const TILT = [0, 89];
 // How far the view can be zoomed away from the frame the stage chose.
@@ -43,13 +37,11 @@ export const zoomed = (view, zoomBy) => ({ ...view, zoomBy: clamp(zoomBy, ZOOM_B
  * The slide is along the ground rather than across the screen, so what the view
  * turns about stays at the height it was; `zoom` is the zoom actually applied to
  * the camera, which is what turns pixels into world units. The arithmetic is the
- * camera transform PolyCSS emits, inverted — `scale(zoom/50) rotateX(rotX)
- * rotate(rotY) translate3d(-target)`, with the target's first two components
- * swapped and scaled by 50 on the way in — and `tests/controls.test.js` checks it
- * against that string rather than against this comment.
+ * camera `polyView` sets up, inverted, and `tests/controls.test.js` checks it by
+ * projecting through a real three camera rather than against this comment.
  *
  * Near side-on the ground is foreshortened to nothing, and a pixel of vertical
- * drag would be a very long way; the floor on the cosine is PolyCSS's own.
+ * drag would be a very long way, so the cosine is floored.
  */
 export function slid(view, dx, dy, zoom) {
   const c = Math.cos(rad(view.rotY));
@@ -63,11 +55,11 @@ export function slid(view, dx, dy, zoom) {
 }
 
 /**
- * Let a viewer be handled. `host` is what the gestures are read off, `cameraEl`
- * the `<poly-camera>` whose applied zoom a pan is measured in.
+ * Let a viewer be handled. `host` is what the gestures are read off; a pan is
+ * measured in the stage's applied zoom.
  */
-export function attachControls(host, cameraEl, stage) {
-  const appliedZoom = () => Number(cameraEl.getAttribute('zoom')) || 1;
+export function attachControls(host, stage) {
+  const appliedZoom = () => stage.zoom();
 
   const gesture = new Gesture(host, {
     onDrag({ delta: [dx, dy], pinching, cancel, buttons, shiftKey }) {

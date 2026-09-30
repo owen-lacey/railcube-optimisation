@@ -1,13 +1,11 @@
 <script>
   import { onMount } from 'svelte';
   import { createStage, together } from '../render/stage.js';
-  import { CAMERA } from '../render/camera.js';
+  import { readTheme } from '../render/renderer.js';
   import { attachControls } from '../render/controls.js';
-  import { LIGHT } from '../render/dimensions.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
   import { gridLines } from '../render/grid.js';
   import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
-  import { identify } from '../../../../src/layouts.js';
 
   let {
     pieces = [],
@@ -76,8 +74,7 @@
   const SETTLE = 2.5;
 
   let host = $state(null);
-  let cameraEl = $state(null);
-  let sceneEl = $state(null);
+  let canvas = $state(null);
   let stage = null;
   let ready = $state(false);
   let failed = $state('');
@@ -186,13 +183,7 @@
     // what lets the build start while there is something to watch instead of after
     // the pile has finished fidgeting. Ending the collapse first and *then*
     // building would freeze every piece the build had not reached yet.
-    const collapse = tumblePhase(stage, shown, {
-      drop: Number(drop),
-      limit: SETTLE,
-      // A cube the build picks up is re-lit when it does; the collapse must not
-      // also re-light it on the way out. Leftovers are not in the set, and are.
-      keep: new Set(identify(next)),
-    });
+    const collapse = tumblePhase(stage, shown, { drop: Number(drop), limit: SETTLE });
     stage.run([together(collapse, buildPhase(stage, next, {
       pace: Number(pace),
       speed: Number(speed),
@@ -202,8 +193,8 @@
     }))]);
   }
 
-  // PolyCSS is custom elements and touches `window`, and every page here is
-  // prerendered — so none of this may run until the browser has the DOM.
+  // Every page here is prerendered, and WebGL is the browser's — so none of this
+  // may run until the browser has the DOM.
   onMount(() => {
     let live = true;
     let stopObserving = () => {};
@@ -212,16 +203,15 @@
 
     (async () => {
       try {
-        await import('@layoutit/polycss/elements');
-        await customElements.whenDefined('poly-scene');
         if (sequence) ({ tumblePhase } = await import('../render/tumble.js'));
         if (!live) return;
-        stage = createStage(cameraEl, sceneEl, {
+        stage = createStage(canvas, {
+          theme: readTheme(host),
           onTrainCell: cell => onTrainCell?.(cell),
           onCamera: () => origin && scheduleAxisLabels(),
         });
         stage.setPaused(paused);
-        if (interactive) controls = attachControls(host, cameraEl, stage);
+        if (interactive) controls = attachControls(host, stage);
         ready = true;
         // Framed once, here, and never again in sequencing mode: `fixedFrame` is a
         // box the layouts all fit inside rather than anything read off them, so
@@ -255,16 +245,9 @@
       }
     })();
 
-    // PolyCSS needs real pixel dimensions on the camera element — the wrapper's
-    // aspect-ratio box does the layout, this copies its size across.
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      if (!cameraEl || !width) return;
-      cameraEl.style.width = `${Math.round(width)}px`;
-      cameraEl.style.height = `${Math.round(height)}px`;
-      // Zoom is relative to the viewer's width, so a resize reframes.
-      stage?.applyCamera();
-    });
+    // The canvas fills the wrapper's aspect-ratio box, and zoom is relative to the
+    // viewer's size, so a resize reframes (and redraws).
+    const ro = new ResizeObserver(() => stage?.applyCamera());
     ro.observe(host);
 
     return () => {
@@ -377,20 +360,7 @@
   role={label ? 'img' : undefined}
   aria-label={label || undefined}
 >
-  <poly-camera
-    bind:this={cameraEl}
-    rot-x={CAMERA['rot-x']}
-    rot-y={CAMERA['rot-y']}
-    zoom={CAMERA.zoom}
-    target={CAMERA.target}
-  >
-    <poly-scene
-      bind:this={sceneEl}
-      directional-direction={LIGHT.direction}
-      directional-intensity={LIGHT.directional}
-      ambient-intensity={LIGHT.ambient}
-    ></poly-scene>
-  </poly-camera>
+  <canvas bind:this={canvas}></canvas>
   {#each axisLabels as { name, x, y } (name)}
     <span class="axis-label" style:left="{x}px" style:top="{y}px" aria-hidden="true">{name}</span>
   {/each}
@@ -422,36 +392,11 @@
     cursor: grabbing;
   }
 
-  .viewer :global(poly-camera) {
-    display: block;
-  }
-
-  /* The cell lattice is an overlay, not an object: one flat colour on every face,
-     so no side of a line reads as lit or in shade, and see-through. PolyCSS writes
-     each face's shaded colour inline, hence `!important`. Opacity goes on the faces,
-     which are leaves — on the preserve-3d mesh container it would flatten the 3D. */
-  .viewer :global(.cell-grid > *) {
-    color: var(--grid-color) !important;
-    opacity: var(--grid-opacity);
-  }
-
-  /* The lattice cell the train is in, filled in exactly the lattice's paint, so the
-     fill and the lines are one blue. */
-  .viewer :global(.train-cell > *) {
-    color: var(--grid-color) !important;
-    opacity: var(--grid-opacity);
-  }
-
-  /* The origin's axes: the lattice's blue at full strength, so the arrows and their
-     letters read as solid marks and not as more lattice. */
-  .viewer :global(.origin-axes > *) {
-    color: var(--grid-color) !important;
-  }
-
-  /* The specks the axis labels are placed by: present, so the browser can say where
-     they landed, and invisible. */
-  .viewer :global(.origin-marker > *) {
-    opacity: 0;
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
 
   /* The axis letters are text, so they never turn with the camera or read backwards. */
@@ -463,17 +408,6 @@
     color: var(--grid-color);
     pointer-events: none;
     user-select: none;
-  }
-
-  /* Ghost trains, flat and see-through the same way, one tint before and one after. */
-  .viewer :global(.ghost-before > *) {
-    color: var(--ghost-before) !important;
-    opacity: var(--ghost-opacity);
-  }
-
-  .viewer :global(.ghost-after > *) {
-    color: var(--ghost-after) !important;
-    opacity: var(--ghost-opacity);
   }
 
   .failed {

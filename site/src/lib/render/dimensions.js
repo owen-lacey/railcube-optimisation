@@ -72,8 +72,8 @@ export const ALARM_PERIOD = 0.9;  // seconds for a full dark-pale-dark cycle
 
 // The one light rig, shared by every viewer so there is a single number to tune.
 //
-// PolyCSS shades a face `base × (ambient + directional × max(0, n·L̂)) / π`, in
-// linear space (`Fs`/`nr` in @layoutit/polycss-core). The π is the part worth
+// A face is shaded `base × (ambient + directional × max(0, n·L̂)) / π`, in linear
+// space — three's Lambert term, and PolyCSS's before it. The π is the part worth
 // knowing: a face only reaches its own colour when the bracket reaches π ≈ 3.14,
 // so the obvious-looking `directional 1, ambient 0.5` renders every piece at
 // half its swatch — measured, 0.42–0.66× across a whole layout. That reads as

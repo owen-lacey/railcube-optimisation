@@ -1,10 +1,14 @@
-// Applying a camera description to a mounted `<poly-camera>`.
+// Applying a camera description to a three.js `OrthographicCamera`.
 //
-// Split out of the one viewer there used to be, because there is more than one
-// now and they all need the zoom scaling below — two copies of the calibration
-// constants would be two copies to get wrong. It is `stage.js` that binds it
-// these days, exactly once per element: a second binding on the same camera
-// would clobber the first on every resize.
+// A description is `{ zoom, target, 'rot-x', 'rot-y' }` — the shape every camera in
+// `scenes.js` is written in. It started as the attributes of PolyCSS's
+// `<poly-camera>`, and it is kept exactly, so that every shot in the catalogue
+// frames the same picture it always did. `polyView` below is that camera
+// reproduced, measured pixel for pixel against PolyCSS in the fidelity spike.
+//
+// It is `stage.js` that binds it, exactly once per viewer.
+
+import { Matrix4, Vector3 } from 'three';
 
 // Every camera in the scene catalogue — the auto-framed ones and the hand-tuned
 // ones alike — was calibrated against the old spike's fixed 900px-wide canvas.
@@ -19,16 +23,17 @@ export const REFERENCE_HEIGHT = 700;
 const MARGIN = 0.88;
 
 /**
- * What a `<poly-camera>` shows before anything is described: an isometric angle,
- * turned so forwards runs *away* from the reader, up and to the right — the viewer
- * frame of docs/coordinates.md — and a track sets off from the bottom left. The
- * classic turn (+45) has forwards coming at them instead, down and to the right.
- * The viewers' markup reads these, so there is one copy of them, and a hand-moved
- * view starts from them when a description names no rotation.
+ * What a viewer shows before anything is described: an isometric angle, turned so
+ * forwards runs *away* from the reader, up and to the right — the viewer frame of
+ * docs/coordinates.md — and a track sets off from the bottom left. The classic
+ * turn (+45) has forwards coming at them instead, down and to the right. A
+ * hand-moved view starts from these when a description names no rotation.
  */
 export const CAMERA = { 'rot-x': 65, 'rot-y': -45, zoom: 4, target: '0,0,0' };
 
 const numbers = target => String(target).split(',').map(Number);
+const rad = d => d * Math.PI / 180;
+const DISTANCE = 2000;   // world units back from the target; anything drawn is far inside
 
 /**
  * A description with someone's hand on the camera: `view` is what they have done
@@ -54,31 +59,77 @@ export function adjusted(described, view) {
   };
 }
 
-/** Bind camera handling to a mounted `<poly-camera>`. */
-export function createCamera(cameraEl, onApply) {
+/**
+ * The zoom a description comes to at this viewer size: pixels per world unit.
+ * Whichever dimension runs out first decides the fit, so a tall narrow card and a
+ * wide short one are both framed by their tighter side.
+ */
+export function appliedZoom(zoom, width, height) {
+  const fit = Math.min(width, height * (REFERENCE_WIDTH / REFERENCE_HEIGHT));
+  return Number(zoom) * (fit / REFERENCE_WIDTH) * MARGIN;
+}
+
+/**
+ * Put an OrthographicCamera where the description says, for a `width`×`height`
+ * viewer, and return the zoom applied.
+ *
+ * The direction *towards the viewer* is `(sin rotX · cos rotY, sin rotX · sin rotY,
+ * cos rotX)` in world right/forwards/up — rot-x 0 is straight down, 90 is side-on
+ * — with world up projecting to screen-up, and one world unit is the applied zoom
+ * in screen pixels. That is PolyCSS's scene transform, `scale(zoom/50) rotateX(rotX)
+ * rotate(rotY) translate3d(-target)` over a frame with right and forwards swapped
+ * and 50px to the unit, read the other way round.
+ *
+ * The orientation is written down rather than got from `lookAt`, because straight
+ * down (rot-x 0, which the controls can reach) is exactly where "keep world up
+ * pointing up the screen" stops meaning anything. Screen right is
+ * `(−sin rotY, cos rotY, 0)` at every tilt — the limit `lookAt` approaches — and
+ * screen up completes the frame.
+ */
+export function polyView(camera, description, width, height) {
+  const base = { ...CAMERA, ...description };
+  const zoom = appliedZoom(base.zoom, width, height);
+  const tilt = rad(Number(base['rot-x']));
+  const turn = rad(Number(base['rot-y']));
+  const towards = new Vector3(Math.sin(tilt) * Math.cos(turn), Math.sin(tilt) * Math.sin(turn), Math.cos(tilt));
+  const right = new Vector3(-Math.sin(turn), Math.cos(turn), 0);
+  const up = new Vector3().crossVectors(towards, right);
+  const target = new Vector3(...numbers(base.target));
+  camera.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(right, up, towards));
+  camera.position.copy(target).addScaledVector(towards, DISTANCE);
+  camera.left = -width / 2 / zoom;
+  camera.right = width / 2 / zoom;
+  camera.top = height / 2 / zoom;
+  camera.bottom = -height / 2 / zoom;
+  camera.near = 1;
+  camera.far = DISTANCE * 2;
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  return zoom;
+}
+
+/**
+ * Bind camera handling to a three camera. `size()` is the viewer's size in CSS
+ * pixels, read afresh on every application; `onApply` is told after each one.
+ */
+export function createCamera(camera, size, onApply) {
   let described = {};
   let view = null;
+  let applied = { ...CAMERA, zoom: appliedZoom(CAMERA.zoom, REFERENCE_WIDTH, REFERENCE_HEIGHT) };
 
-  /** (Re-)apply the current description at the element's current size. */
+  /** (Re-)apply the current description at the viewer's current size. */
   function applyCamera() {
-    const width = cameraEl.clientWidth || REFERENCE_WIDTH;
-    const height = cameraEl.clientHeight || REFERENCE_HEIGHT;
-    // Whichever dimension runs out first is the one that decides the fit, so a
-    // tall narrow card and a wide short one are both framed by their tighter
-    // side rather than always by width.
-    const fit = Math.min(width, height * (REFERENCE_WIDTH / REFERENCE_HEIGHT));
-    for (const [attr, value] of Object.entries(adjusted(described, view))) {
-      const scaled = attr === 'zoom'
-        ? Number(value) * (fit / REFERENCE_WIDTH) * MARGIN
-        : value;
-      cameraEl.setAttribute(attr, String(scaled));
-    }
+    const { width, height } = size();
+    const w = width || REFERENCE_WIDTH;
+    const h = height || REFERENCE_HEIGHT;
+    const shot = { ...CAMERA, ...adjusted(described, view) };
+    applied = { ...shot, zoom: polyView(camera, shot, w, h) };
     onApply?.();
   }
 
-  /** Apply a camera description — only the attributes it names. */
-  function frameTo(camera) {
-    described = camera ?? {};
+  /** Apply a camera description; what it does not name comes from `CAMERA`. */
+  function frameTo(next) {
+    described = next ?? {};
     applyCamera();
   }
 
@@ -98,5 +149,5 @@ export function createCamera(cameraEl, onApply) {
     applyCamera();
   }
 
-  return { frameTo, applyCamera, view: currentView, adjust };
+  return { frameTo, applyCamera, view: currentView, adjust, applied: () => applied };
 }

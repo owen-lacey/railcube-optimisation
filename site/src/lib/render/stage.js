@@ -14,11 +14,7 @@
 // being rearranged, not one track deleted and another drawn. Object constancy
 // cannot live inside either animation, so it lives here.
 //
-// The camera pushed the same way, from the other end: `createCamera` keeps its
-// own `described` state and writes attributes on every resize, so two of them on
-// one element clobber each other. One element, one camera binding.
-//
-// So an animation is no longer a viewer. It is a **phase**: something with an
+// So an animation is not a viewer. It is a **phase**: something with an
 // `advance(delta, elapsed)` that moves cubes it was handed, and returns `false`
 // when it has nothing left to do, plus an optional `dispose` for anything it owns
 // that the cubes do not. The train is the whole of that last part, and it is not a
@@ -28,35 +24,42 @@
 // The camera is deliberately *not* something a phase touches. It is set once and
 // held for the life of the viewer — see `fixedFrame` in `scenes.js` for why that is
 // a fixed box rather than anything derived from what is being shown.
+//
+// **Drawing is on demand.** Everything that changes the picture — a cube placed, an
+// overlay set, the camera moved — calls `invalidate`. While the loop is running its
+// tick draws once at the end of the frame, however many writes the frame made; when
+// it is not, an invalidation asks for one frame and draws in it. So a still viewer
+// is drawn once and then costs nothing.
 
-import { GEOMETRY } from './pieces.js';
-import { movingMesh, meshLike } from './meshes.js';
+import { AmbientLight, DirectionalLight, Mesh, MeshBasicMaterial, MeshLambertMaterial, OrthographicCamera, Scene, Vector3 } from 'three';
+import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js';
 import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
+import { sharedRenderer } from './renderer.js';
 import { cellBox } from './grid.js';
 import { originCell, axisArrows, axisAnchor, LABEL_SPOTS } from './axes.js';
-import { TRAIN_CELL_INSET, CUBE } from './dimensions.js';
+import { TRAIN_CELL_INSET, LIGHT } from './dimensions.js';
 import { toWorld } from './vec.js';
 import { trainAt } from './rail.js';
 import { trainBody } from './train.js';
 
-/** The class the lattice's mesh carries, for the stylesheet to find it by. */
-export const GRID_CLASS = 'cell-grid';
+/**
+ * The names the overlays' meshes carry, so a test can find them in the scene. A
+ * ghost's tint follows its name, `ghost-before` or `ghost-after`.
+ */
+export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 'train-cell', ghost: 'ghost' };
 
-/** The class the origin's axes carry, for the same reason. */
-export const ORIGIN_CLASS = 'origin-axes';
+// The overlays draw after the solids, and in this order among themselves. With
+// depth writes off that is what PolyCSS's painter's order came to, measured to the
+// pixel in the fidelity spike.
+const ORDER = { grid: 1, ghost: 2, fill: 3 };
 
-/** The class of the invisible specks the axis labels are placed by. */
-export const MARKER_CLASS = 'origin-marker';
-
-// A speck is a cell's box inset almost to nothing: a fifth of a scene unit a side.
-const MARKER_INSET = CUBE * 0.49;
-
-/** The class the train's cell carries, for the same reason. */
-export const TRAIN_CELL_CLASS = 'train-cell';
-
-/** The class a ghost train carries; its tint is `ghost-<tint>` beside it. */
-export const GHOST_CLASS = 'ghost';
+// Made on first use and shared by every stage on the page: the train as it is lit
+// standing (a ghost), and as it is lit carried round a lap (a driven train).
+let standing = null;
+let carried = null;
+const standingTrain = () => (standing ??= soupGeometry(trainBody()));
+const carriedTrain = () => (carried ??= soupGeometry(trainBody(), { shade: carriedShade }));
 
 /**
  * Two or more phases as one, advancing together off the same clock and finishing
@@ -84,13 +87,75 @@ export function together(...phases) {
   };
 }
 
+/** A flat, see-through overlay paint. */
+const overlay = (color, opacity) => new MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+
+/** A mesh of fixed polygons, placed by translation alone. */
+function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {}) {
+  const mesh = new Mesh(geometry, material);
+  mesh.name = name;
+  mesh.renderOrder = order;
+  mesh.matrixAutoUpdate = false;
+  mesh.matrix.makeTranslation(...at);
+  mesh.matrixWorldNeedsUpdate = true;
+  return mesh;
+}
+
 /**
- * Bind a stage to a mounted `<poly-camera>` containing a `<poly-scene>`.
- * The caller is responsible for having awaited `customElements.whenDefined`.
+ * Bind a stage to a 2D `canvas`, sized by its stylesheet.
+ *
+ * `theme` is the overlay paint (see `readTheme` in renderer.js); `renderer` is what
+ * draws — the page's shared one, or a stand-in for the tests.
  */
-export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
-  const scene = sceneEl.getScene();
-  const { frameTo: applyDescription, applyCamera, view, adjust } = createCamera(cameraEl, () => onCamera?.());
+export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onCamera } = {}) {
+  const scene = new Scene();
+  scene.add(new AmbientLight(0xffffff, LIGHT.ambient));
+  const sun = new DirectionalLight(0xffffff, LIGHT.directional);
+  // The rig's direction points *at* the light, and so does a three light's position.
+  sun.position.set(...LIGHT.direction.split(',').map(Number));
+  scene.add(sun);
+
+  const paint = {
+    solid: new MeshLambertMaterial({ vertexColors: true }),
+    // The driven train's lighting is baked into its colours, so it is drawn unlit.
+    carried: new MeshBasicMaterial({ vertexColors: true }),
+    grid: overlay(theme.grid, theme.gridOpacity),
+    fill: overlay(theme.grid, theme.gridOpacity),
+    // The origin's arrows are the lattice's blue at full strength, so they read as
+    // solid marks and not as more lattice.
+    origin: new MeshBasicMaterial({ color: theme.grid }),
+    before: overlay(theme.ghostBefore, theme.ghostOpacity),
+    after: overlay(theme.ghostAfter, theme.ghostOpacity),
+  };
+  const cellGeometry = soupGeometry(cellBox(TRAIN_CELL_INSET));
+
+  // ---- Drawing ------------------------------------------------------------
+
+  const camera = new OrthographicCamera();
+  const size = () => ({ width: canvas.clientWidth, height: canvas.clientHeight });
+  let dirty = true;
+  let requested = null;   // a frame asked for to draw in while the loop is idle
+
+  function draw() {
+    const { width, height } = size();
+    if (!dirty || !width || !height) return;
+    renderer.draw(canvas, scene, camera, width, height);
+    dirty = false;
+  }
+
+  /** The picture has changed: draw it at the end of this frame, or in the next. */
+  function invalidate() {
+    dirty = true;
+    if (loop.running() || requested !== null) return;
+    requested = requestAnimationFrame(() => {
+      requested = null;
+      draw();
+    });
+  }
+
+  const {
+    frameTo: applyDescription, applyCamera, view, adjust, applied,
+  } = createCamera(camera, size, () => { invalidate(); onCamera?.(); });
 
   // The cubes, by piece ID (`1L` is the first left curve — see `identify` in
   // src/layouts.js). This is the registry object constancy is made of: a phase
@@ -111,36 +176,45 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
    * A cube records the orientation and position last written to it, which is
    * what a pick-up needs: the builder has to start a piece's flight from
    * wherever the collapse left it, and only the thing that wrote it knows that.
+   *
+   * Geometry is authored about the piece's own cube, always, and a mesh turns
+   * about its geometry origin — so anything wanting to turn a piece about its
+   * centre of mass converts with `originAt` from shapes.js.
    */
   function cube(id, { type, color, basis, position }) {
     const existing = cubes.get(id);
     if (existing) return existing;
 
-    const mesh = movingMesh(scene, GEOMETRY[type](color), basis, position);
-    // Geometry is authored about the piece's own cell, always — every mesh in the
-    // project agrees on that, and PolyCSS rotates about the geometry origin, so
-    // anything wanting to turn a piece about its centre of mass converts with
-    // `originAt` from shapes.js rather than re-authoring the polygons.
+    const mesh = movingMesh(scene, geometryFor(type, color), paint.solid, basis, position);
     const made = {
       id,
       type,
       color,
       basis,
       position,
-      bake(next, at) { mesh.bake(next, at); made.basis = next; made.position = at; },
-      place(next, at) { mesh.place(next, at); made.basis = next; made.position = at; },
-      // Repaint where it stands. Costs a bake, so it is for a piece being pointed
-      // at rather than for a track being themed.
+      place(next, at) {
+        mesh.place(next, at);
+        made.basis = next;
+        made.position = at;
+        invalidate();
+      },
+      // Repaint where it stands: a swap to that colour's shared geometry.
       recolour(next) {
-        mesh.recolour(GEOMETRY[type](next), made.basis, made.position);
+        mesh.reshape(geometryFor(type, next));
         made.color = next;
+        invalidate();
       },
       // A detached cube's ID may already belong to a newer one, which this must not
       // take off the stage with it.
-      dispose() { mesh.dispose(); if (cubes.get(id) === made) cubes.delete(id); },
+      dispose() {
+        mesh.dispose();
+        if (cubes.get(id) === made) cubes.delete(id);
+        invalidate();
+      },
       mesh,
     };
     cubes.set(id, made);
+    invalidate();
     return made;
   }
 
@@ -167,6 +241,9 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
     return item ?? null;
   }
 
+  /** A train for a phase to drive, carrying the lighting of its authored pose round the lap. */
+  const train = (basis, position) => movingMesh(scene, carriedTrain(), paint.carried, basis, position);
+
   // ---- The camera ---------------------------------------------------------
   //
   // A phase never touches this — see the header. The stage owns it because the one
@@ -188,9 +265,9 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
   });
 
   /** Apply a camera description at once, cancelling any pan under way. */
-  function frameTo(camera) {
+  function frameTo(description) {
     pan = null;
-    framed = camera ?? {};
+    framed = description ?? {};
     applyDescription(framed);
   }
 
@@ -199,9 +276,9 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
    *
    * Panning from nothing is just framing: a viewer's first shot is not a move.
    */
-  function panTo(camera, seconds = PAN) {
-    if (!framed || framed.zoom === undefined) return frameTo(camera);
-    pan = { from: framed, to: camera ?? {}, seconds, spent: 0 };
+  function panTo(description, seconds = PAN) {
+    if (!framed || framed.zoom === undefined) return frameTo(description);
+    pan = { from: framed, to: description ?? {}, seconds, spent: 0 };
   }
 
   /** Advance a pan, and say whether one is still running. */
@@ -224,7 +301,7 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
    * so the phase taking over gets a clean zero and no delta belonging to its
    * predecessor.
    */
-  const loop = createLoop((delta, elapsed) => {
+  function tick(delta, elapsed) {
     // Paused, a frame is a still: the head phase is drawn where it has got to and
     // the loop stops. That one frame is what puts a train on a track shown while
     // paused, which would otherwise sit unturned at the origin until play. Its delta
@@ -244,6 +321,14 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
       phaseAt = now;
       if (!queue.length) return panning ? undefined : false;
     }
+    return undefined;
+  }
+
+  // One draw at the end of every frame the loop runs, whatever that frame wrote.
+  const loop = createLoop((delta, elapsed) => {
+    const going = tick(delta, elapsed);
+    draw();
+    return going;
   });
 
   /** The stage's own time: the loop's, less what was spent on paused frames. */
@@ -271,7 +356,7 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
 
   /**
    * Back to an empty stage: the cubes, the queue and the clock all gone. The camera
-   * description survives, because the element it was written to does.
+   * description survives.
    *
    * A sequenced viewer must *not* call this between phases — the surviving cubes
    * are the whole point. It is for a viewer that draws one thing and then a
@@ -286,68 +371,72 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
     pan = null;
     for (const item of [...cubes.values()]) item.dispose();
     cubes.clear();
+    invalidate();
+  }
+
+  /** Take an overlay's meshes out of the scene, with the geometry each owns. */
+  function remove(meshes, { owned = true } = {}) {
+    for (const mesh of meshes) {
+      mesh.removeFromParent();
+      if (owned) mesh.geometry.dispose();
+    }
+    invalidate();
   }
 
   // ---- The cell lattice ---------------------------------------------------
   //
   // Not a cube and not in the registry, so `clear()` between two shapes leaves it
   // standing; whoever set it takes it down with `setGrid(null)`. One mesh, mounted
-  // once per box and never written to after.
-  //
-  // It is an overlay, not an object, and PolyCSS has no unlit material to say so:
-  // every face is shaded from its normal and painted opaque. So the mesh is tagged
-  // `GRID_CLASS` and the viewer's stylesheet repaints its faces flat and translucent.
+  // once per box and never written to after. It is an overlay, not an object: one
+  // flat colour on every face, so no side of a line reads as lit or in shade.
 
   let grid = null;
 
   /** Replace the lattice with these polygons, or take it away with `null`. */
   function setGrid(polygons) {
-    grid?.dispose();
-    grid = polygons ? scene.add(meshLike(polygons), {}) : null;
-    grid?.element.classList.add(GRID_CLASS);
+    if (grid) remove([grid]);
+    grid = polygons ? fixedMesh(soupGeometry(polygons), paint.grid, { name: OVERLAY.grid, order: ORDER.grid }) : null;
+    if (grid) scene.add(grid);
     showTrainCell();
+    invalidate();
   }
 
   // ---- The origin's axes --------------------------------------------------
   //
   // An overlay like the lattice, and for the same reasons: not a cube, so `clear()`
-  // leaves it standing, and painted by the stylesheet through `ORIGIN_CLASS`.
+  // leaves it standing.
 
   let origin = [];    // the origin cell's outline, then the arrows
-  let markers = [];   // one invisible speck per axis label, which the label finds by
+  let tips = [];      // where each axis label goes, `{ name, at }` in world units
 
   /** Outline the origin cell and stand the arrows at `box`'s corner, or take them away with null. */
   function setOrigin(box) {
-    for (const handle of origin) handle.dispose();
-    for (const { handle } of markers) handle.dispose();
+    remove(origin);
     origin = [];
-    markers = [];
+    tips = [];
     if (!box) return;
     const anchor = axisAnchor(box);
-    const arrows = scene.add(meshLike(axisArrows()), {});
-    arrows.setTransform({ position: anchor, rotation: [0, 0, 0] });
-    origin = [scene.add(meshLike(originCell()), {}), arrows];
-    for (const handle of origin) handle.element.classList.add(ORIGIN_CLASS);
-    markers = LABEL_SPOTS.map(({ name, position }) => {
-      const handle = scene.add(meshLike(cellBox(MARKER_INSET)), {});
-      handle.setTransform({ position: position.map((c, k) => c + anchor[k]), rotation: [0, 0, 0] });
-      handle.element.classList.add(MARKER_CLASS);
-      return { name, handle };
-    });
+    origin = [
+      fixedMesh(soupGeometry(originCell()), paint.origin, { name: OVERLAY.origin }),
+      fixedMesh(soupGeometry(axisArrows()), paint.origin, { name: OVERLAY.origin, at: anchor }),
+    ];
+    for (const mesh of origin) scene.add(mesh);
+    tips = LABEL_SPOTS.map(({ name, position }) => ({ name, at: position.map((c, k) => c + anchor[k]) }));
+    invalidate();
   }
 
   /**
    * Where each axis label belongs on screen, `{ name, x, y }` in client pixels.
    *
-   * HTML text cannot be placed in the 3D scene, and a projection worked out here
-   * would be a second copy of PolyCSS's camera. So each label has an invisible
-   * speck at its spot and the browser is asked where the speck landed. Reading it
-   * forces a layout, so it is for after the camera has moved, not for every frame.
+   * HTML text cannot be placed in the 3D scene, so each label's spot is projected
+   * through the camera and the canvas's place on the page.
    */
   function originTips() {
-    return markers.map(({ name, handle }) => {
-      const { left, top, width, height } = handle.element.firstElementChild.getBoundingClientRect();
-      return { name, x: left + width / 2, y: top + height / 2 };
+    const { left, top, width, height } = canvas.getBoundingClientRect();
+    const point = new Vector3();
+    return tips.map(({ name, at }) => {
+      point.set(...at).project(camera);
+      return { name, x: left + (point.x + 1) / 2 * width, y: top + (1 - point.y) / 2 * height };
     });
   }
 
@@ -356,23 +445,27 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
   // Part of the lattice, so it is only drawn while there is one. The driver reports
   // the cell whatever the viewer shows; the stage decides whether there is anything
   // to draw it on. One mesh — a see-through box filling one cell, authored about
-  // the origin — mounted once and moved with `setTransform`, so following the train
-  // costs a transform per cell entered and never a `setPolygons`.
+  // the origin — mounted once and moved by its matrix, never rebuilt.
 
   let trainCell = null;   // the cell last reported, or null when there is no train
   let trainMark = null;
 
   function showTrainCell() {
     if (!grid || !trainCell) {
-      trainMark?.dispose();
+      if (trainMark) remove([trainMark], { owned: false });
       trainMark = null;
       return;
     }
-    if (!trainMark) {
-      trainMark = scene.add(meshLike(cellBox(TRAIN_CELL_INSET)), {});
-      trainMark.element.classList.add(TRAIN_CELL_CLASS);
+    if (trainMark) {
+      trainMark.matrix.makeTranslation(...toWorld(trainCell));
+      trainMark.matrixWorldNeedsUpdate = true;
+    } else {
+      trainMark = fixedMesh(cellGeometry, paint.fill, {
+        name: OVERLAY.trainCell, order: ORDER.fill, at: toWorld(trainCell),
+      });
+      scene.add(trainMark);
     }
-    trainMark.setTransform({ position: toWorld(trainCell), rotation: [0, 0, 0] });
+    invalidate();
   }
 
   /** The cell the train is in, or `null` when it has gone. */
@@ -389,9 +482,8 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
   // after it. Not cubes and not a phase's: a phase that finishes is disposed on the
   // next frame, and one that never finishes keeps the loop running for a picture
   // that does not move. So they are an overlay like the lattice — `clear()` leaves
-  // them, and whoever set them takes them down with `setGhosts([])`. Each is tagged
-  // `GHOST_CLASS` and `ghost-<tint>` for the viewer's stylesheet to paint; one with
-  // no tint is left in the train's own colours, solid.
+  // them, and whoever set them takes them down with `setGhosts([])`. A tinted ghost
+  // is flat and see-through in its tint; one with no tint is the train itself, lit.
 
   let ghosts = [];
 
@@ -401,14 +493,15 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
    * not be drawn.
    */
   function setGhosts(list) {
-    for (const ghost of ghosts) ghost.dispose();
+    remove(ghosts, { owned: false });
     ghosts = list.map(({ type, cell, pose, tint }) => {
       const { basis, position } = trainAt(type, cell, pose);
-      const mesh = movingMesh(scene, trainBody(), basis, position);
-      mesh.handle.element.classList.add(GHOST_CLASS);
-      if (tint) mesh.handle.element.classList.add(`${GHOST_CLASS}-${tint}`);
+      const { mesh } = movingMesh(scene, standingTrain(), tint ? paint[tint] : paint.solid, basis, position);
+      mesh.name = tint ? `${OVERLAY.ghost}-${tint}` : OVERLAY.ghost;
+      if (tint) mesh.renderOrder = ORDER.ghost;
       return mesh;
     });
+    invalidate();
   }
 
   // ---- Filled cells ---------------------------------------------------------
@@ -421,25 +514,28 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
 
   /** Fill these cells, `[x, y, z]` each, replacing any filled before. */
   function setFill(cells) {
-    for (const handle of fills) handle.dispose();
-    fills = cells.map(cell => {
-      const handle = scene.add(meshLike(cellBox(TRAIN_CELL_INSET)), {});
-      handle.setTransform({ position: toWorld(cell), rotation: [0, 0, 0] });
-      handle.element.classList.add(TRAIN_CELL_CLASS);
-      return handle;
-    });
+    remove(fills, { owned: false });
+    fills = cells.map(cell => fixedMesh(cellGeometry, paint.fill, {
+      name: OVERLAY.trainCell, order: ORDER.fill, at: toWorld(cell),
+    }));
+    for (const mesh of fills) scene.add(mesh);
+    invalidate();
   }
 
   return {
     scene,
+    camera,
     cubes,
     cube,
     held,
     drop,
     detach,
+    train,
     frameTo,
     panTo,
     applyCamera,
+    applied,
+    zoom: () => applied().zoom,
     view,
     adjust,
     run,
@@ -453,5 +549,6 @@ export function createStage(cameraEl, sceneEl, { onTrainCell, onCamera } = {}) {
     setGhosts,
     setFill,
     markTrainCell,
+    invalidate,
   };
 }

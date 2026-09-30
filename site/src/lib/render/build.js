@@ -23,16 +23,6 @@
 // This is a scripted tween and not the tumbler run backwards. A rigid-body
 // simulation is not reversible — a pile does not know which of the thousands of
 // tracks that collapse into it was the one — so nothing here touches cannon.
-//
-// **The lighting comes out exactly right**, which is worth the trouble it costs. A
-// container rotation cannot recompute a polygon normal, so a `place`d piece
-// carries the lighting of its baked pose; the tumbler lives with that mid-air and
-// re-bakes on landing, because it cannot know a resting orientation in advance.
-// Here the resting orientation is the one thing that *is* known in advance — it is
-// the pose the solver chose — so a piece is baked at its final pose the moment it
-// sets off and the container carries what it still has to lose. That delta reaches
-// nothing precisely as the piece lands, so the finished track is lit identically
-// to a static one and nothing is baked twice.
 
 import { CUBE, ALARM, ALARM_FLASH, ALARM_PERIOD } from './dimensions.js';
 import { cubePosition, poseRotation, axisAngle, compose, turnToward, add } from './vec.js';
@@ -81,7 +71,7 @@ const STANDOFF = 1.3;  // cubes back along the piece's own heading: the connecto
 // is the one it actually needs, from however it fell to the pose it is going to.
 const TILT = 100;      // degrees
 
-const UP = [0, 0, 1];  // world up, in PolyCSS's frame — see `toWorld`
+const UP = [0, 0, 1];  // world up, in the renderer's frame — see `toWorld`
 
 const clamp = t => Math.max(0, Math.min(1, t));
 // A turn that is *finished* by `at` and is then exactly nothing, so the piece is
@@ -151,14 +141,13 @@ const timingFor = (pace, speed, delay) => ({
 });
 
 /**
- * Put a cube down finished: at its final pose, in its final place, with nothing
- * on the container. Mints it if it is not on the stage; re-bakes it if it is,
- * which is what re-lights a piece that has been lying on the floor.
+ * Put a cube down finished: at its final pose, in its final place. Mints it if it
+ * is not on the stage; moves it there if it is.
  */
 function finish(stage, slot) {
   const existing = stage.held(slot.id);
   const cube = stage.cube(slot.id, slot);
-  if (existing) cube.bake(slot.basis, slot.position);
+  if (existing) cube.place(slot.basis, slot.position);
   return cube;
 }
 
@@ -305,7 +294,7 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } =
  * floor after a collapse, so it is picked up and carried. Here it is a cube that is
  * already *in the right place* — the viewer takes off every cube that no longer
  * belongs before running this — so the right thing to do with it is nothing at all:
- * no bake, no transform, not a single write. A piece already down must not so much
+ * not a single write. A piece already down must not so much
  * as twitch when the next letter is typed.
  *
  * `leaving` is the pieces that no longer belong, `{ cube, piece }` each: the cube
@@ -401,7 +390,7 @@ export function growPhase(stage, pieces, {
         }
         flying = flying.filter(slot => {
           if (elapsed >= slot.lands) {
-            slot.cube.place(slot.basis, slot.position);   // the delta is now nothing
+            slot.cube.place(slot.basis, slot.position);   // home, exactly
             return false;
           }
           (slot.pickUp ? resume : slide)(slot, (elapsed - slot.at) / timing.flight);
@@ -452,14 +441,7 @@ export function buildPhase(stage, pieces, {
   let flying = [];       // slots in the air, in no particular order
   let closedAt = null;   // loop time the train set off, null until it has
 
-  /**
-   * Set a piece going.
-   *
-   * A pick-up is re-baked at its final pose here and the container immediately
-   * put back to where the piece is actually lying, so it does not visibly snap:
-   * from this moment the delta on the container is only what the arrival still
-   * has to spend, and it is lit as it will be when it lands.
-   */
+  /** Set a piece going. A pick-up's flight starts from wherever it is lying. */
   function begin(slot) {
     // Taken off whatever else was moving it *before* its position is read, so the
     // flight starts from exactly where the piece was left and nothing writes to it
@@ -470,8 +452,6 @@ export function buildPhase(stage, pieces, {
     if (slot.pickUp) {
       slot.from = { basis: cube.basis, com: comAt(slot.type, cube.basis, cube.position) };
       slot.to = comAt(slot.type, slot.basis, add(slot.position, slot.standoff));
-      cube.bake(slot.basis, slot.position);
-      cube.place(slot.from.basis, originAt(slot.type, slot.from.basis, slot.from.com));
     }
     slot.cube = cube;
     flying.push(slot);
@@ -486,7 +466,7 @@ export function buildPhase(stage, pieces, {
 
       flying = flying.filter(slot => {
         if (elapsed >= slot.lands) {
-          slot.cube.place(slot.basis, slot.position);   // the delta is now nothing at all
+          slot.cube.place(slot.basis, slot.position);   // home, exactly
           return false;
         }
         const since = elapsed - slot.at;

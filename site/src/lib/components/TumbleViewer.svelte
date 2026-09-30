@@ -1,10 +1,9 @@
 <script>
   import { onMount } from 'svelte';
   import { createStage } from '../render/stage.js';
-  import { CAMERA } from '../render/camera.js';
+  import { readTheme } from '../render/renderer.js';
   import { attachControls } from '../render/controls.js';
   import { tumblePhase } from '../render/tumble.js';
-  import { LIGHT } from '../render/dimensions.js';
   import { tumbleScene, cubesIn } from '$lib/scenes.js';
   import { routeOf } from '../../../../src/layouts.js';
 
@@ -29,8 +28,7 @@
   });
 
   let host = $state(null);
-  let cameraEl = $state(null);
-  let sceneEl = $state(null);
+  let canvas = $state(null);
   let stage = null;
   let ready = $state(false);
   let failed = $state('');
@@ -48,35 +46,22 @@
   }
 
   onMount(() => {
-    let live = true;
     let controls = null;
 
-    (async () => {
-      try {
-        await import('@layoutit/polycss/elements');
-        await customElements.whenDefined('poly-scene');
-        if (!live) return;
-        stage = createStage(cameraEl, sceneEl);
-        if (interactive) controls = attachControls(host, cameraEl, stage);
-        ready = true;   // the effect below does the first drop
-      } catch (error) {
-        failed = error.message;
-      }
-    })();
+    try {
+      stage = createStage(canvas, { theme: readTheme(host) });
+      if (interactive) controls = attachControls(host, stage);
+      ready = true;   // the effect below does the first drop
+    } catch (error) {
+      failed = error.message;
+    }
 
-    // PolyCSS needs real pixel dimensions on the camera element — the wrapper's
-    // aspect-ratio box does the layout, this copies its size across.
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      if (!cameraEl || !width) return;
-      cameraEl.style.width = `${Math.round(width)}px`;
-      cameraEl.style.height = `${Math.round(height)}px`;
-      stage?.applyCamera();
-    });
+    // The canvas fills the wrapper's aspect-ratio box, and zoom is relative to the
+    // viewer's size, so a resize reframes (and redraws).
+    const ro = new ResizeObserver(() => stage?.applyCamera());
     ro.observe(host);
 
     return () => {
-      live = false;
       ro.disconnect();
       controls?.destroy();
       stage?.clear();
@@ -85,28 +70,14 @@
   });
 
   // A new shape or a new drop height is a new `result`, and a new result is a new
-  // fall. This is also what does the first drop, once PolyCSS is up.
+  // fall. This is also what does the first drop, once the stage is up.
   $effect(() => {
     if (ready && result.state === 'ok') release();
   });
 </script>
 
 <div class="viewer" class:interactive bind:this={host} style:aspect-ratio={aspect}>
-  <poly-camera
-    bind:this={cameraEl}
-    rot-x={CAMERA['rot-x']}
-    rot-y={CAMERA['rot-y']}
-    zoom={CAMERA.zoom}
-    target={CAMERA.target}
-  >
-    <poly-scene
-      bind:this={sceneEl}
-      directional-direction={LIGHT.direction}
-      directional-intensity={LIGHT.directional}
-      ambient-intensity={LIGHT.ambient}
-    >
-    </poly-scene>
-  </poly-camera>
+  <canvas bind:this={canvas}></canvas>
 
   {#if failed}
     <p class="failed">Could not start the 3D view: {failed}</p>
@@ -146,8 +117,11 @@
     cursor: grabbing;
   }
 
-  .viewer :global(poly-camera) {
-    display: block;
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
 
   .failed {

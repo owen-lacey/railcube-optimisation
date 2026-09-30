@@ -1,5 +1,5 @@
 // The track falling apart: a cannon-es rigid-body world built from a chained
-// route. Physics only — no PolyCSS, no DOM. `render/tumble.js` is the binding
+// route. Physics only — no rendering, no DOM. `render/tumble.js` is the binding
 // that draws what this works out.
 //
 // The collision shapes themselves are next door in `shapes.js`, because the
@@ -41,7 +41,7 @@ const vec = ([x, y, z]) => new CANNON.Vec3(x, y, z);
 // ---- Rotations ------------------------------------------------------------
 
 /**
- * A rotation basis (the images of local right/forwards/up, as `rotate` takes)
+ * A rotation basis (the images of local right/forwards/up, as `poseRotation` returns)
  * as a cannon quaternion. Shepperd's method: pick the branch whose divisor is
  * largest, because the other three go singular at half-turns — and the poses
  * are all made of quarter- and half-turns, so those are not edge cases here.
@@ -64,7 +64,7 @@ export function quaternionOf([a, b, c]) {
   return from(s, m[k][j] - m[j][k], q[0], q[1], q[2]);
 }
 
-/** A cannon quaternion as a rotation basis, which is what `rotate` takes. */
+/** A cannon quaternion as a rotation basis, which is what a cube is placed by. */
 export function basisOf({ x, y, z, w }) {
   return [
     [1 - 2 * (y * y + z * z), 2 * (x * y + w * z), 2 * (x * z - w * y)],

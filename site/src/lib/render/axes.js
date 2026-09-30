@@ -8,14 +8,14 @@
 // The origin cell is outlined where it is. The arrows are not at it: the start cube
 // fills the cell and the track winds round it, so arrows there are lost in the
 // cubes. They stand at the lattice box's outer corner instead, clear of the track.
-// Everything is one colour, painted by the
-// viewer's stylesheet. The letters are not drawn here: PolyCSS has no text, and a
-// glyph made of geometry turns with the camera and reads backwards from behind. They
-// are HTML, placed by the viewer from `LABEL_SPOTS` — see `originTips` in stage.js.
+// Everything is one colour, painted flat by the
+// stage. The letters are not drawn here: a glyph made of geometry turns with the
+// camera and reads backwards from behind. They are HTML, placed by the viewer from
+// `LABEL_SPOTS` — see `originTips` in stage.js.
 //
 // Like the lattice, every shape is closed — a bar is four sides and two caps, a
-// head is four sides and a base — because PolyCSS faces are single-sided and the
-// camera can be anywhere.
+// head is four sides and a base — because faces are single-sided and the camera
+// can be anywhere.
 
 import { CUBE, AXIS_W, AXIS_LENGTH, AXIS_HEAD, AXIS_HEAD_W, AXIS_LABEL, AXIS_GAP, ORIGIN_W } from './dimensions.js';
 import { cellEdges } from './grid.js';
@@ -58,8 +58,8 @@ function bar(a, b, w) {
 
 /**
  * A four-sided head whose base is centred on `base`, narrowing along `d` to a tip a
- * pinhead wide. Every face is a quad: PolyCSS draws a triangle as a sliver that can
- * show its unpainted underside, and the lattice's quads never do.
+ * pinhead wide. Every face is a quad, like the lattice's (PolyCSS drew a triangle
+ * as a sliver that could show its unpainted underside).
  */
 function head(base, d, length, w) {
   const frame = crossSection(d);

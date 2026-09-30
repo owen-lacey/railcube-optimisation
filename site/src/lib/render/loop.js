@@ -50,5 +50,5 @@ export function createLoop(tick) {
     elapsed = 0;
   }
 
-  return { start, stop, reset, at: () => elapsed };
+  return { start, stop, reset, at: () => elapsed, running: () => frame !== null };
 }

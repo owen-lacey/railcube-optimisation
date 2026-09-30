@@ -1,70 +1,111 @@
-// One piece, one mesh, and the two ways its orientation can be written.
+// The project's polygon lists as three.js meshes, and the one way a mesh is moved.
 //
-// Extracted from `tumble.js`, which worked this out the hard way, because there
-// are three viewers now and all three mount meshes: the track viewer, the
-// tumbler and the builder.
+// Every geometry generator here (`pieces.js`, `train.js`, `grid.js`, `axes.js`)
+// emits a list of polygons, `{ vertices, color }`, each wound so that its outward
+// normal follows the right-hand rule. `soupGeometry` turns such a list into a
+// non-indexed `BufferGeometry` with face normals and per-vertex colours, which is
+// all a three material needs.
 //
-// The choice is between putting an orientation in the *vertices* and putting it
-// on the *container*:
-//
-// `bake` calls `setPolygons`, which rebuilds a `matrix3d` per polygon. A track
-// piece is about 110 polygons, so eighteen of them is two thousand matrices, and
-// at that rate the frame rate visibly collapses — measured, having first shipped
-// the tumbler that way. So `bake` is for orientations that will be *held*, not
-// for orientations that change every frame.
-//
-// `place` calls `setTransform`, which writes one transform to one container
-// element. It carries the difference between the orientation asked for and the
-// one currently in the vertices, so it is cheap however far the piece has turned.
-// The cost is lighting: PolyCSS shades each polygon from its normal, and a CSS
-// rotation cannot recompute a normal, so a `place`d piece carries the lighting of
-// its baked pose around with it. Bake at the orientation a piece will be looked
-// at in, and the approximation only ever shows while it is moving.
+// A mesh is moved by writing its matrix, and nothing else. There used to be two
+// ways, `bake` (an orientation in the vertices) and `place` (one on the container),
+// because PolyCSS could not recompute a normal under a CSS rotation and re-baking
+// was expensive. three rotates the normals with the matrix, so a piece is lit
+// correctly in any orientation and one matrix write is the whole cost of moving it.
 
-import { rotate, compose, transpose, polyRotation } from './vec.js';
+import { BufferGeometry, Color, Float32BufferAttribute, Matrix4, Mesh, Vector3 } from 'three';
+import { GEOMETRY } from './pieces.js';
+import { LIGHT } from './dimensions.js';
+import { unit, cross, sub } from './vec.js';
 
-/** PolyCSS's `add` takes a loader result; hand-built geometry fakes one. */
-export const meshLike = polygons => ({ polygons, objectUrls: [], warnings: [], dispose: () => {} });
+const color = new Color();
+
+/** A polygon's face normal, from its first three vertices. */
+export function faceNormal([a, b, c]) {
+  return unit(cross(sub(b, a), sub(c, a)));
+}
 
 /**
- * Mount `canonical` — polygons in the piece's own frame — at a world
- * orientation and position, and return the two ways of moving it afterwards.
- *
- * It goes up already rotated rather than mounted flat and then baked, so a piece
- * costs one `setPolygons` to appear rather than two.
+ * Fan-triangulate a polygon list into a non-indexed geometry with per-vertex
+ * colours in linear space, which is what three's materials expect. `shade(poly,
+ * normal, rgb)` may return a linear `[r, g, b]` to use instead of the polygon's own
+ * colour — which is how the train's lighting is carried, see `carriedShade`.
  */
-export function movingMesh(scene, canonical, basis, position) {
-  let source = canonical;
-  const handle = scene.add(meshLike(rotate(source, basis)), {});
-  handle.setTransform({ position, rotation: [0, 0, 0] });
-  let inverse = transpose(basis);
-
-  /** Write an orientation into the vertices. Expensive; re-lights the piece. */
-  function bake(next, at) {
-    handle.setPolygons(rotate(source, next), { stableDom: true });
-    handle.setTransform({ position: at, rotation: [0, 0, 0] });
-    inverse = transpose(next);
+export function soupGeometry(polys, { fallback = '#3b82f6', shade = null } = {}) {
+  const positions = [];
+  const colors = [];
+  for (const poly of polys) {
+    const { vertices } = poly;
+    color.set(poly.color ?? fallback);   // sRGB hex → linear, via three's colour management
+    let rgb = [color.r, color.g, color.b];
+    if (shade) rgb = shade(poly, faceNormal(vertices), rgb);
+    for (let k = 1; k + 1 < vertices.length; k++) {
+      for (const v of [vertices[0], vertices[k], vertices[k + 1]]) {
+        positions.push(v[0], v[1], v[2]);
+        colors.push(...rgb);
+      }
+    }
   }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();   // non-indexed, so these are face normals
+  return geometry;
+}
 
-  /**
-   * Swap the polygons for a differently-coloured set of the same shape, at the
-   * orientation and position the piece is already sitting in.
-   *
-   * It costs exactly what `bake` costs, which is why the only thing that uses it
-   * blinks *one* piece about twice a second rather than tinting a track.
-   */
-  function recolour(next, basisNow, at) {
-    source = next;
-    bake(basisNow, at);
-  }
+/**
+ * The lighting a polygon gets at the pose it was authored in, worked out once so
+ * it can be carried: `base × (directional × max(0, n·L) + ambient) / π` in linear
+ * space. That is three's Lambert term under the `LIGHT` rig exactly, so a mesh
+ * pre-shaded by this and drawn unlit looks the same as a lit one *at that pose* —
+ * and keeps looking that way however it turns afterwards.
+ *
+ * It is the train's. Under PolyCSS the train was moved without being re-lit, so it
+ * carried the lighting of its authored pose round the whole lap, and that is the
+ * picture being kept.
+ */
+const L = unit(LIGHT.direction.split(',').map(Number));
+export function carriedShade(_poly, n, base) {
+  const dot = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
+  const bracket = (LIGHT.directional * dot + LIGHT.ambient) / Math.PI;
+  return base.map(v => Math.min(1, v * bracket));
+}
 
-  /** Write an orientation onto the container, as a delta from the baked one. */
-  function place(next, at) {
-    handle.setTransform({ position: at, rotation: polyRotation(compose(next, inverse)) });
-  }
+// One geometry per piece type and colour, shared by every mesh of that type on
+// the page — which is also what makes a repaint free: it is a swap to another one.
+const pieceGeometry = new Map();
 
-  // `handle` is exposed for the tests, which assert on what was actually drawn —
-  // how many times a piece was baked, and that a picked-up cube is the same object
-  // it was before it fell. Nothing in the renderer reaches for it.
-  return { bake, place, recolour, handle, dispose: () => handle.dispose() };
+/** The geometry of a `type` piece painted `hex`, authored about its own cube. */
+export function geometryFor(type, hex) {
+  const key = `${type}|${hex}`;
+  if (!pieceGeometry.has(key)) pieceGeometry.set(key, soupGeometry(GEOMETRY[type](hex)));
+  return pieceGeometry.get(key);
+}
+
+/** A rotation basis (the images of the local axes) and a position, as one matrix. */
+export const basisMatrix = ([mx, my, mz], position, into = new Matrix4()) => into
+  .makeBasis(new Vector3(...mx), new Vector3(...my), new Vector3(...mz))
+  .setPosition(...position);
+
+/**
+ * Mount `geometry` in `scene` at a world orientation and position, and return the
+ * way of moving it afterwards. `mesh` is the three.js object, which the tests
+ * watch to count what is actually written to it.
+ */
+export function movingMesh(scene, geometry, material, basis, position) {
+  const mesh = new Mesh(geometry, material);
+  mesh.matrixAutoUpdate = false;
+  basisMatrix(basis, position, mesh.matrix);
+  mesh.matrixWorldNeedsUpdate = true;
+  scene.add(mesh);
+
+  return {
+    mesh,
+    place(next, at) {
+      basisMatrix(next, at, mesh.matrix);
+      mesh.matrixWorldNeedsUpdate = true;
+    },
+    /** Show a different geometry in the same place — a repaint, for a piece pointed at. */
+    reshape(next) { mesh.geometry = next; },
+    dispose() { mesh.removeFromParent(); },
+  };
 }

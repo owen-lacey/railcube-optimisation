@@ -196,8 +196,8 @@ const rad = d => d * Math.PI / 180;
 
 /**
  * Where a world point lands on screen at zoom 1 under the default camera, as
- * `[across, down]` — PolyCSS's camera transform (see `slid` in controls.js), which
- * swaps a point's first two components on the way in.
+ * `[across, down]` — the camera `polyView` sets up in camera.js (see `slid` in
+ * controls.js for the same arithmetic inverted).
  */
 function onScreen([a, b, c]) {
   const [turn, tilt] = [rad(CAMERA['rot-y']), rad(CAMERA['rot-x'])];

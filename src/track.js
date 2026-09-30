@@ -3,7 +3,7 @@
 // source of truth — both the solver and the visualisation spike import it.
 //
 // Everything here is in the project frame from docs/coordinates.md: x = right,
-// y = up, z = forwards (away from the viewer). No rendering, no PolyCSS.
+// y = up, z = forwards (away from the viewer). No rendering.
 
 /** Project-frame vector for each direction letter (coordinates.md:20-24). */
 export const PROJ = {

@@ -3,9 +3,9 @@
 // One cell is one straight cube, and a cell `c` spans `toWorld(c) ± CUBE/2`, so
 // the lattice's planes sit half a cell either side of every cell in the box.
 //
-// PolyCSS has no line primitive and every polygon is single-sided, so each line
-// is a thin square prism: four side faces, each wound outward, which between them
-// face every way the camera can look from. One prism per full-length line rather
+// Every polygon is single-sided, so each line is a thin square prism rather than a
+// GL line (which would be one pixel wide at any zoom): four side faces, each wound
+// outward, which between them face every way the camera can look from. One prism per full-length line rather
 // than one per cell edge keeps the polygon count to the lines actually visible.
 
 import { CUBE, GRID_W } from './dimensions.js';
@@ -39,7 +39,7 @@ function line(axis, from, to, at, half = HALF) {
     [v, 1, [[-half, half], [half, half]]],
     [v, -1, [[-half, -half], [half, -half]]],
   ];
-  // No colour: the lattice is painted by the viewer's stylesheet, not by PolyCSS.
+  // No colour: the lattice is painted flat by the stage's overlay material.
   return faces.map(([normal, sign, [[du0, dv0], [du1, dv1]]]) => ({
     vertices: windToward([
       point(from, du0, dv0), point(to, du0, dv0), point(to, du1, dv1), point(from, du1, dv1),

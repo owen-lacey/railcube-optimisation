@@ -10,8 +10,6 @@
 // that a track that collapses leaves its train hanging in mid-air over the
 // wreckage. Which it did.
 
-import { movingMesh } from './meshes.js';
-import { trainBody } from './train.js';
 import { trackPath } from './rail.js';
 import { SPEED, BODY_Z, TRAIN_H } from './dimensions.js';
 import { cross, add, sub, len, unit, toCell } from './vec.js';
@@ -21,8 +19,9 @@ import { cross, add, sub, len, unit, toCell } from './vec.js';
 const BODY_REF = BODY_Z + TRAIN_H / 2;
 
 // The train's polygons are authored facing forwards, and it is mounted turned by
-// nothing, so every per-frame `place` below is a delta from that authored pose —
-// whose lighting it therefore carries for the whole lap.
+// nothing. Its colours carry the lighting of that authored pose (see `carriedShade`
+// in meshes.js), so it keeps it for the whole lap rather than re-lighting on a bank
+// or a wall — Owen's call, and the picture the site has always drawn.
 const UNTURNED = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
 /** Bind a train to a live stage. It has no mesh until it has a route. */
@@ -38,7 +37,7 @@ export function createDriver(stage) {
     // drawn for its first few seconds, and a track being built has nothing drawn
     // for the first one. A train parked in mid-air over no track at all is a
     // worse picture than an empty box.
-    if (!mesh) mesh = movingMesh(stage.scene, trainBody(), UNTURNED, [0, 0, 0]);
+    if (!mesh) mesh = stage.train(UNTURNED, [0, 0, 0]);
     path = trackPath(pieces);
     // Pace the train by the body, not by the wheels. A rail sample is the point
     // where the wheels touch the strip, and the body rides BODY_REF above it, so
@@ -94,15 +93,9 @@ export function createDriver(stage) {
     const raw = blend(a.up, b.up);
     const dot = raw.reduce((acc, v, i) => acc + v * fwd[i], 0);
     const up = unit(raw.map((v, i) => v - dot * fwd[i])); // square up against the heading
-    // Placed, never baked. The train used to be the one mesh that baked every
-    // frame — fifty polygons, and the thing being watched, so its lighting was
-    // worth keeping right. Profiled on a throttled phone, that bake was about
-    // half the main thread: `setPolygons` re-runs PolyCSS's whole mesh optimiser
-    // per call, not fifty matrix writes. Placing it instead holds 60fps (29
-    // before), at the cost `meshes.js` names — the train carries the lighting of
-    // its authored pose round the lap.
     const pos = blend(a.pos, b.pos);
     mesh.place([cross(fwd, up), fwd, up], pos);
+    stage.invalidate();
     // The lattice cell is the one the body is in, not the wheels: the body is what
     // is seen, and it rides clear of the cube, in the cell the model books as train.
     stage.markTrainCell(toCell(add(pos, up.map(v => v * BODY_REF))));
@@ -111,6 +104,7 @@ export function createDriver(stage) {
   function dispose() {
     stage.markTrainCell(null);
     mesh?.dispose();
+    stage.invalidate();
     mesh = null;
     lap = 0;
   }

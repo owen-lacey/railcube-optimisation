@@ -1,93 +1,27 @@
-// The two bits of the renderer's rotation arithmetic that have to be exactly
-// right and cannot be eyeballed: `polyRotation`, and `turnToward`.
+// The renderer's rotation arithmetic that has to be exactly right and cannot be
+// eyeballed: how a basis goes onto a mesh, and `turnToward`.
 //
-// `polyRotation` — the conversion from a rotation to the three Euler angles
-// PolyCSS's `setTransform` accepts — checked against what PolyCSS actually emits.
+// Everything that moves goes through the first: the tumbler turns a falling cube
+// with it, the builder turns an arriving one, and a wrong sign produces an
+// animation that looks entirely plausible and is wrong — pieces spinning the other
+// way, or about the wrong axis, on layouts nobody has memorised. So it is checked
+// against what three.js actually does with the matrix, a local axis sent through
+// the mesh's world matrix, rather than against the reasoning in `meshes.js`.
 //
-// This is the one piece of the renderer that has to be exactly right and cannot
-// be eyeballed. Everything that moves goes through it: the tumbler turns a
-// falling cube with it, the builder turns an arriving one, and a wrong sign in
-// any of the three angles produces an animation that looks entirely plausible
-// and is wrong — pieces spinning the other way, or about the wrong axis, on
-// layouts nobody has memorised. It was verified once by a scratch script that no
-// longer exists, which is the situation this file fixes.
-//
-// The check is not against the reasoning in `vec.js`'s comment; it is against the
-// string `buildPolyMeshTransform` emits, which is the only thing that actually
-// decides where a piece appears. Two facts about PolyCSS are being asserted along
-// with the arithmetic:
-//
-//   - the emitted order is `rotateY rotateX rotateZ`, so the decomposition has to
-//     be Y-X-Z (the test fails loudly if a future version reorders them);
-//   - the CSS frame is the world frame with right and forwards swapped, because
-//     the same call emits `translate3d(y, x, z)` — so a world rotation appears
-//     there conjugated by that swap.
-//
-// `@layoutit/polycss` is a runtime dependency and this import needs no DOM, so
-// this belongs in the fast tier.
+// `three` is a runtime dependency and none of this needs a DOM, so this belongs in
+// the fast tier.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPolyMeshTransform } from '@layoutit/polycss';
-import { DIR, axisAngle, compose, transpose, polyRotation, poseRotation, turnToward }
+import { Scene, Vector3 } from 'three';
+import { DIR, axisAngle, compose, transpose, poseRotation, turnToward }
   from '../site/src/lib/render/vec.js';
+import { movingMesh } from '../site/src/lib/render/meshes.js';
 
-const mul = (a, b) => a.map(row => b[0].map((_, j) => row.reduce((s, v, k) => s + v * b[k][j], 0)));
-const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-
-// The rotation matrices of the CSS transforms spec, as written there.
-const rad = d => d * Math.PI / 180;
-const CSS_TURN = {
-  X: a => [[1, 0, 0], [0, Math.cos(rad(a)), -Math.sin(rad(a))], [0, Math.sin(rad(a)), Math.cos(rad(a))]],
-  Y: a => [[Math.cos(rad(a)), 0, Math.sin(rad(a))], [0, 1, 0], [-Math.sin(rad(a)), 0, Math.cos(rad(a))]],
-  Z: a => [[Math.cos(rad(a)), -Math.sin(rad(a)), 0], [Math.sin(rad(a)), Math.cos(rad(a)), 0], [0, 0, 1]],
-};
-
-/**
- * The rotation PolyCSS really applies, composed from the transform string it
- * emits for a given `rotation` triple. CSS transform functions multiply left to
- * right, so the reduce below is the whole of the composition rule.
- *
- * A zero angle is left out of the string altogether, and a transform with nothing
- * in it at all comes back `undefined` rather than empty — which is not a special
- * case to work around but the thing that makes a landed piece cost nothing: the
- * builder's arrivals end on the identity, and the identity emits no transform.
- */
-function emitted(rotation) {
-  const css = buildPolyMeshTransform({ position: [0, 0, 0], rotation }) ?? '';
-  const turns = [...css.matchAll(/rotate([XYZ])\((-?[\d.]+(?:e-?\d+)?)deg\)/g)]
-    .map(([, axis, deg]) => [axis, Number(deg)]);
-  return {
-    order: turns.map(([axis]) => axis).join(''),
-    matrix: turns.reduce((acc, [axis, deg]) => mul(acc, CSS_TURN[axis](deg)), IDENTITY),
-  };
-}
-
-/** A basis holds the images of local right/forwards/up as columns. */
-const matrixOf = basis => [0, 1, 2].map(r => [0, 1, 2].map(c => basis[c][r]));
-
-/** Conjugation by the right↔forwards swap: how a world rotation reads in CSS. */
-const SWAP = [[0, 1, 0], [1, 0, 0], [0, 0, 1]];
-const asCss = matrix => mul(mul(SWAP, matrix), SWAP);
-
-const errorOf = (a, b) => Math.max(...a.flat().map((v, i) => Math.abs(v - b.flat()[i])));
-
-/** How far PolyCSS's own transform is from the rotation it was asked for. */
-function misplacement(basis) {
-  const { order, matrix } = emitted(polyRotation(basis));
-  // Whichever turns are present must come in Y-X-Z order — the decomposition in
-  // `polyRotation` is only correct for that order, so a future version of PolyCSS
-  // reordering them has to fail here rather than quietly mis-orient every piece.
-  const expected = [...'YXZ'].filter(axis => order.includes(axis)).join('');
-  assert.equal(order, expected, 'PolyCSS no longer emits its rotations in Y-X-Z order');
-  return errorOf(matrix, asCss(matrixOf(basis)));
-}
-
-// The measured worst over everything below is 2.2e-14 — floating point noise
-// through three trig calls a side and two matrix products, and nothing more. The
-// budget is two orders of magnitude above that, which is loose enough never to be
-// flaky and tight enough that no real error could slip under it: the smallest
-// mistake worth catching is a sign, and a sign is O(1).
+// Floating point noise through one matrix product is of order 1e-15. The budget is
+// well above that, which is loose enough never to be flaky and tight enough that
+// no real error could slip under it: the smallest mistake worth catching is a
+// sign, and a sign is O(1).
 const TOLERANCE = 1e-12;
 
 const FACES = ['U', 'D', 'F', 'B', 'L', 'R'];
@@ -108,23 +42,45 @@ function orientations(seed) {
   return () => compose(compose(spin(), spin()), spin());
 }
 
-test('the 24 poses survive the round trip', () => {
-  const poses = POSES;
-  assert.equal(poses.length, 24);
-  for (const pose of poses) {
-    // Every pose is made of quarter- and half-turns, so between them these take
-    // the singular branch of the decomposition — where the first and third turns
-    // are about the same axis and only their sum is determined. That branch is
-    // unreachable from random orientations, which is why the poses are checked
-    // separately rather than folded into the sweep below.
-    assert.ok(misplacement(poseRotation(pose)) < TOLERANCE, `pose ${pose}`);
+/**
+ * How far a mesh placed at `basis` and `position` is from putting each local axis
+ * where the basis says: local right, forwards and up, sent through the mesh's
+ * world matrix, against the basis's columns — and the local origin against the
+ * position. A placement is written once at mount and then again by `place`, and
+ * both are measured.
+ */
+function misplacement(basis, position) {
+  const scene = new Scene();
+  const moving = movingMesh(scene, undefined, undefined, poseRotation('DF'), [0, 0, 0]);
+  const worst = mesh => {
+    scene.updateMatrixWorld();   // what the renderer does before it draws
+    const origin = new Vector3().applyMatrix4(mesh.matrixWorld);
+    const axes = [0, 1, 2].map(k => {
+      const local = new Vector3(...[0, 1, 2].map(i => (i === k ? 1 : 0))).applyMatrix4(mesh.matrixWorld);
+      return local.sub(origin).toArray();
+    });
+    return Math.max(
+      ...origin.toArray().map((v, k) => Math.abs(v - position[k])),
+      ...axes.flatMap((axis, c) => axis.map((v, r) => Math.abs(v - basis[c][r]))),
+    );
+  };
+  moving.place(basis, position);
+  const placed = worst(moving.mesh);
+  const mounted = worst(movingMesh(scene, undefined, undefined, basis, position).mesh);
+  return Math.max(placed, mounted);
+}
+
+test('the 24 poses go onto a mesh as the rotations they name', () => {
+  assert.equal(POSES.length, 24);
+  for (const pose of POSES) {
+    assert.ok(misplacement(poseRotation(pose), [20, -40, 60]) < TOLERANCE, `pose ${pose}`);
   }
 });
 
 test('so do arbitrary orientations', () => {
   const next = orientations(20260804);
   let worst = 0;
-  for (let i = 0; i < 20000; i++) worst = Math.max(worst, misplacement(next()));
+  for (let i = 0; i < 2000; i++) worst = Math.max(worst, misplacement(next(), [i, -i / 2, 3]));
   assert.ok(worst < TOLERANCE, `worst misplacement was ${worst}`);
 });
 

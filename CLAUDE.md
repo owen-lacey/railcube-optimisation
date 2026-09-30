@@ -385,22 +385,66 @@ holds, and why an exact-string match is checked first and pays nothing.
 
 `IntVar.notEquals` builds a constraint that is silently a no-op — two variables pinned to the same value still solve. `src/solver/index.js` uses a `differ` helper (a reified pair of strict inequalities) instead. `tests/library.test.js` asserts the bug still exists, so fixing the port will fail that test and point at the workaround to delete. `addAllDifferent` and `onlyEnforceIf` are fine, as are `addHint` and `onSolution`.
 
-## Visualisation: PolyCSS
+## Visualisation: three.js
 
-Track layouts and the train are rendered with [PolyCSS](https://polycss.com) (`@layoutit/polycss`), a CSS 3D engine that renders meshes as real DOM elements. Use the `polycss` skill (`.claude/skills/polycss/`) when touching visualisation code — it has the API cheat-sheet, verified gotchas where the official docs are wrong, and the full docs mirrored offline. A working example lives at `spikes/polycss/index.html`.
+Track layouts and the train are rendered with plain [three.js](https://threejs.org) behind
+the imperative `stage.js` API — not Threlte, because the stage is imperative. It replaced
+PolyCSS (a CSS 3D engine, one DOM element per polygon), which made `/post` unusable on a
+phone: Chrome's Layerize step re-layerized every polygon leaf on every main-thread change.
+The port held the pictures identical rather than improving them, and was checked against a
+Storybook screenshot baseline taken on PolyCSS (below). The memories `threejs-migration-decision`
+and `threejs-fidelity-spike` hold the measurements.
 
-**The renderer lives in the site now** — `site/src/lib/render/`, split into `dimensions.js`
-(measurements), `vec.js` (the project → PolyCSS axis map and pose rotations), `pieces.js`
+- **One renderer per page** (`renderer.js`). Browsers cap WebGL contexts at ~16, so one
+  offscreen `WebGLRenderer` (antialiased, pixel ratio `min(dpr, 3)`, grown to the largest
+  viewer) draws every viewer, and each viewer is a plain 2D `<canvas>` filled with
+  `drawImage` **in the same call as the render** — left for later, the copy can read back
+  blank. It is made on first draw, never at import: every page is prerendered.
+- **Drawing is on demand.** Every write to the picture (a cube placed, an overlay set, the
+  camera applied) calls `stage.invalidate()`. While the loop runs, its tick draws once at
+  the end of the frame; idle, an invalidation asks for one frame. A still viewer is drawn
+  once and then costs nothing — `tests/stage.test.js` counts the draws.
+- **Pieces are `MeshLambertMaterial` with vertex colours** under the `LIGHT` rig
+  (`AmbientLight` + `DirectionalLight` at `LIGHT.direction`). three's Lambert term is exactly
+  what PolyCSS shaded (`base × (directional·max(0, n·L) + ambient) / π`, linear), measured
+  black in a difference overlay. Moving a piece is one matrix write and the normals turn
+  with it, so a piece is lit correctly in every orientation — mid-fall and mid-flight
+  included, which PolyCSS could not do.
+- **The driven train's lighting is carried** — Owen's call, to keep the picture. Its colours
+  are pre-shaded at its authored pose by `carriedShade` (the same formula, in JS) and it is
+  drawn with an unlit `MeshBasicMaterial`, so it never re-lights on a bank or a wall. An
+  untinted ghost train is lit live, since it stands still.
+- **Overlays** (lattice prisms, train-cell fill, filled cells, tinted ghosts, origin axes)
+  are flat `MeshBasicMaterial`s whose colours `readTheme` reads off the viewer's computed
+  style (`--grid-color`, `--grid-opacity`, `--ghost-before/after`, `--ghost-opacity`), so the
+  theme stays in CSS. The see-through ones are `transparent`, `depthWrite: false`, drawn after
+  the solids in the order lattice → ghosts → fill by `renderOrder`; that matched PolyCSS to
+  the pixel. The lattice stays prisms (`gridLines`), not `LineSegments`, which are one pixel
+  wide at any zoom. Overlay meshes carry `OVERLAY` names so tests can find them.
+- **One difference from PolyCSS is a correction**: a ghost inside a filled cell has the
+  fill's near face drawn over it where the face really is nearer (the pose cycle's
+  upside-down poses), which PolyCSS's depth sorting got wrong.
+- **Axis labels** are HTML placed by `originTips()`, which projects each label spot through
+  the camera (`Vector3.project`) onto the canvas's client rect.
+- three r186 only refreshes a world matrix whose `matrixWorldNeedsUpdate` is set (the
+  scene's own auto-update happens to force it every render). Meshes with hand-set matrices
+  set it on every write, and need `updateWorldMatrix`/`scene.updateMatrixWorld()` before
+  anything like `Box3.setFromObject` reads them.
+
+**The renderer lives in the site** — `site/src/lib/render/`, split into `dimensions.js`
+(measurements), `vec.js` (the project → world axis map and pose rotations), `pieces.js`
 (one geometry generator per piece type), `rail.js` (where the rail runs, plus the
-`assertRailMouths` check that runs at import) and `train.js` (the lofted body). The 945-line
-`spikes/track-piece/index.html` this was extracted from is gone; `spikes/polycss/index.html`
-stays as the minimal working example.
+`assertRailMouths` check that runs at import) and `train.js` (the lofted body). Each emits
+polygon lists, `{ vertices, color }`, wound so the outward normal follows the right-hand
+rule (three's front face; everything is single-sided).
 
-Four shared bindings sit on those: `camera.js` (the zoom calibration below), `meshes.js`
-(one mesh per piece, and the two ways to write an orientation onto it), `loop.js` (an rAF
-loop with its own clock) and `drive.js` (the train's motion along a route).
+Five shared bindings sit on those: `camera.js` (the camera below), `meshes.js`
+(`soupGeometry` — polygons → a non-indexed `BufferGeometry` with face normals and linear
+vertex colours, fan-triangulated, so a concave polygon must be split — plus the shared
+per-type geometry cache and `movingMesh`), `renderer.js`, `loop.js` (an rAF loop with its
+own clock) and `drive.js` (the train's motion along a route).
 
-**`stage.js` sits on all four, and everything that draws goes through it.** It owns the
+**`stage.js` sits on all of them, and everything that draws goes through it.** It owns the
 scene, *one* camera binding, *one* loop, and the cubes — keyed by piece ID, so the same
 mesh can outlive the animation that put it there. That last part is the reason it exists;
 see "the same cubes, rearranged" below. An animation is therefore not a viewer but a
@@ -430,13 +474,13 @@ track part-way through being built, `frame` for the auto-framing, `paint`/`cubes
 frames the *finished* loop, which is what `sceneFromRoute` already returns, so a factory
 there would only have renamed one.
 Seven components sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts
-PolyCSS, owns the stage and the intersection/resize observers), `PieceViewer.svelte` (a piece
+the canvas, owns the stage and the intersection/resize observers), `PieceViewer.svelte` (a piece
 type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `SketchViewer.svelte`
 (a text box the track is typed into), `TrackBuilder.svelte` (buttons the track is clicked
 together with), `TumbleViewer.svelte` and `BuildViewer.svelte`. The stories are plain JS CSF
 files beside them.
 
-`TrackViewer` mounts PolyCSS one way and shows a layout three, chosen by two flags, which is
+`TrackViewer` mounts a stage one way and shows a layout three, chosen by two flags, which is
 why the wrappers stay thin rather than becoming copies of the plumbing. Plain: new pieces
 are a redraw off an emptied stage. `sequence`: they are a rearrangement — the old layout
 collapses and the new one is built out of what falls. `grow`: they are an *extension* —
@@ -469,11 +513,8 @@ stuck track, so the key does nothing, while pasting a *different* shape over it 
 ran into, pulsing between `ALARM` and `ALARM_FLASH`. Owen's call, over blanking the viewer
 or drawing the legal prefix: the overlap is the explanation. Three things about it:
 
-- The pulse is a `setPolygons` on **one** mesh about twice a second, which is nowhere near
-  the "never `setPolygons` per frame" rule (that is ~2,000 matrices a frame across a whole
-  layout). A CSS class on the `.polycss-mesh` container was rejected: polygon colour can
-  come from a baked texture atlas, and `filter`/`opacity` on a `preserve-3d` subtree
-  flattens the 3D.
+- The pulse is `recolour` on **one** cube about twice a second: a swap to that colour's
+  shared geometry, so nothing is rebuilt.
 - It lives inside `growPhase` rather than in a phase of its own, so that exactly one thing
   ever writes to a cube in a frame — the same rule `onPickUp` exists to protect.
 - **Which step is at fault is not always which cube is.** A cross traversed a third time
@@ -529,21 +570,28 @@ post is Owen's call.
 
 ### Handling a viewer: `render/controls.js`
 
-`interactive` means `attachControls`, on `@use-gesture/vanilla`: one-pointer drag orbits,
-pinch or wheel zooms, two fingers or a right-/shift-drag pans. It replaced
-`<poly-orbit-controls>` in every viewer, because PolyCSS's controls follow one pointer
-(no pinch, no two-finger pan) and keep their camera in element state — so the next attribute
-the stage wrote (a resize, `frameTo`, every frame of `panTo`) put the camera back.
+`interactive` means `attachControls(host, stage)`, on `@use-gesture/vanilla`: one-pointer
+drag orbits, pinch or wheel zooms, two fingers or a right-/shift-drag pans. A pan is
+measured in `stage.zoom()`, the zoom actually applied.
 
 **The hand-moved camera is an adjustment, not a camera.** `camera.js` holds a `view`
 (`{ rotX, rotY, zoomBy, offset }`) and composes it over the description in `applyCamera`
 (`adjusted`): rotation absolute, zoom a multiple of the frame's, target offset. So the stage
-can reframe as it likes and the turn, zoom and pan survive. The markup defaults are `CAMERA` in `camera.js`.
+can reframe as it likes and the turn, zoom and pan survive. The defaults are `CAMERA` in `camera.js`.
 
-The pan (`slid`) is along the ground, inverted from the transform PolyCSS emits —
-`scale(zoom/50) rotateX rotate translate3d(-target)`, target x/y swapped and ×50 — and
-`tests/controls.test.js` checks it against `buildPolyCameraSceneTransform`'s actual string,
-at several tilts, turns and zooms, rather than against the reasoning. A sign mutant fails it.
+**A camera description is still PolyCSS's `{ zoom, target, 'rot-x', 'rot-y' }`**, kept
+exactly so every camera in `scenes.js` frames the same shot. `polyView` puts an
+`OrthographicCamera` there: the direction towards the viewer is `(sin rotX·cos rotY,
+sin rotX·sin rotY, cos rotX)` in right/forwards/up (rot-x 0 straight down, 90 side-on,
+rot-y −45 the default), and one world unit is the *applied* zoom in CSS pixels —
+`zoom × min(width, height × 900/700)/900 × 0.88`, the old 900×700 calibration. The
+orientation is written down (screen right `(−sin rotY, cos rotY, 0)`) rather than got from
+`lookAt`, which is degenerate straight down — a tilt the controls can reach. `applied()` is
+the description with the applied zoom.
+
+The pan (`slid`) is along the ground, the camera's projection inverted, and
+`tests/controls.test.js` checks it by projecting through a real three camera at several
+tilts (0 included), turns and zooms, rather than against the reasoning.
 
 use-gesture decides at *module load* whether it is on a touchscreen, and only then does
 pinch listen to touch. So a CDP check of pinch must enable touch emulation before navigating;
@@ -556,34 +604,10 @@ unless the route closes and nothing collides, so an illegal string gets the mode
 objection rendered as text rather than a drawing of nonsense. `Layout/Not a legal track` is
 that path under test by eye.
 
-**Never call `setPolygons` per frame.** It rebuilds a `matrix3d` per polygon, and a track
-piece is ~110 polygons, so eighteen of them is ~2,000 matrices a frame and the frame rate
-visibly collapses — measured, having first shipped the tumbler that way. `meshes.js` is the
-whole of the rule: `movingMesh(...).bake` puts an orientation in the *vertices* and is for
-orientations that will be held; `.place` puts it on the container with one `setTransform` and
-is for orientations that change. The train used to be a deliberate exception — fifty
-polygons, and the thing being looked at, so its lighting was kept right every frame — and
-is not any more: profiled on a CPU-throttled phone emulation, its per-frame bake was ~half
-the main thread (29fps), because `setPolygons` re-runs PolyCSS's whole mesh-optimisation
-pipeline per call rather than costing fifty matrix writes. The train is `place`d now
-(60fps) and carries the lighting of its authored pose round the lap — Owen's call, over
-`{ merge: false }` on the bake (43fps, lighting kept) and a low-rate re-bake hybrid.
-
-**What `place` costs is lighting, and the two animations pay differently.** PolyCSS shades
-each polygon from its normal and a CSS rotation cannot recompute a normal, so a `place`d
-piece carries the lighting of its baked pose. The tumbler cannot know a resting orientation
-in advance, so it lives with that mid-air and re-bakes each body as it falls asleep. The
-builder *can* — the resting pose is the one the solver chose — so it bakes at the final pose
-the moment a piece sets off and the container carries only what is still to be lost. That
-delta reaches nothing exactly as the piece lands, so a built track is lit identically to the
-same shape drawn statically — verified by rendering one shape both ways under a pinned
-camera and comparing the pixels, not merely reasoned about — and nothing is baked twice.
-
-The one place that had to be *made* true: the tumbler's `settle()` re-lights everything still
-in the air when a fall ends, which is a `setPolygons` per cube **in a single frame**. Doing
-that for eighteen cubes the build is about to re-bake one at a time put a two-thousand-matrix
-spike at exactly the handover. So `tumblePhase` takes a `keep` set of IDs something after it
-will re-light anyway, and skips those. Leftovers are not in the set, and are re-lit.
+**A cube is moved by `place(basis, position)` and nothing else** — one matrix write. Under
+PolyCSS there were two ways (`bake` into the vertices, `place` on the container) and a
+dance of re-lighting on landing, on pick-up and on settling; all of it went with the port,
+because three rotates the normals. Only the train's lighting is carried, and on purpose.
 
 **A build animation is a tween, not the tumbler backwards.** A rigid-body simulation is not
 reversible — a pile does not know which of the many tracks that collapse into it was the one
@@ -595,8 +619,7 @@ than simply the last piece.
 
 **Geometry is authored about the piece's cube, always** — `cubePosition` in `vec.js`, the cube
 under the train's cell, since a piece's `cell` is the train's. Every mesh in the project
-agrees on that, and PolyCSS rotates about the geometry origin (`autoCenter` defaults to
-`false` and nothing here sets it). Anything wanting to move a piece about its **centre of
+agrees on that, and a mesh turns about its geometry origin. Anything wanting to move a piece about its **centre of
 mass** converts instead: `originAt(type, basis, com)` and `comAt` in `site/src/lib/shapes.js`.
 Two things need to. The physics, because cannon treats a body's position as its centre of
 mass. And a pick-up, because an arc's cell is a whole cube outside its own material, so
@@ -684,8 +707,8 @@ fill on Owen's call. A highlight on the *piece* the train is in (its cube lighte
 white) came first of all, from misreading him; he kept it for a while, then had it removed,
 along with the white start cube — every piece is drawn in its type's colour. The stage owns
 the mark: the driver reports a cell every frame, and the stage draws it
-only while there is a lattice. It is one mesh, moved with `setTransform` on each new cell and
-never redrawn. It follows the body rather than the booked train cells, and
+only while there is a lattice. It is one mesh, moved by its matrix on each new cell and
+never remounted. It follows the body rather than the booked train cells, and
 the two differ in ways worth knowing:
 
 - An inside curve books **no** train cells, because its train runs through the curve's own
@@ -811,27 +834,26 @@ animated: there is nothing on the floor to pick up.
 
 ### The animations are under test
 
-`tests/stage.test.js` drives the real modules against a fake PolyCSS scene — `scene.add`
-returning handles that record `setPolygons`/`setTransform`/`dispose` — and a hand-cranked
-`requestAnimationFrame` stepped in 16 ms ticks. No DOM, and both `cannon-es` and
-`@layoutit/polycss` are runtime dependencies, so it is in the fast tier.
+`tests/stage.test.js` drives the real modules on a real three `Scene` and fakes only the
+renderer (a `draw` that counts), with a hand-cranked `requestAnimationFrame` stepped in 16 ms
+ticks that holds every frame asked for. Every mesh is watched from `childadded`: its mounting
+transform, each matrix write after it (`setPosition` ends a placement, `makeTranslation` is an
+overlay's move) and its `childremoved`. No DOM or WebGL, and `three` and `cannon-es` are
+runtime dependencies, so it is in the fast tier.
 
 It is the promotion of a throwaway script that had been written and deleted twice. Worth
 keeping because *four* of its assertions failed when first written and three of the four were
-the assertion being wrong, not the code — a mint's polygons go in through `scene.add`, so it
-is never `setPolygons`-ed at all, and coarse time snapshots straddle the handover. The fourth
-was real. It asserts, beyond the geometry: that a picked-up cube is the *same handle* it was
-before it fell and was never disposed; that a cube with no slot receives no writes at all;
-that a pick-up is baked exactly once and a mint never; and that no train is ever abandoned.
-A **marker phase** slotted between the two real ones is what makes the ordering assertions
-exact rather than a guess at a time — and being able to slot one in is the sequencing itself
-under test.
+the assertion being wrong, not the code. It asserts, beyond the geometry: that a picked-up
+cube is the *same mesh* it was before it fell and was never removed; that a cube with no slot
+receives no writes at all; that no train is ever abandoned; and that a still track is drawn
+exactly once. A **marker phase** slotted between the two real ones is what makes the ordering
+assertions exact rather than a guess at a time — and being able to slot one in is the
+sequencing itself under test.
 
-The growing viewer is in there too, on the same fake scene, and its first assertion is the
-one that matters: **a cube already standing receives no writes when the next letter is
-typed** — no `setPolygons`, no `setTransform`, not disposed and remade. "It does not
-twitch" is a claim about writes rather than pixels, which is exactly what the fake scene
-can settle and the eye cannot. Beside it: a backspace slides exactly one cube back out along
+The growing viewer is in there too, and its first assertion is the one that matters: **a
+cube already standing receives no writes when the next letter is typed** — no matrix write,
+no geometry swap, not removed and remade. "It does not twitch" is a claim about writes
+rather than pixels, which is exactly what watching the meshes can settle and the eye cannot. Beside it: a backspace slides exactly one cube back out along
 its heading and then disposes it, leaving the others the same handles with no writes; a piece
 put back mid-departure is a fresh cube; a piece still arriving when the next is added lands; there is no train until the route closes and exactly one
 after; the rejected piece is the *only* mesh ever repainted, about twice a second; and a
@@ -842,7 +864,7 @@ over CDP, which is worth doing for anything in this area:
 
 - **The first render tumbled itself.** `onMount` draws, then the `$effect` fires with the same
   pieces; a truthiness check on "is there something to knock down" saw a shape change. Fixed
-  by `keyOf` above. Unreachable from the fake scene, because it is Svelte's effect graph.
+  by `keyOf` above. Unreachable from `tests/stage.test.js`, because it is Svelte's effect graph.
 - **Every replaced phase abandoned its train**, leaving it hanging in mid-air over the
   wreckage. Phases now have `dispose`, and the stage calls it on a phase it drops. *This* one
   is now under test.
@@ -852,15 +874,10 @@ over CDP, which is worth doing for anything in this area:
   is simpler than the guard it replaced. Invisible to the unit tests because it is the
   component's input handling rather than the renderer.
 
-**`polyRotation` is under test now** — `tests/rotation.test.js`, against the string
-`buildPolyMeshTransform` actually emits rather than against the reasoning in `vec.js`. It was
-verified once by a scratch script that no longer exists, and it is the one piece of the
-renderer where a wrong sign yields a thoroughly plausible wrong animation. The test also pins
-the two facts about PolyCSS the conversion depends on: the emitted order is `rotateY rotateX
-rotateZ`, and the CSS frame is the world frame with right and forwards swapped. Worst error
-over the 24 poses and 20,000 random orientations is 2.2e-14. Two useful things it turned up:
-a zero angle is left out of the emitted string altogether, and a transform with nothing in it
-comes back `undefined` — which is why a landed piece costs nothing.
+**How a basis goes onto a mesh is under test** — `tests/rotation.test.js` places a mesh
+at each of the 24 poses and 2,000 random orientations and sends its local axes through the
+world matrix the renderer would use, rather than trusting the reasoning in `meshes.js`. It is
+the one piece of the renderer where a wrong sign yields a thoroughly plausible wrong animation.
 
 `turnToward` is in there with it, for the same reason: the pick-up's lift needs the shortest
 arc from however a cube fell to the pose it is going to, so it reads a turn's axis back *out*
@@ -883,11 +900,6 @@ now, so the model is inside it), and `optimizeDeps.exclude: ['cpsat-js']` +
 deliberate absence of COOP/COEP headers, which is what keeps the browser on the
 single-worker build whose solution callbacks can actually reach JS mid-search.
 
-**Camera zoom is scaled by viewer size.** Every camera in `scenes.js` — auto-framed and
-hand-tuned alike — is calibrated against the old spike's fixed 900×700 canvas, so
-`camera.js` scales `zoom` by the element's actual fit against that reference. Without it
-every layout is cropped on anything smaller.
-
 **A viewer only animates while it is on screen.** `TrackViewer` and `BuildViewer` both gate
 their loop on an `IntersectionObserver` plus `visibilitychange`, because a blog post is
 several of these on one page and each running a permanent rAF loop is the one thing that
@@ -905,9 +917,16 @@ drive it over the DevTools Protocol on a real clock. `ws` is available transitiv
 throwaway script can connect, `Page.navigate` to
 `iframe.html?id=layout--default&viewMode=story`, change the shape the way the control does
 (`__STORYBOOK_ADDONS_CHANNEL__.emit('updateStoryArgs', …)`), and screenshot at intervals while
-collecting `Runtime.exceptionThrown`. Counting `[class*=polycss-mesh]` elements is how the
-abandoned trains were found — and pinning the camera by hand before two shots is how "lit
-identically" was checked as pixels rather than asserted.
+collecting `Runtime.exceptionThrown`. A viewer's pixels can be sampled by `drawImage`-ing its
+canvas into a probe canvas and reading `getImageData`.
+
+**That is also the renderer's regression baseline.** Before the three.js port, every story in
+`/index.json` was screenshotted at 900×700 under `Emulation.setEmulatedMedia`
+`prefers-reduced-motion: reduce` (every viewer then draws finished, via `trackPhase`), and the
+port was diffed against it: opaque differences were edges only. Anything that changes the
+renderer should be diffed the same way, before and after. Driven trains, falling piles and
+`Known tracks` (a random pick) differ by timing, not rendering, so compare those by eye, and
+compare translucent overlays side by side rather than by difference.
 
 ## Solver: cpsat-js
 
