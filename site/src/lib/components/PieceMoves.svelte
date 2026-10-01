@@ -53,19 +53,23 @@
     margin: 0 0 1.25rem;
   }
 
-  /* The builder's keys: a square per piece in its colour, filled when selected. */
+  /* The builder's keys: a square per piece in its colour, filled when selected.
+     Always one row of their own: the squares shrink before the row wraps. */
   :global(.piece-moves .keys) {
     display: flex;
-    flex-wrap: wrap;
+    flex-basis: 100%;
     justify-content: center;
     gap: 0.5rem;
+    min-width: 0;
   }
 
   :global(.piece-moves .key) {
     display: grid;
     place-items: center;
     width: 44px;
-    height: 44px;
+    min-width: 0;
+    flex-shrink: 1;
+    aspect-ratio: 1;
     padding: 0;
     border: 2px solid var(--piece);
     border-radius: 0.5rem;
