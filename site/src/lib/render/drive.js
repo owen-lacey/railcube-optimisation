@@ -30,6 +30,8 @@ export function createDriver(stage) {
   let path = [], gaps = [], lap = 0;
   let entries = [];          // how far along the lap each piece begins, in route order
   let cells = [];            // the cell the train is in as it enters each piece
+  let poses = [];            // and its pose then
+  let per = 0;               // rail samples per piece
   let k = 0, travelled = 0;  // travelled = distance to the start of sample k
 
   /** Hand the train a new route. Safe to call with the same pieces repeatedly. */
@@ -54,9 +56,10 @@ export function createDriver(stage) {
     lap = gaps.reduce((a, b) => a + b, 0);
     // `trackPath` lays the same number of samples down for every piece, revisits
     // included, so piece i begins at sample i × per and a crossed cross begins twice.
-    const per = path.length / pieces.length;
+    per = path.length / pieces.length;
     entries = pieces.map((_, i) => gaps.slice(0, i * per).reduce((a, b) => a + b, 0));
     cells = pieces.map(piece => piece.cell);
+    poses = pieces.map(piece => piece.pose);
     k = 0; travelled = 0; // the cursor indexed the old path; it means nothing now
   }
 
@@ -70,6 +73,9 @@ export function createDriver(stage) {
     // The lattice cell is the one the body is in, not the wheels: the body is what
     // is seen, and it rides clear of the cube, in the cell the model books as train.
     stage.markTrainCell(toCell(place(d)));
+    // The pose is the last piece entered's: `place` leaves the cursor on the
+    // current sample, and every piece has `per` of them.
+    stage.markTrainPose(poses[Math.floor(k / per)]);
     return d / lap;
   }
 
@@ -85,6 +91,7 @@ export function createDriver(stage) {
     if (!lap) return;
     place(entries[i % entries.length]);
     stage.markTrainCell(cells[i % cells.length]);
+    stage.markTrainPose(poses[i % poses.length]);
   }
 
   /**
@@ -113,6 +120,7 @@ export function createDriver(stage) {
 
   function dispose() {
     stage.markTrainCell(null);
+    stage.markTrainPose(null);
     mesh?.dispose();
     stage.invalidate();
     mesh = null;

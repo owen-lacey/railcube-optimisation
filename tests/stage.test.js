@@ -583,6 +583,46 @@ test('a held train marks the cell it is in as it enters its piece', () => {
   }
 });
 
+test('a held train reports the pose it enters its piece in', () => {
+  const clock = fakeClock();
+  const reported = [];
+  const { stage } = staged({ onTrainPose: pose => reported.push(pose) });
+  for (const shape of [SET, 'XSLLLSXSRRRS']) {
+    const pieces = piecesOf(shape);
+    let held = 0;
+    stage.run([trackPhase(stage, pieces, { trainAt: () => held })]);
+    stage.start();
+    for (const [i, { pose }] of pieces.entries()) {
+      held = i;
+      clock.run(0.05);
+      assert.equal(reported.at(-1), pose, `${shape} piece ${i}`);
+    }
+  }
+});
+
+test('a driven train reports the pose of each piece it enters, in route order, once each', () => {
+  const clock = fakeClock();
+  const reported = [];
+  const { stage } = staged({ onTrainPose: pose => reported.push(pose) });
+  const pieces = piecesOf(SET);
+
+  stage.run([trackPhase(stage, pieces, { drive: true })]);
+  stage.start();
+  clock.run(20);
+
+  const poses = reported.filter(Boolean);
+  assert.ok(poses.length > pieces.length, 'not even a lap was reported');
+  assert.equal(reported.includes(null), false, 'the train was reported gone while running');
+  // Route order, laps on end, with a pose a piece shares with the one before it said once.
+  const laps = Math.ceil(poses.length / pieces.length) + 1;
+  const route = Array.from({ length: laps * pieces.length }, (_, i) => pieces[i % pieces.length].pose)
+    .filter((pose, i, all) => i === 0 || pose !== all[i - 1]);
+  assert.deepEqual(poses, route.slice(0, poses.length));
+
+  stage.run([tumblePhase(stage, pieces, { drop: 1, limit: 1 })]);
+  assert.equal(reported.at(-1), null, 'the train went and nobody was told');
+});
+
 test('a handed-over train stands on each piece for one step, then jumps to the next', () => {
   const clock = fakeClock();
   const { handles, stage } = staged();

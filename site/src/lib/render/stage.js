@@ -127,7 +127,7 @@ function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {})
  * `theme` is the overlay paint (see `readTheme` in renderer.js); `renderer` is what
  * draws — the page's shared one, or a stand-in for the tests.
  */
-export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onCamera } = {}) {
+export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPose, onCamera } = {}) {
   const scene = new Scene();
   scene.add(new AmbientLight(0xffffff, LIGHT.ambient));
   const sun = new DirectionalLight(0xffffff, LIGHT.directional);
@@ -519,6 +519,18 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     onTrainCell?.(cell);
   }
 
+  let trainPose = null;   // the pose last reported, or null when there is no train
+
+  /**
+   * The pose of the piece the train last entered, or `null` when it has gone. Only
+   * reported: a pose exists between pieces, so there is nothing to draw mid-piece.
+   */
+  function markTrainPose(pose) {
+    if (pose === trainPose) return;
+    trainPose = pose;
+    onTrainPose?.(pose);
+  }
+
   // ---- Ghost trains -------------------------------------------------------
   //
   // Trains that stand still, to show where a train *would* be: before a piece and
@@ -601,6 +613,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     setGhosts,
     setFill,
     markTrainCell,
+    markTrainPose,
     invalidate,
   };
 }

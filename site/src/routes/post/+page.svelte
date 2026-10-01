@@ -70,7 +70,7 @@
 <LayoutViewer
 	shape="SSSSLLIOOILL"
 	grid={true}
-	trainCaption={true}
+	trainCaption="position"
 	origin={true}
 	scrub={true}
 	interactive={true}

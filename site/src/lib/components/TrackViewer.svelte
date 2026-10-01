@@ -65,6 +65,9 @@
     // Told the cell the train is in, `[x, y, z]`, each time it enters a new one, and
     // `null` when the train goes. Read once, at mount.
     onTrainCell = undefined,
+    // Told the pose of the piece the train last entered, `'DF'` say, each time it
+    // changes, and `null` when the train goes. Read once, at mount.
+    onTrainPose = undefined,
     // Static mode only: who holds the train, and who is told where it has driven
     // to — see `trackPhase`. Read once, at mount.
     trainAt = undefined,
@@ -232,6 +235,7 @@
         stage = createStage(canvas, {
           theme: readTheme(host),
           onTrainCell: cell => onTrainCell?.(cell),
+          onTrainPose: pose => onTrainPose?.(pose),
           onCamera: () => {
             if (origin) scheduleAxisLabels();
             if (blueprint) placeSheet();

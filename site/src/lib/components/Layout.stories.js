@@ -26,7 +26,7 @@ export default {
     aspect: { control: 'text' },
     grid: { control: 'boolean' },
     blueprint: { control: 'boolean' },
-    trainCaption: { control: 'boolean' },
+    trainCaption: { control: 'inline-radio', options: ['none', 'position', 'position-pose'] },
     origin: { control: 'boolean' },
     scrub: { control: 'boolean' },
     change: { control: 'inline-radio', options: ['none', 'tumble', 'build'] },
@@ -115,7 +115,7 @@ export const Blueprint = {
 export const Scrubbed = {
   name: 'Train on a slider',
   args: {
-    shape: 'SLLIOOILLSSS', grid: true, trainCaption: true, origin: true, scrub: true,
+    shape: 'SLLIOOILLSSS', grid: true, trainCaption: 'position-pose', origin: true, scrub: true,
     interactive: true,
   },
   parameters: {

@@ -31,8 +31,9 @@
     // canvas. It does not change the framing. On for every layout; a single piece
     // is drawn by `PieceViewer`, which leaves it off.
     blueprint = true,
-    // Caption the cell the train is in, `(x, y, z)` from the start cube.
-    trainCaption = false,
+    // Caption the train: 'none'; 'position', the cell it is in, `(x, y, z)` from the
+    // start cube; or 'position-pose', that and the pose of the piece it last entered.
+    trainCaption = 'none',
     // Draw the origin's axis arrows, so the caption's x, y, z have a direction each.
     origin = false,
     // A slider for which piece the train is on, split into one segment per piece
@@ -54,6 +55,8 @@
   // The cell the train is in, the model's `[right, up, forwards]` from the start
   // cube (docs/coordinates.md), or null while there is no train.
   let trainCell = $state(null);
+  // The pose of the piece the train last entered, `'DF'` say, or null.
+  let trainPose = $state(null);
 
   // The model's cell is [right, up, forwards]; the post's axes are x left, y
   // forwards, z up (docs/coordinates.md): the last two swap and x is negated.
@@ -103,13 +106,13 @@
     return `linear-gradient(to right, ${stops.join(', ')})`;
   });
 
-  const showCaption = $derived(result.state === 'ok' && trainCaption && drive && result.closed);
+  const showCaption = $derived(result.state === 'ok' && trainCaption !== 'none' && drive && result.closed);
 </script>
 
 {#snippet controls()}
   {#if showCaption}
     <p class="caption">
-      Train entering cell {trainCell ? `(${readerFrame(trainCell).join(', ')})` : '—'}
+      Train entering cell {trainCell ? `(${readerFrame(trainCell).join(', ')})` : '—'}{#if trainCaption === 'position-pose'}, pose {trainPose ?? '—'}{/if}
     </p>
   {/if}
   {#if showScrub}
@@ -152,6 +155,7 @@
       label="The layout {letters}"
       origin={origin ? result.box : null}
       onTrainCell={cell => (trainCell = cell)}
+      onTrainPose={pose => (trainPose = pose)}
       trainAt={scrub ? () => (held ? at : null) : undefined}
       onTrainAt={scrub ? i => { if (!held) at = i; } : undefined}
     />
