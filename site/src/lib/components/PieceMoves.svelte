@@ -82,11 +82,6 @@
     color: white;
   }
 
-  .caption {
-    margin: 0;
-    font-weight: 600;
-  }
-
   .legend {
     margin: 0;
     font-size: 0.85rem;

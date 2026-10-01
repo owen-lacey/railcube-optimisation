@@ -252,19 +252,24 @@
         // phone; a still viewer costs nothing. A sequencing or growing viewer needs
         // frames with no train on it, since the assembly is the animation.
         if ((drive || sequence || build || grow) && !reduced) {
-          const io = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting && !document.hidden) stage?.start();
+          // Runs while both hold. Each signal re-checks the pair rather than only
+          // stopping, because the observer does not fire again when the page comes
+          // back: switching desktops leaves the viewer exactly as in view as it was.
+          let onscreen = false;
+          const gate = () => {
+            if (onscreen && !document.hidden) stage?.start();
             else stage?.stop();
+          };
+          const io = new IntersectionObserver(([entry]) => {
+            onscreen = entry.isIntersecting;
+            gate();
           }, { rootMargin: '100px' });
           io.observe(host);
 
-          const onVisibility = () => {
-            if (document.hidden) stage?.stop();
-          };
-          document.addEventListener('visibilitychange', onVisibility);
+          document.addEventListener('visibilitychange', gate);
           stopObserving = () => {
             io.disconnect();
-            document.removeEventListener('visibilitychange', onVisibility);
+            document.removeEventListener('visibilitychange', gate);
           };
         }
       } catch (error) {
@@ -419,6 +424,7 @@
 <style>
   .viewer {
     --grid-opacity: 0.22;
+    --train-cell-opacity: 0.4;
     position: relative;
     width: 100%;
     overflow: hidden;

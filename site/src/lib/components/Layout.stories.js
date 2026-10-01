@@ -121,8 +121,10 @@ export const Scrubbed = {
   parameters: {
     docs: {
       description: {
-        story: 'The slider follows the train round until it is dragged, and from then on '
-          + 'holds it: left is the start, right is a whole lap on, which is the same place.',
+        story: 'The slider is one segment per piece, in route order and in the piece\'s '
+          + 'colour, faded past the thumb. Played, the train steps piece to piece and the '
+          + 'slider follows; dragged, it snaps to a piece and holds the train where it '
+          + 'enters it. Right is a whole lap on, which is the same place as left.',
       },
     },
   },

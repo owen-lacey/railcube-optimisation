@@ -36,6 +36,7 @@ import { identify } from '../../../../src/layouts.js';
 // build, so a story can stretch the gap and look at one arrival on its own.
 export const PACE = 0.1;        // seconds per piece
 export const FLIGHT = 0.34;     // seconds the axial slide takes
+export const STEP = 0.8;        // seconds a handed-over train stands on each piece
 const HOLD = 0.6;      // seconds the closed loop is left alone before the train starts
 
 // A pick-up's first leg: off the floor and up to the standoff. Longer than the
@@ -248,9 +249,13 @@ function departuresFor(leaving, { beat, flight }) {
  * off for the catalogue views, which are loose pieces rather than routes and so
  * have no rail for a train to find.
  *
- * `trainAt` hands the train to someone else: asked every frame, a number is how
- * far round the lap to hold it (0 to 1), and null lets it drive on from there. `onTrainAt` is
- * told how far round a driving train has got, every frame, so a slider can follow.
+ * `trainAt` hands the train to someone else, a piece at a time: asked every frame,
+ * a number is the piece in route order to hold it at the entry of (one past the
+ * last is a whole lap on, the first again), and null lets it drive on from there.
+ * Given one, the drive is stepped too — the train stands on each piece for STEP,
+ * whatever its length, then jumps to the next one's entry — and `onTrainAt`
+ * is told the piece it is on, every frame, so a slider can follow. A train standing
+ * on a piece is written once, when it gets there, so it costs no draws.
  */
 export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } = {}) {
   for (const slot of slotsFor(stage, pieces)) finish(stage, slot);
@@ -258,26 +263,37 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } =
 
   const driver = createDriver(stage);
   driver.setRoute(pieces);
-  // A hold let go carries on from where it held the train, not from wherever the
-  // clock says it would have got to: `lag` is how far the drive runs behind the
-  // clock for that.
+  if (!trainAt) return { advance: (_, elapsed) => { driver.at(elapsed); }, dispose: driver.dispose };
+
+  // A hold let go carries on from the piece it held, not from wherever the clock
+  // says it would have got to: the drive counts steps from `since`, starting on
+  // piece `from`. Counted rather than subtracted, so a release can never land a
+  // rounding error short and step back one.
   let heldAt = null;
-  let lag = 0;
+  let from = 0;
+  let since = 0;
+  let shown = null;
+  const show = piece => {
+    const i = piece % pieces.length;
+    if (i !== shown) driver.toPiece(i);
+    shown = i;
+  };
   return {
     advance: (_, elapsed) => {
-      const held = trainAt?.();
+      const held = trainAt();
       if (typeof held === 'number') {
         heldAt = held;
-        return driver.atFraction(held);
+        show(held);
+        return;
       }
       if (heldAt !== null) {
-        lag = elapsed - driver.secondsTo(heldAt);
+        from = heldAt;
+        since = elapsed;
         heldAt = null;
       }
-      // Driven first and reported after: `onTrainAt?.(driver.at(…))` would skip
-      // the drive altogether whenever nobody is listening.
-      const fraction = driver.at(elapsed - lag);
-      onTrainAt?.(fraction);
+      const piece = (from + Math.floor((elapsed - since) / STEP)) % pieces.length;
+      show(piece);
+      onTrainAt?.(piece);
     },
     // The train is the one thing here the stage does not own, so it is the one
     // thing this has to take away with it.

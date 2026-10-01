@@ -35,18 +35,20 @@
     trainCaption = false,
     // Draw the origin's axis arrows, so the caption's x, y, z have a direction each.
     origin = false,
-    // A slider for where the train is round the lap, left the start and right a
-    // whole lap on, and a play/pause beside it. It follows the train until it is
-    // dragged or paused, and then holds it until played.
+    // A slider for which piece the train is on, split into one segment per piece
+    // in route order and coloured as that piece, with a play/pause beside it. It
+    // snaps to a piece's start, which puts the train where it enters that piece;
+    // the right end is a whole lap on. Played, the train steps piece to piece
+    // rather than gliding, and the slider follows it until dragged or paused.
     scrub = false,
     // Hold the train where it is, and anything else moving.
     paused = false,
-    // Extra controls for the card's footer, after the scrubber and caption.
+    // Extra controls for the card's footer, after the caption and scrubber.
     footer = undefined,
   } = $props();
 
-  // How far round the lap the train is, 0 to 1, and whether the slider has it.
-  let lap = $state(0);
+  // Which piece the train is on, in route order, and whether the slider has it.
+  let at = $state(0);
   let held = $state(false);
 
   // The cell the train is in, the model's `[right, up, forwards]` from the start
@@ -83,27 +85,48 @@
   });
 
   const showScrub = $derived(result.state === 'ok' && scrub && drive && result.closed && change === 'none');
+  // The slider's track: a segment per piece, each its piece's colour, those from
+  // the thumb on faded. A boundary sits where the thumb's centre does at that
+  // piece, and the thumb's centre stops half a thumb short of each end, so the
+  // bar does too. Every segment gives up half a gap at each end, the end ones
+  // included, so all of them are the same length.
+  const segments = $derived.by(() => {
+    if (result.state !== 'ok') return null;
+    const n = result.pieces.length;
+    const edge = i => `calc(var(--thumb) / 2 + (100% - var(--thumb)) * ${i / n})`;
+    const stops = result.pieces.map(({ color }, i) => {
+      const paint = i < at ? color : `color-mix(in srgb, ${color} var(--fade), transparent)`;
+      const from = `calc(${edge(i)} + var(--gap) / 2)`;
+      const to = `calc(${edge(i + 1)} - var(--gap) / 2)`;
+      return `transparent ${from}, ${paint} ${from} ${to}, transparent ${to}`;
+    });
+    return `linear-gradient(to right, ${stops.join(', ')})`;
+  });
+
   const showCaption = $derived(result.state === 'ok' && trainCaption && drive && result.closed);
 </script>
 
 {#snippet controls()}
+  {#if showCaption}
+    <p class="caption">
+      Train entering cell {trainCell ? `(${readerFrame(trainCell).join(', ')})` : '—'}
+    </p>
+  {/if}
   {#if showScrub}
+    <div class="scrubber">
       <PlayPause bind:playing={() => !held, playing => (held = !playing)} label="the train" />
       <input
         class="scrub"
         type="range"
         min="0"
-        max="1"
-        step="any"
-        bind:value={lap}
+        max={result.pieces.length}
+        step="1"
+        bind:value={at}
+        style:--segments={segments}
         oninput={() => (held = true)}
         aria-label="Where the train is round the lap"
       />
-  {/if}
-  {#if showCaption}
-    <p class="caption">
-      Train in cell {trainCell ? `(${readerFrame(trainCell).join(', ')})` : '—'}
-    </p>
+    </div>
   {/if}
   {@render footer?.()}
 {/snippet}
@@ -129,8 +152,8 @@
       label="The layout {letters}"
       origin={origin ? result.box : null}
       onTrainCell={cell => (trainCell = cell)}
-      trainAt={scrub ? () => (held ? lap : null) : undefined}
-      onTrainAt={scrub ? f => { if (!held) lap = f; } : undefined}
+      trainAt={scrub ? () => (held ? at : null) : undefined}
+      onTrainAt={scrub ? i => { if (!held) at = i; } : undefined}
     />
   {:else}
     <div class="empty" style:aspect-ratio={aspect}>
@@ -156,17 +179,68 @@
     margin: 0;
   }
 
-  .caption {
-    margin: 0;
-    text-align: center;
-    font-family: ui-monospace, monospace;
-    font-variant-numeric: tabular-nums;
-    color: var(--grid-color);
+  /* The play/pause and the slider are one control, so they stay on one line: the
+     slider gives up width before the pair wraps. */
+  .scrubber {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
   }
 
-  /* The play/pause's outline colour, so the two read as one control. */
+  .scrubber > :global(.play-pause) {
+    flex: none;
+  }
+
+  /* The thumb takes the play/pause's outline colour, so the two read as one control.
+     A fixed width, and narrower only where the footer is. */
   .scrub {
-    flex: 1;
-    accent-color: currentColor;
+    --thumb: 1.25rem;
+    --track: 0.75rem;
+    --gap: 2px;
+    --fade: 35%;
+    width: 20rem;
+    min-width: 0;
+    height: var(--thumb);
+    margin: 0;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .scrub::-webkit-slider-runnable-track {
+    height: var(--track);
+    background: var(--segments);
+  }
+
+  .scrub::-moz-range-track {
+    height: var(--track);
+    background: var(--segments);
+  }
+
+  .scrub::-webkit-slider-thumb {
+    width: var(--thumb);
+    height: var(--thumb);
+    margin-top: calc((var(--track) - var(--thumb)) / 2);
+    border: 2px solid var(--card-footer);
+    border-radius: 50%;
+    background: currentColor;
+    appearance: none;
+  }
+
+  .scrub::-moz-range-thumb {
+    width: var(--thumb);
+    height: var(--thumb);
+    box-sizing: border-box;
+    border: 2px solid var(--card-footer);
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .scrub:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+    border-radius: calc(var(--thumb) / 2);
   }
 </style>

@@ -135,6 +135,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     // Transparent only so it is drawn in the overlays' pass, in their order.
     gridDepth: new MeshBasicMaterial({ transparent: true, colorWrite: false }),
     fill: overlay(theme.grid, theme.gridOpacity),
+    // The cell the train is in: the lattice's blue, stronger, so it can be made out.
+    trainCell: overlay(theme.grid, theme.trainCellOpacity),
     // The origin's arrows are the lattice's blue at full strength, so they read as
     // solid marks and not as more lattice.
     origin: new MeshBasicMaterial({ color: theme.grid }),
@@ -493,7 +495,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
       trainMark.matrix.makeTranslation(...toWorld(trainCell));
       trainMark.matrixWorldNeedsUpdate = true;
     } else {
-      trainMark = fixedMesh(cellGeometry, paint.fill, {
+      trainMark = fixedMesh(cellGeometry, paint.trainCell, {
         name: OVERLAY.trainCell, order: ORDER.fill, at: toWorld(trainCell),
       });
       scene.add(trainMark);

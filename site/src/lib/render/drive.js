@@ -28,6 +28,8 @@ const UNTURNED = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 export function createDriver(stage) {
   let mesh = null;
   let path = [], gaps = [], lap = 0;
+  let entries = [];          // how far along the lap each piece begins, in route order
+  let cells = [];            // the cell the train is in as it enters each piece
   let k = 0, travelled = 0;  // travelled = distance to the start of sample k
 
   /** Hand the train a new route. Safe to call with the same pieces repeatedly. */
@@ -50,6 +52,11 @@ export function createDriver(stage) {
     const ref = p => p.pos.map((v, i) => v + p.up[i] * BODY_REF);
     gaps = path.map((p, i) => len(sub(ref(path[(i + 1) % path.length]), ref(p))));
     lap = gaps.reduce((a, b) => a + b, 0);
+    // `trackPath` lays the same number of samples down for every piece, revisits
+    // included, so piece i begins at sample i × per and a crossed cross begins twice.
+    const per = path.length / pieces.length;
+    entries = pieces.map((_, i) => gaps.slice(0, i * per).reduce((a, b) => a + b, 0));
+    cells = pieces.map(piece => piece.cell);
     k = 0; travelled = 0; // the cursor indexed the old path; it means nothing now
   }
 
@@ -60,24 +67,29 @@ export function createDriver(stage) {
   function at(seconds) {
     if (!lap) return null;   // no track yet, so nowhere to put a train
     const d = (seconds * SPEED) % lap;
-    place(d);
+    // The lattice cell is the one the body is in, not the wheels: the body is what
+    // is seen, and it rides clear of the cube, in the cell the model books as train.
+    stage.markTrainCell(toCell(place(d)));
     return d / lap;
   }
 
-  /** How many seconds of driving it takes to get `fraction` of the way round. */
-  const secondsTo = fraction => (fraction * lap) / SPEED;
-
   /**
-   * Put the train `fraction` of the way round the lap. 1 is a whole lap, which on
-   * a closed loop is exactly where 0 is.
+   * Put the train where it enters piece `i`. One past the last piece is a whole
+   * lap on, which on a closed loop is exactly where the first one is.
+   *
+   * The cell marked is the piece's own, the model's head as the piece begins,
+   * rather than read off the body: at a piece's entry the body is exactly on the
+   * face between two cells, and rounding it picks whichever floating point says.
    */
-  function atFraction(fraction) {
+  function toPiece(i) {
     if (!lap) return;
-    place((fraction * lap) % lap);
+    place(entries[i % entries.length]);
+    stage.markTrainCell(cells[i % cells.length]);
   }
 
   /**
-   * Put the train `d` along the lap, measured on the body's path.
+   * Put the train `d` along the lap, measured on the body's path, and say where
+   * its body is.
    *
    * Between two rail samples both the heading and the up direction are blended
    * and squared back up, so the train leans into the corners instead of snapping
@@ -96,9 +108,7 @@ export function createDriver(stage) {
     const pos = blend(a.pos, b.pos);
     mesh.place([cross(fwd, up), fwd, up], pos);
     stage.invalidate();
-    // The lattice cell is the one the body is in, not the wheels: the body is what
-    // is seen, and it rides clear of the cube, in the cell the model books as train.
-    stage.markTrainCell(toCell(add(pos, up.map(v => v * BODY_REF))));
+    return add(pos, up.map(v => v * BODY_REF));
   }
 
   function dispose() {
@@ -109,5 +119,5 @@ export function createDriver(stage) {
     lap = 0;
   }
 
-  return { setRoute, at, atFraction, secondsTo, dispose, driving: () => lap > 0 };
+  return { setRoute, at, toPiece, dispose, driving: () => lap > 0 };
 }

@@ -70,6 +70,7 @@ export function readTheme(el) {
   return {
     grid: value('--grid-color'),
     gridOpacity: Number(value('--grid-opacity')),
+    trainCellOpacity: Number(value('--train-cell-opacity')),
     ghostBefore: value('--ghost-before'),
     ghostAfter: value('--ghost-after'),
     ghostOpacity: Number(value('--ghost-opacity')),

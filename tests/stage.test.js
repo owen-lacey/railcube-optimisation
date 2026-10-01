@@ -23,18 +23,19 @@ import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
 import { createStage, together, OVERLAY } from '../site/src/lib/render/stage.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
-import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
+import { buildPhase, growPhase, trackPhase, PACE, FLIGHT, STEP } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
 import { ALARM_PERIOD, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
 import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
+import { trackPath } from '../site/src/lib/render/rail.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { orbit, slid, zoomed } from '../site/src/lib/render/controls.js';
 
 // ---- The watched stage -----------------------------------------------------
 
-const THEME = { grid: '#4f75b8', gridOpacity: 0.22, ghostBefore: '#b4bfcd', ghostAfter: '#6b7a90', ghostOpacity: 0.6 };
+const THEME = { grid: '#4f75b8', gridOpacity: 0.22, trainCellOpacity: 0.4, ghostBefore: '#b4bfcd', ghostAfter: '#6b7a90', ghostOpacity: 0.6 };
 
 /** What a matrix says: where the mesh is, and the images of its local axes. */
 const transformOf = ({ elements: e }) => ({
@@ -525,101 +526,141 @@ test('a replaced phase takes its train off the track with it', () => {
   assert.equal(handles.length, 20, 'two trains were ever made, and one was thrown away');
 });
 
-test('a held train stays put, and a whole lap on is where it started', () => {
+// Where the train's mesh stands, so two placements can be compared.
+const standing = handle => handle.transforms.at(-1).position;
+const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+
+test('a held train stands where it enters its piece, and one past the last is the first', () => {
   const clock = fakeClock();
   const { handles, stage } = staged();
-  let held = 0.3;
+  const pieces = piecesOf(SET);
+  const path = trackPath(pieces);
+  const entries = path.filter((_, k) => k % (path.length / pieces.length) === 0);
+  let held = 2;
   const told = [];
 
-  stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => held, onTrainAt: f => told.push(f) })]);
+  stage.run([trackPhase(stage, pieces, { trainAt: () => held, onTrainAt: i => told.push(i) })]);
   stage.start();
   const train = handles.at(-1);
-  const pose = () => JSON.stringify(train.transforms.at(-1));
 
   clock.run(0.05);
-  const first = pose();
+  assert.ok(near(standing(train), entries[2].pos), 'at the entry of piece 2');
+  const writes = train.transforms.length;
   clock.run(1);
-  assert.equal(pose(), first, 'the train did not move while held');
+  assert.equal(train.transforms.length, writes, 'a held train is not written again');
   assert.deepEqual(told, [], 'a held train is not reported as driving');
 
+  for (const [i, { pos }] of entries.entries()) {
+    held = i;
+    clock.run(0.05);
+    assert.ok(near(standing(train), pos), `at the entry of piece ${i}`);
+  }
   held = 0;
   clock.run(0.05);
-  const start = pose();
-  held = 0.6;
+  const before = train.transforms.length;
+  held = pieces.length;
   clock.run(0.05);
-  assert.notEqual(pose(), start, 'moving the hold moves the train');
-  held = 1;
-  clock.run(0.05);
-  assert.equal(pose(), start, 'a whole lap on is the start');
+  assert.equal(train.transforms.length, before, 'a whole lap on is the start, so nothing moves');
 });
 
-test('a hold let go drives on from where it held the train', () => {
+test('a held train marks the cell it is in as it enters its piece', () => {
+  // At a piece's entry the body is exactly on the face between two cells, so
+  // reading the cell off it rounds either way. The model says which it is: the
+  // piece's own cell, the head as the piece begins.
+  const clock = fakeClock();
+  const marked = [];
+  const { stage } = staged({ onTrainCell: cell => marked.push(cell) });
+  for (const shape of [SET, 'XSLLLSXSRRRS']) {
+    const pieces = piecesOf(shape);
+    let held = 0;
+    stage.run([trackPhase(stage, pieces, { trainAt: () => held })]);
+    stage.start();
+    for (const [i, { cell }] of pieces.entries()) {
+      held = i;
+      clock.run(0.05);
+      assert.deepEqual(marked.at(-1), cell, `${shape} piece ${i}`);
+    }
+  }
+});
+
+test('a handed-over train stands on each piece for one step, then jumps to the next', () => {
+  const clock = fakeClock();
+  const { handles, stage } = staged();
+  const pieces = piecesOf(SET);
+  const told = [];
+
+  stage.run([trackPhase(stage, pieces, { trainAt: () => null, onTrainAt: i => told.push(i) })]);
+  stage.start();
+  const train = handles.at(-1);
+  clock.run(STEP * pieces.length * 1.5);
+
+  // Each frame's report, grouped into runs of the same piece.
+  const runs = [];
+  for (const [k, piece] of told.entries()) {
+    if (k === 0 || piece !== told[k - 1]) runs.push({ piece, frames: 0 });
+    runs.at(-1).frames += 1;
+  }
+  const order = pieces.map((_, i) => i);
+  assert.deepEqual(runs.slice(0, pieces.length + 1).map(r => r.piece), [...order, 0], 'piece by piece, and round');
+  assert.equal(train.transforms.length, 1 + runs.length, 'mounted, then one write per piece and none between');
+  // Straights, curves and inside curves all take the same time: a fixed step, not
+  // the time it would take to drive them. The last run may be cut short by the clock.
+  const frames = runs.slice(0, -1).map(r => r.frames);
+  const step = STEP / 0.016;
+  assert.ok(frames.every(f => Math.abs(f - step) <= 1), `every piece is one step (${frames})`);
+});
+
+test('a hold let go drives on from the piece it held', () => {
   const clock = fakeClock();
   const { stage } = staged();
   let held = null;
   const told = [];
 
-  stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => held, onTrainAt: f => told.push(f) })]);
+  stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => held, onTrainAt: i => told.push(i) })]);
   stage.start();
   clock.run(1);
-  held = 0.8;
+  held = 2;
   clock.run(1);
   held = null;
-  clock.run(0.05);
+  const from = told.length;
+  clock.run(3);
 
-  const after = told.at(-1);
-  assert.ok(after > 0.8 && after < 0.85, `it carried on from 0.8, not the clock (${after})`);
-});
-
-test('a driving train reports how far round the lap it is', () => {
-  const clock = fakeClock();
-  const { stage } = staged();
-  const told = [];
-
-  stage.run([trackPhase(stage, piecesOf(RING), { trainAt: () => null, onTrainAt: f => told.push(f) })]);
-  stage.start();
-  clock.run(20);
-
-  assert.ok(told.length > 0);
-  assert.ok(told.every(f => f >= 0 && f < 1), 'every fraction is in [0, 1)');
-  const wraps = told.slice(1).filter((f, i) => f < told[i]);
-  assert.ok(wraps.length >= 1, 'twenty seconds is more than a lap');
-  assert.ok(wraps.every(f => f < 0.1), 'it only ever goes back by lapping');
+  const after = told.slice(from).filter((i, k, all) => k === 0 || i !== all[k - 1]);
+  assert.deepEqual(after.slice(0, 3), [2, 3, 0], 'it carried on from piece 2, not the clock');
 });
 
 test('a paused stage draws one still frame, stops, and carries on from there', () => {
   const clock = fakeClock();
   const { handles, stage } = staged();
-  const told = [];
 
-  stage.run([trackPhase(stage, piecesOf(RING), { onTrainAt: f => told.push(f) })]);
+  stage.run([trackPhase(stage, piecesOf(RING))]);
   stage.start();
   clock.run(1);
-  const before = told.at(-1);
   const train = handles.at(-1);
+  const before = standing(train);
   const writes = train.transforms.length;
 
   stage.setPaused(true);
   stage.start();
   clock.run(1);
   assert.equal(clock.running(), false, 'a paused stage stops asking for frames');
-  assert.equal(told.at(-1), before, 'the still frame is where the train had got to');
   assert.equal(train.transforms.length, writes + 1, 'one still frame, and only one');
+  assert.ok(near(standing(train), before), 'the still frame is where the train had got to');
 
   stage.setPaused(false);
   stage.start();
   clock.run(0.05);
-  const after = told.at(-1);
-  assert.ok(after > before && after - before < 0.05, 'it carries on from where it stopped');
+  const moved = Math.hypot(...standing(train).map((v, i) => v - before[i]));
+  assert.ok(moved > 0 && moved < CUBE, `it carries on from where it stopped (${moved})`);
 });
 
 test('a track shown while paused gets its train, standing still', () => {
   const clock = fakeClock();
   const { handles, stage } = staged();
-  const told = [];
+  const pieces = piecesOf(RING);
 
   stage.setPaused(true);
-  stage.run([trackPhase(stage, piecesOf(RING), { onTrainAt: f => told.push(f) })]);
+  stage.run([trackPhase(stage, pieces)]);
   stage.start();
   clock.run(1);
 
@@ -627,7 +668,7 @@ test('a track shown while paused gets its train, standing still', () => {
   // One transform to mount it, unturned at the origin, and one to put it on the track.
   assert.equal(train.transforms.length, 2, 'the train is put on the track once');
   assert.equal(clock.running(), false);
-  assert.deepEqual(told, [0], 'at the start of the lap');
+  assert.ok(near(standing(train), trackPath(pieces)[0].pos), 'at the start of the lap');
 });
 
 test('a picked-up cube also finishes down the connector axis', () => {

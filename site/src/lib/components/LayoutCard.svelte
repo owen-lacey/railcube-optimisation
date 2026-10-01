@@ -31,4 +31,13 @@
 		border-top: 2px solid var(--card-border);
 		background: var(--card-footer);
 	}
+
+	/* A footer's caption: the line saying what the card shows, on a line of its own
+	   above the controls. */
+	.footer :global(.caption) {
+		flex-basis: 100%;
+		margin: 0;
+		text-align: center;
+		font-weight: 600;
+	}
 </style>
