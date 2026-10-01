@@ -6,6 +6,10 @@
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
   import { gridLines } from '../render/grid.js';
   import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
+  import { toWorld } from '../render/vec.js';
+
+  // How far a callout stands off the outline of what is drawn, in CSS pixels.
+  const CALLOUT_GAP = 12;
 
   let {
     pieces = [],
@@ -61,6 +65,10 @@
     fill = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
+    // Callouts on cells, `{ key, lines, cell }` each: `lines` an array of strings, set
+    // outside what is drawn with a leader line to the middle of `cell`, and kept
+    // there as the camera moves. See `placeLabels`.
+    notes = [],
   } = $props();
 
   // The settings a transition leaves out.
@@ -263,7 +271,7 @@
           onTrainPose: pose => train?.onPose?.(pose),
           onCamera: () => {
             touched = stage?.touched() ?? false;
-            if (origin) scheduleAxisLabels();
+            if (origin || notes.length) scheduleLabels();
             if (blueprint) placeSheet();
           },
         });
@@ -366,24 +374,61 @@
     else sheet = null;
   });
 
-  // The origin's axes. A boolean, so there is nothing to key. The letters are HTML
-  // over the scene, found by asking the stage where each one's speck landed — after
-  // the camera has moved, and at most once a frame however many writes it took.
+  // The origin's axes and the notes. Both are HTML over the scene, found by asking
+  // the stage where each one's speck landed — after the camera has moved, and at
+  // most once a frame however many writes it took.
+  //
+  // A note is a callout. Text over a cell covers whatever is in it, and which way
+  // is clear of the piece depends on the pose, so a note stands outside the
+  // outline of everything drawn instead: the upper half of the cells (on screen)
+  // get theirs above it and the rest below, each straight over or under its cell,
+  // with a leader down or up to the cell's middle. So two notes never meet.
+  //
+  // Where there is not room outside the outline — a small viewer — a note is kept
+  // inside the viewer instead, which needs its size: so it is measured once drawn,
+  // and the first placement of a note is followed by a second.
   let axisLabels = $state([]);
+  let noteSpots = $state([]);
   let labelFrame = 0;
+  const noteEls = {};
 
-  function placeAxisLabels() {
+  function calloutsFor(local, { width, height }) {
+    const bounds = stage.outline();
+    if (!bounds || !notes.length) return [];
+    const within = (v, size, room) => Math.min(Math.max(v, size + CALLOUT_GAP), room - CALLOUT_GAP);
+    const top = local({ x: bounds.left, y: bounds.top }).y;
+    const bottom = local({ x: bounds.left, y: bounds.bottom }).y;
+    const spots = stage.project(notes.map(({ cell }) => toWorld(cell))).map(local);
+    const order = spots.map((_, i) => i).sort((a, b) => spots[a].y - spots[b].y);
+    const above = new Set(order.slice(0, Math.ceil(notes.length / 2)));
+    return notes.map(({ key, lines }, i) => {
+      const side = above.has(i) ? 'above' : 'below';
+      const w = noteEls[key]?.offsetWidth ?? 0;
+      const h = noteEls[key]?.offsetHeight ?? 0;
+      const x = within(spots[i].x + w / 2, w, width) - w / 2;
+      const y = side === 'above'
+        ? within(top - CALLOUT_GAP, h, height)
+        : within(bottom + CALLOUT_GAP + h, h, height) - h;
+      return { key, lines, side, x, y, to: spots[i], measured: Boolean(noteEls[key]) };
+    });
+  }
+
+  function placeLabels() {
     labelFrame = 0;
-    if (!stage || !origin || !host) {
+    if (!stage || !host) {
       axisLabels = [];
+      noteSpots = [];
       return;
     }
     const box = host.getBoundingClientRect();
-    axisLabels = stage.originTips().map(({ name, x, y }) => ({ name, x: x - box.left, y: y - box.top }));
+    const local = ({ x, y }) => ({ x: x - box.left, y: y - box.top });
+    axisLabels = origin ? stage.originTips().map(({ name, ...spot }) => ({ name, ...local(spot) })) : [];
+    noteSpots = calloutsFor(local, box);
+    if (noteSpots.some(spot => !spot.measured)) scheduleLabels();
   }
 
-  function scheduleAxisLabels() {
-    if (!labelFrame) labelFrame = requestAnimationFrame(placeAxisLabels);
+  function scheduleLabels() {
+    if (!labelFrame) labelFrame = requestAnimationFrame(placeLabels);
   }
 
   let originKey = null;
@@ -392,7 +437,16 @@
     if (!ready || !stage || key === originKey) return;
     stage.setOrigin(origin);
     originKey = key;
-    scheduleAxisLabels();
+    scheduleLabels();
+  });
+
+  // The notes, keyed on what they say and where, for the same reason as the lattice.
+  let notesKey = null;
+  $effect(() => {
+    const key = notes.map(n => `${n.key}${n.cell}${n.lines}`).join('|');
+    if (!ready || !stage || key === notesKey) return;
+    notesKey = key;
+    scheduleLabels();
   });
 
   // The ghost trains, keyed on what they are for the same reason as the lattice.
@@ -441,6 +495,19 @@
   <canvas bind:this={canvas}></canvas>
   {#each axisLabels as { name, x, y } (name)}
     <span class="axis-label" style:left="{x}px" style:top="{y}px" aria-hidden="true">{name}</span>
+  {/each}
+  {#if noteSpots.length}
+    <svg class="leaders" aria-hidden="true">
+      {#each noteSpots as { key, x, y, to } (key)}
+        <line x1={x} y1={y} x2={to.x} y2={to.y} />
+        <circle cx={to.x} cy={to.y} r="3" />
+      {/each}
+    </svg>
+  {/if}
+  {#each noteSpots as { key, lines, side, x, y } (key)}
+    <span class="note {side}" style:left="{x}px" style:top="{y}px" aria-hidden="true" bind:this={noteEls[key]}>
+      {#each lines as line, i (i)}<span>{line}</span>{/each}
+    </span>
   {/each}
 
   {#if controls && touched}
@@ -516,6 +583,43 @@
     color: var(--grid-color);
     pointer-events: none;
     user-select: none;
+  }
+
+  /* A callout's leaders, drawn over the scene in the lattice's colour. */
+  .leaders {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+    stroke: var(--grid-color);
+    stroke-width: 1.5;
+    fill: var(--grid-color);
+  }
+
+  /* A callout's text, centred over (or under) its cell, a line per entry. Its edge
+     nearest the drawing is on the leader's end. */
+  .note {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.1em 0.4em;
+    border-radius: 0.3em;
+    background: color-mix(in srgb, var(--card-footer) 85%, transparent);
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    color: var(--grid-color);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .note.below {
+    transform: translate(-50%, 0);
   }
 
   /* Outlined like PlayPause, over a footer-coloured fill so it reads over the dots. */
