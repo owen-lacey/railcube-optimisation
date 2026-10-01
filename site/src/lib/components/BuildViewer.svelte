@@ -8,7 +8,8 @@
     pace = 0.1,
     speed = 1,
     aspect = '16 / 10',
-    interactive = false,
+    // Handling, or null — see `controls` in TrackViewer.
+    controls = null,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -41,14 +42,12 @@
 {#if result.state === 'ok'}
   <TrackViewer
     bind:this={viewer}
-    build
     pieces={result.scene.pieces}
     camera={result.scene.camera}
-    drive
-    {pace}
-    {speed}
+    transition={{ kind: 'build', pace, speed }}
+    train={{}}
     {aspect}
-    {interactive}
+    {controls}
     label="The layout {letters}, building"
   />
 {:else}

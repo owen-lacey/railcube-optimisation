@@ -7,7 +7,8 @@
   import PlayPause from './PlayPause.svelte';
   import { SWEEP_CROSSED } from '$lib/sweeps.js';
 
-  let { sweep = SWEEP_CROSSED, every = 2000, aspect = '16 / 10', drive = true } = $props();
+  // `train` is LayoutViewer's: its callbacks, or null for no train.
+  let { sweep = SWEEP_CROSSED, every = 2000, aspect = '16 / 10', train = {} } = $props();
 
   const shapes = $derived(sweep.shapes);
 
@@ -66,12 +67,11 @@
 <figure bind:this={host}>
   <LayoutViewer
     shape={shapes[index].shape}
-    interactive={true}
     paused={!playing}
     {aspect}
-    {drive}
+    {train}
   >
-    {#snippet footer()}
+    {#snippet caption()}
       <label>
         Track #<input
           type="number"

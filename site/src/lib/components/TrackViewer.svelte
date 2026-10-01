@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { createStage, together } from '../render/stage.js';
   import { readTheme } from '../render/renderer.js';
-  import { attachControls } from '../render/controls.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
   import { gridLines } from '../render/grid.js';
   import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
@@ -10,43 +9,40 @@
   let {
     pieces = [],
     camera = {},
-    drive = false,
     aspect = '4 / 3',
-    interactive = false,
     label = '',
-    // A new layout collapses the one that is there and is built out of the pieces
-    // that fall — see `show`. Off by default: a catalogue card showing one piece
-    // has nothing to rearrange.
-    sequence = false,
-    // A new layout is *built from scratch*: the stage is emptied and every piece
-    // comes in from off the edge of the frame, in route order. `sequence` is this
-    // with a collapse in front of it; without one there is nothing to pick up, so
-    // every piece is a mint. Framed on `camera`, as a static track is.
-    build = false,
-    // A new layout *extends* the one that is there: whatever the two have in common
-    // is left standing and only the rest arrives. This is what a track being typed
-    // needs, and it is the one mode whose camera moves — see `showGrown`.
-    grow = false,
-    // Grow mode only. A track is not a loop until it closes, so there is nothing
-    // for a train to run on before then; and a piece the model rejects is named
-    // here so the renderer can flash it.
-    closed = false,
-    offender = null,
-    // Grow mode only: the box the frame starts from, before the track has reached
-    // past it. Unset, it is the tight one a sketch starts in — see `growBox`.
-    from = undefined,
-    pace = 0.04,
-    // One tempo over the whole assembly — see `timingFor` in build.js.
-    speed = 1.2,
-    // When the build starts, measured from the moment the track is let go of. The
-    // two run *together*, so this is genuinely "start picking pieces up now" and not
-    // "wait for the pile to finish" — see `show`.
-    handover = 0.5,
-    drop = 2,
-    // Sequence mode only: how far the fixed frame reaches, in cells. Left unset it
-    // is the JS solver's own box constraint (see `fixedFrame`); a viewer showing a
-    // sweep solved in a bigger box passes that sweep's `question.box` instead.
-    reach = undefined,
+    // What a new layout looks like, `{ kind, ...that kind's settings }` — see
+    // `CHANGES`. Its kind is read once, at mount; its settings when a layout is shown.
+    //
+    //   redraw  drawn finished, off an emptied stage.
+    //   build   the stage is emptied and every piece comes in from off the edge of
+    //           the frame, in route order. Framed on `camera`, as a static track is.
+    //           `{ pace, speed }`.
+    //   tumble  the layout that is there collapses and the new one is built out of
+    //           the pieces that fall. Framed on a fixed box, not on `camera`.
+    //           `{ pace, speed, handover, drop, reach }`.
+    //   grow    the layout *extends* the one that is there: whatever the two have in
+    //           common is left standing and only the rest arrives. The one kind whose
+    //           camera moves — see `showGrown`. `{ pace, speed, from, offender }`.
+    //
+    // `speed` is one tempo over the whole assembly (see `timingFor` in build.js).
+    // `handover` is when the build starts, measured from the moment the track is let
+    // go of: the two run *together*. `reach` is how far the fixed frame reaches, in
+    // cells — unset, the JS solver's own box constraint (see `fixedFrame`). `from` is
+    // the box a growing frame starts from — unset, the tight one a sketch starts in
+    // (see `growBox`). `offender` is the piece the model rejects, flashed red.
+    transition = { kind: 'redraw' },
+    // The train, as callbacks, or null for none. Read once, at mount.
+    //   at()       who holds it: a piece index to hold it there, null to let it drive.
+    //   onAt(i)    told the piece it has driven onto. Both redraw only — see `trackPhase`.
+    //   onCell(c)  told the cell it is in, `[x, y, z]`, each time it enters a new one,
+    //              and null when it goes.
+    //   onPose(p)  told the pose of the piece it last entered, `'DF'` say, each time it
+    //              changes, and null when it goes.
+    train = null,
+    // Handling: `(host, stage) => ({ destroy })`, attached at mount, or null for a
+    // viewer that cannot be handled. `attachControls` in render/controls.js.
+    controls = null,
     // A box of cells, `{ lo, hi }`, to draw the model's cell lattice around; null
     // draws none. See `render/grid.js`.
     grid = null,
@@ -62,19 +58,13 @@
     // Cells, `[x, y, z]` each, filled see-through in the train cell's paint whether
     // or not a train is driving. See `setFill` in stage.js.
     fill = [],
-    // Told the cell the train is in, `[x, y, z]`, each time it enters a new one, and
-    // `null` when the train goes. Read once, at mount.
-    onTrainCell = undefined,
-    // Told the pose of the piece the train last entered, `'DF'` say, each time it
-    // changes, and `null` when the train goes. Read once, at mount.
-    onTrainPose = undefined,
-    // Static mode only: who holds the train, and who is told where it has driven
-    // to — see `trackPhase`. Read once, at mount.
-    trainAt = undefined,
-    onTrainAt = undefined,
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
   } = $props();
+
+  // The settings a transition leaves out.
+  const DEFAULTS = { pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 };
+  const settings = () => ({ ...DEFAULTS, ...transition });
 
   // How long the collapse is simulated for at the outside.
   //
@@ -90,7 +80,7 @@
   let ready = $state(false);
   let failed = $state('');
   let reduced = false;
-  // Loaded on mount, and only in sequencing mode: `tumble.js` reaches cannon-es,
+  // Loaded on mount, and only for a tumble: `tumble.js` reaches cannon-es,
   // which is a chunk worth keeping off a page whose viewers are static piece cards.
   // It is awaited before the first `show`, so nothing downstream is async.
   let tumblePhase = null;
@@ -102,7 +92,9 @@
   // Grow mode's frame, which only ever enlarges. Not `$state` for the same reason
   // as `shown`: `showGrown` owns it, and the framing effect below must not read it.
   let box = undefined;
-  let controls = null;
+  let handle = null;
+  // This viewer's entry in `CHANGES`, fixed at mount.
+  let change = null;
 
   /**
    * What makes two `pieces` arrays the same layout drawn the same way.
@@ -127,16 +119,41 @@
   }
 
   /**
-   * Show a layout, by whichever of the four routes this viewer is set to.
+   * The four kinds of transition. Each says how it shows a layout, where it frames
+   * (null for one that frames itself), what it loads first, and whether it animates
+   * with no train on it — the assembly being the animation. A reader who has asked
+   * for reduced motion gets the redraw from the two that would otherwise assemble,
+   * and a tumble with nothing standing has nothing to knock down.
+   */
+  const CHANGES = {
+    redraw: { show: showStatic, frame: () => camera, animates: false },
+    build: {
+      show: next => (reduced ? showStatic : showBuilt)(next),
+      frame: () => camera,
+      animates: true,
+    },
+    tumble: {
+      show: next => (shown && !reduced ? showSequenced : showStatic)(next),
+      // `fixedFrame` is a box the layouts all fit inside rather than anything read
+      // off them, so there is nothing for a shape change to reframe. See `scenes.js`.
+      frame: () => {
+        const { drop, reach } = settings();
+        return fixedFrame({ drop: Number(drop), reach });
+      },
+      load: async () => ({ tumblePhase } = await import('../render/tumble.js')),
+      animates: true,
+    },
+    grow: { show: showGrown, frame: null, animates: true },
+  };
+
+  /**
+   * Show a layout, by this viewer's kind of transition.
    */
   function show(next) {
     const key = keyOf(next);
     if (key === shownKey) return;
 
-    if (grow) showGrown(next);
-    else if (sequence && shown && tumblePhase && !reduced) showSequenced(next);
-    else if (build && !reduced) showBuilt(next);
-    else showStatic(next);
+    change.show(next);
 
     shown = next;
     shownKey = key;
@@ -169,11 +186,12 @@
       if (cube) leaving.push({ cube, piece: before[i] });
     }
 
+    const { pace, speed, from, offender } = settings();
     stage.run([growPhase(stage, next, {
       leaving,
       pace: Number(pace),
       speed: Number(speed),
-      drive: drive && closed,
+      drive: Boolean(train),
       alarm: offender?.id ?? null,
       instant: reduced,
     })]);
@@ -191,13 +209,14 @@
   /** Draw it finished and drive it, off an emptied stage. */
   function showStatic(next) {
     stage.clear();
-    stage.run([trackPhase(stage, next, { drive, trainAt, onTrainAt })]);
+    stage.run([trackPhase(stage, next, { drive: Boolean(train), trainAt: train?.at, onTrainAt: train?.onAt })]);
   }
 
   /** Empty the stage and click the whole layout together, every piece a mint. */
   function showBuilt(next) {
     stage.clear();
-    stage.run([buildPhase(stage, next, { pace: Number(pace), speed: Number(speed), drive })]);
+    const { pace, speed } = settings();
+    stage.run([buildPhase(stage, next, { pace: Number(pace), speed: Number(speed), drive: Boolean(train) })]);
   }
 
   /**
@@ -210,13 +229,14 @@
     // what lets the build start while there is something to watch instead of after
     // the pile has finished fidgeting. Ending the collapse first and *then*
     // building would freeze every piece the build had not reached yet.
+    const { pace, speed, handover, drop } = settings();
     const collapse = tumblePhase(stage, shown, { drop: Number(drop), limit: SETTLE });
     stage.run([together(collapse, buildPhase(stage, next, {
       pace: Number(pace),
       speed: Number(speed),
       delay: Number(handover),
       onPickUp: collapse.release,
-      drive,
+      drive: Boolean(train),
     }))]);
   }
 
@@ -230,32 +250,30 @@
 
     (async () => {
       try {
-        if (sequence) ({ tumblePhase } = await import('../render/tumble.js'));
+        change = CHANGES[transition.kind];
+        await change.load?.();
         if (!live) return;
         stage = createStage(canvas, {
           theme: readTheme(host),
-          onTrainCell: cell => onTrainCell?.(cell),
-          onTrainPose: pose => onTrainPose?.(pose),
+          onTrainCell: cell => train?.onCell?.(cell),
+          onTrainPose: pose => train?.onPose?.(pose),
           onCamera: () => {
             if (origin) scheduleAxisLabels();
             if (blueprint) placeSheet();
           },
         });
         stage.setPaused(paused);
-        if (interactive) controls = attachControls(host, stage);
+        handle = controls?.(host, stage) ?? null;
         ready = true;
-        // Framed once, here, and never again in sequencing mode: `fixedFrame` is a
-        // box the layouts all fit inside rather than anything read off them, so
-        // there is nothing for a shape change to reframe. See `scenes.js`. Grow
-        // mode is the exception — its frame is `showGrown`'s, from the first paint.
-        if (!grow) stage.frameTo(sequence ? fixedFrame({ drop: Number(drop), reach }) : camera);
+        // A tumble is framed once, here, and never again. A grow is framed by
+        // `showGrown`, from the first paint.
+        if (change.frame) stage.frameTo(change.frame());
         show(pieces);
 
         // Animate only what is on screen. A page of viewers each running its own
         // rAF loop for ever is the one thing that would make this unusable on a
-        // phone; a still viewer costs nothing. A sequencing or growing viewer needs
-        // frames with no train on it, since the assembly is the animation.
-        if ((drive || sequence || build || grow) && !reduced) {
+        // phone; a still viewer costs nothing.
+        if ((train || change.animates) && !reduced) {
           // Runs while both hold. Each signal re-checks the pair rather than only
           // stopping, because the observer does not fire again when the page comes
           // back: switching desktops leaves the viewer exactly as in view as it was.
@@ -290,8 +308,8 @@
       live = false;
       stopObserving();
       ro.disconnect();
-      controls?.destroy();
-      controls = null;
+      handle?.destroy();
+      handle = null;
       stage?.setGrid(null);
       stage?.setOrigin(null);
       cancelAnimationFrame(labelFrame);
@@ -390,22 +408,22 @@
     fillKey = key;
   });
 
-  // Framing. In sequencing mode this deliberately does *not* read `pieces` or
-  // `camera`: the frame is the fixed box, so a new shape has nothing to reframe and
-  // this never fires on one. Only `drop` moves it, which is someone changing the
-  // shot on purpose rather than the shot chasing the content.
+  // Framing. A tumble's frame deliberately does *not* read `pieces` or `camera`:
+  // it is the fixed box, so a new shape has nothing to reframe and this never fires
+  // on one. Only `drop` or `reach` moves it, which is someone changing the shot on
+  // purpose rather than the shot chasing the content.
   //
-  // In grow mode it does not run at all: the frame is `showGrown`'s, and two things
+  // A grow has no frame here at all: the frame is `showGrown`'s, and two things
   // writing the camera would have it snapping back mid-pan.
   $effect(() => {
-    if (!ready || !stage || grow) return;
-    stage.frameTo(sequence ? fixedFrame({ drop: Number(drop), reach }) : camera);
+    if (!ready || !stage || !change.frame) return;
+    stage.frameTo(change.frame());
   });
 </script>
 
 <div
   class="viewer"
-  class:interactive
+  class:interactive={Boolean(controls)}
   class:blueprint
   style:--dot-s={sheet && `${sheet.spacing}px`}
   style:--dot-x={sheet && `${sheet.x}px`}

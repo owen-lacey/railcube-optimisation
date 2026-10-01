@@ -17,6 +17,7 @@
   import { onMount } from 'svelte';
   import Delete from '@lucide/svelte/icons/delete';
   import TrackViewer from './TrackViewer.svelte';
+  import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
   import { PIECES } from '$lib/catalogue.js';
   import { claimKeys } from '$lib/keys.js';
@@ -122,14 +123,9 @@
 >
   <TrackViewer
     pieces={view.pieces}
-    closed={view.closed}
-    offender={view.offender}
-    grow
-    drive
-    interactive
-    from={BUILD_FLOOR}
-    {pace}
-    {speed}
+    transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR, offender: view.offender }}
+    train={view.closed ? {} : null}
+    controls={attachControls}
     aspect={shapeOfViewer}
     label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
   />

@@ -6,7 +6,8 @@
   let {
     shape = '',
     aspect = '16 / 10',
-    interactive = false,
+    // Handling, or null — see `controls` in TrackViewer.
+    controls = null,
     pace = 0.1,
     speed = 1.2,
   } = $props();
@@ -84,14 +85,10 @@
 
 <TrackViewer
   pieces={view.pieces}
-  closed={view.closed}
-  offender={view.offender}
-  grow
-  drive
-  {pace}
-  {speed}
+  transition={{ kind: 'grow', pace, speed, offender: view.offender }}
+  train={view.closed ? {} : null}
   {aspect}
-  {interactive}
+  {controls}
   label={typed ? `The track ${typed}, as far as it has been built` : 'An empty stage'}
 />
 

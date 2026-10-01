@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { createStage } from '../render/stage.js';
   import { readTheme } from '../render/renderer.js';
-  import { attachControls } from '../render/controls.js';
   import { tumblePhase } from '../render/tumble.js';
   import { tumbleScene, cubesIn } from '$lib/scenes.js';
   import { routeOf } from '../../../../src/layouts.js';
@@ -11,7 +10,8 @@
     shape = '',
     drop = 3,
     aspect = '16 / 10',
-    interactive = false,
+    // Handling, `(host, stage) => ({ destroy })`, or null — see `attachControls`.
+    controls = null,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -46,11 +46,11 @@
   }
 
   onMount(() => {
-    let controls = null;
+    let handle = null;
 
     try {
       stage = createStage(canvas, { theme: readTheme(host) });
-      if (interactive) controls = attachControls(host, stage);
+      handle = controls?.(host, stage) ?? null;
       ready = true;   // the effect below does the first drop
     } catch (error) {
       failed = error.message;
@@ -63,7 +63,7 @@
 
     return () => {
       ro.disconnect();
-      controls?.destroy();
+      handle?.destroy();
       stage?.clear();
       stage = null;
     };
@@ -76,7 +76,7 @@
   });
 </script>
 
-<div class="viewer" class:interactive bind:this={host} style:aspect-ratio={aspect}>
+<div class="viewer" class:interactive={Boolean(controls)} bind:this={host} style:aspect-ratio={aspect}>
   <canvas bind:this={canvas}></canvas>
 
   {#if failed}

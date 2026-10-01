@@ -8,7 +8,8 @@
     pose = 'DF',
     scale = 1,
     aspect = poses ? '16 / 9' : '5 / 4',
-    interactive = false,
+    // Handling, or null — see `controls` in TrackViewer.
+    controls = null,
     label = '',
   } = $props();
 
@@ -21,6 +22,6 @@
   pieces={scene.pieces}
   camera={scene.camera}
   {aspect}
-  {interactive}
+  {controls}
   label={label || (poses ? `Every pose of the ${type} piece` : `The ${type} piece`)}
 />

@@ -10,10 +10,14 @@ export default {
   argTypes: {
     every: { control: { type: 'range', min: 500, max: 10000, step: 100 } },
     aspect: { control: 'text' },
-    drive: { control: 'boolean' },
   },
 };
 
 export const Default = {
-  args: { every: 2000, drive: true },
+  args: { every: 2000 },
+};
+
+/** No train: the tracks alone, as the post shows them. */
+export const NoTrain = {
+  args: { every: 2000, train: null },
 };

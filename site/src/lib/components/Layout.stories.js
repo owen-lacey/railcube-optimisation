@@ -13,28 +13,38 @@
 // so it is simply drawn finished and driven.
 
 import LayoutViewer from './LayoutViewer.svelte';
+import { cellScene, axesScene } from '$lib/scenes.js';
+
+// The transition's kind and dials are separate controls, put together here into
+// the one object LayoutViewer takes.
+const render = ({ kind, pace, speed, handover, drop, ...props }) => ({
+  Component: LayoutViewer,
+  props: { ...props, transition: { kind, pace, speed, handover, drop } },
+});
 
 export default {
   title: 'Layout',
   component: LayoutViewer,
+  render,
+  args: { kind: 'redraw', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
   argTypes: {
     shape: { control: 'text' },
+    kind: { control: 'inline-radio', options: ['redraw', 'tumble', 'build'] },
     pace: { control: { type: 'range', min: 0.02, max: 2, step: 0.02 } },
     speed: { control: { type: 'range', min: 0.5, max: 4, step: 0.1 } },
     handover: { control: { type: 'range', min: 0, max: 3, step: 0.05 } },
     drop: { control: { type: 'range', min: 0, max: 6, step: 1 } },
     aspect: { control: 'text' },
-    grid: { control: 'boolean' },
-    blueprint: { control: 'boolean' },
-    trainCaption: { control: 'inline-radio', options: ['none', 'position', 'position-pose'] },
-    origin: { control: 'boolean' },
-    scrub: { control: 'boolean' },
-    change: { control: 'inline-radio', options: ['none', 'tumble', 'build'] },
+    transition: { table: { disable: true } },
+    scene: { table: { disable: true } },
+    train: { table: { disable: true } },
+    controls: { table: { disable: true } },
+    caption: { table: { disable: true } },
   },
 };
 
 export const Default = {
-  args: { shape: 'RIORIROIRSLSISOILIOLSISLSSSI', change: 'tumble', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
+  args: { shape: 'RIORIROIRSLSISOILIOLSISLSSSI', kind: 'tumble' },
   parameters: {
     docs: {
       description: {
@@ -50,7 +60,7 @@ export const Default = {
 
 export const Rearranged = {
   name: 'The same cubes, twice',
-  args: { shape: 'LIRIROSOLORLLSORII', change: 'tumble', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
+  args: { shape: 'LIRIROSOLORLLSORII', kind: 'tumble' },
   parameters: {
     docs: {
       description: {
@@ -83,7 +93,7 @@ export const Rearranged = {
 
 export const Grid = {
   name: 'In its grid',
-  args: { shape: 'LLLL', grid: true, interactive: true },
+  args: { shape: 'LLLL', scene: cellScene },
   parameters: {
     docs: {
       description: {
@@ -98,7 +108,7 @@ export const Grid = {
 
 export const Blueprint = {
   name: 'On a blueprint',
-  args: { shape: 'LIRIROSOLORLLSORII', interactive: true },
+  args: { shape: 'LIRIROSOLORLLSORII' },
   parameters: {
     docs: {
       description: {
@@ -112,19 +122,14 @@ export const Blueprint = {
   },
 };
 
-export const Scrubbed = {
-  name: 'Train on a slider',
-  args: {
-    shape: 'SLLIOOILLSSS', grid: true, trainCaption: 'position-pose', origin: true, scrub: true,
-    interactive: true,
-  },
+export const WithAxes = {
+  name: 'In its grid, with axes',
+  args: { shape: 'SSSSLLIOOILL', scene: axesScene },
   parameters: {
     docs: {
       description: {
-        story: 'The slider is one segment per piece, in route order and in the piece\'s '
-          + 'colour, faded past the thumb. Played, the train steps piece to piece and the '
-          + 'slider follows; dragged, it snaps to a piece and holds the train where it '
-          + 'enters it. Right is a whole lap on, which is the same place as left.',
+        story: 'The lattice with the origin\'s axis arrows at its low corner, and the frame '
+          + 'fitted to reach them.',
       },
     },
   },

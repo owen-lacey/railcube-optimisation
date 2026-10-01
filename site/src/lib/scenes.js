@@ -9,6 +9,7 @@ import { routeOf, identify } from '../../../src/layouts.js';
 import { COLORS, ALARM } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
 import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT } from './render/camera.js';
+import { axisAnchor, LABEL_SPOTS } from './render/axes.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
 export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[piece.type] }));
@@ -106,6 +107,34 @@ export function openScene(letters) {
     closed: closed && !fault,
     offender: fault && { ...fault, id: cubeIds(kept)[blamed] },
   };
+}
+
+/** `openScene`, framed on its cubes: a layout shown for its own sake. */
+export function layoutScene(letters) {
+  const scene = openScene(letters);
+  return { ...scene, camera: frame(scene.pieces) };
+}
+
+/**
+ * `openScene` in its cells: the lattice drawn around the cubes and their train,
+ * framed on that box rather than on the cubes alone.
+ */
+export function cellScene(letters) {
+  const scene = openScene(letters);
+  const box = extentOf(scene.pieces);
+  return { ...scene, grid: box, camera: frameFit(cornersOf(box)) };
+}
+
+/**
+ * `cellScene` with the origin's axis arrows at the lattice's low corner. They stand
+ * outside the box, so the frame reaches them too — the arrows' corner, and each
+ * label, which is past each tip.
+ */
+export function axesScene(letters) {
+  const scene = cellScene(letters);
+  const anchor = axisAnchor(scene.grid);
+  const labels = LABEL_SPOTS.map(({ position }) => position.map((v, a) => v + anchor[a]));
+  return { ...scene, origin: scene.grid, camera: frameFit([...cornersOf(scene.grid), anchor, ...labels]) };
 }
 
 /**

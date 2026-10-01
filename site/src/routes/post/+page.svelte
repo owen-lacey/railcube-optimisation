@@ -1,7 +1,9 @@
 <script>
 	import Highlight from "$lib/components/Highlight.svelte";
 	import KnownTracks from "$lib/components/KnownTracks.svelte";
-	import LayoutViewer from "$lib/components/LayoutViewer.svelte";
+	import TrackFigure from "$lib/components/TrackFigure.svelte";
+	import TrainCoordinates from "$lib/components/TrainCoordinates.svelte";
+	import { cellScene } from "$lib/scenes.js";
 	import PieceCardGrid from "$lib/components/PieceCardGrid.svelte";
 	import PieceMoves from "$lib/components/PieceMoves.svelte";
 	import PieceTag from "$lib/components/PieceTag.svelte";
@@ -17,7 +19,7 @@
 
 <p>This is a Rail Cube track:</p>
 
-<LayoutViewer shape="SIOLLOISLL" interactive={true} />
+<TrackFigure shape="SIOLLOISLL" />
 
 <p>
 	It uses two straights, two inner loops, two outer, and four right turns. It
@@ -26,18 +28,18 @@
 
 <p>Consider this instead:</p>
 
-<LayoutViewer shape="XSSLISISSOIILSRISSXSISSOSOIRRSROILSL" interactive={true} />
+<TrackFigure shape="XSSLISISSOIILSRISSXSISSOSOIRRSROILSL" />
 
 <p>Or this:</p>
 
-<LayoutViewer shape="ILSSXOSSSSSIISLRSISOORSOIRRSXIILSLSI" interactive={true} />
+<TrackFigure shape="ILSSXOSSSSSIISLRSISOORSOIRRSXIILSLSI" />
 
 <p>
 	In fact, I've got a bunch of these ready to use anytime my three year old
 	decrees that the existing structure is tiresome.
 </p>
 
-<KnownTracks drive={false} />
+<KnownTracks train={null} />
 
 <p>
 	Hopefully the sheer number of tracks convinces you I couldn't have possibly
@@ -59,7 +61,6 @@
 	of the train's position in the track.
 </p>
 <!-- Editorial note: I think we should pivot the terminology to say "the cube after the train has travelled a track piece," as opposed to "at any given time." The intermediary points on the track could cause confusion, and really, we only care about the position that the train has ended up in after it's moved.  -->
-<PieceMoves />
 <p>
 	Imagine our track was in a box divided into cubes the size of a single <PieceTag
 		letter="S"
@@ -67,14 +68,7 @@
 	cube.
 </p>
 
-<LayoutViewer
-	shape="SSSSLLIOOILL"
-	grid={true}
-	trainCaption="position"
-	origin={true}
-	scrub={true}
-	interactive={true}
-/>
+<TrainCoordinates shape="SSSSLLIOOILL" readout="position" />
 <p>
 	The coordinates of the train are given by how many cubes along it is from the
 	starting <Highlight colour="grid-color">highlighted cube</Highlight>,
@@ -91,72 +85,29 @@
 
 <p>
 	We can now represent the position & pose of the train piece at any given time.
-	A complete track is one that returns to the origin cube facing DF.
+	A complete track is one that returns to the origin cube facing DF. Putting
+	positions and poses together, here is a track in which the train travels along
+	every face of the cube:
 </p>
+
+<TrainCoordinates
+	shape="SIOOLSOOLISLIISL"
+	readout="position-pose"
+	scene={cellScene}
+/>
 
 <hr />
 
-<h2>Defining the model</h2>
-
-<p>Here's the plan of attack:</p>
-<ol>
-	<li>Create a coordinate system the track can exist on</li>
-	<li>Define each track piece in that coordinate system</li>
-	<li>Model how we add pieces together</li>
-</ol>
-<p>Once we have these, we can build our model</p>
-
-<h3>1. The coordinate system</h3>
-<p>
-	As much as I would like it to go without saying, these tracks occupy 3D space.
-	This means you can go up, down, left, right, forwards, or backwards. We call
-	this type of movement <i>orthogonal</i>.
-</p>
-
-<Placeholder />
-
-<p>
-	After it has travelled each track piece, the train is in exactly one of these
-	boxes. The train can then move to any box orthogonal to it depending on where
-	the track is heading.
-</p>
-<Placeholder />
-
-<p>
-	A straight track represents a move forwards relative to its current position,
-	a left turn is 1 step forward and two steps left, etc
-</p>
-
-<Placeholder />
-
-<p>
-	Similarly, the train could change orientation, it travel alongside a wall, or
-	down vertically. It can assume any position on the 6-faced cube, facing in any
-	of the 4 directions. That makes 24 possible directions for every box.
-</p>
-
-<Placeholder />
-
-<p>
-	Let's combine this with our positions to show how we represent adding a piece
-	to the track
-</p>
-
-<Placeholder />
-
-<p>
-	Once we have our initial position, the position of the train after any track
-	piece simply becomes the combination of all of the track pieces before it.
-</p>
-
-<p>
-	Therefore, to enforce a closed loop, we need to tell the programme that the
-	position of the last track piece equals the starting piece.
-</p>
-
-<Placeholder caption="Here's the animation" />
-
+<h1>scratch</h1>
 <h2>adding costs</h2>
+
+<p>can't have this</p>
+
+<TrackFigure shape="SSLLLSS" />
+
+<p>or this</p>
+
+<TrackFigure shape="SSISLILISS" />
 
 <p>Two approaches here:</p>
 

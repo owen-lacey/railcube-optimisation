@@ -100,8 +100,8 @@
 {#key `${config.key}:${animate}`}
   <LayoutViewer
     {shape}
-    reach={config.sweep.question.box}
-    change={animate ? 'tumble' : 'none'}
+    transition={animate ? { kind: 'tumble', reach: config.sweep.question.box } : { kind: 'redraw' }}
+    controls={null}
     aspect={narrow.current ? '4 / 3' : '16 / 10'}
   />
 {/key}
