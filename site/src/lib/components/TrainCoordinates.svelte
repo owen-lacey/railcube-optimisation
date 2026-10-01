@@ -5,6 +5,7 @@
   import LayoutViewer from './LayoutViewer.svelte';
   import TrainScrubber from './TrainScrubber.svelte';
   import { axesScene } from '$lib/scenes.js';
+  import { readerFrame } from '$lib/catalogue.js';
 
   let {
     shape,
@@ -33,10 +34,6 @@
     onCell: c => (cell = c),
     onPose: p => (pose = p),
   };
-
-  // The model's cell is [right, up, forwards]; the post's axes are x left, y
-  // forwards, z up (docs/coordinates.md): the last two swap and x is negated.
-  const readerFrame = ([right, up, forwards]) => [0 - right, forwards, up];
 </script>
 
 <LayoutViewer {shape} {aspect} {scene} {train}>

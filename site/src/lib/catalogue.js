@@ -112,3 +112,21 @@ const HEADING_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'forwards',
 /** A pose as the post words it: `DL` is "down face, heading left (DL)". */
 export const describePose = pose =>
   `${FACE_WORD[pose[0]]} face, heading ${HEADING_WORD[pose[1]]} (${pose})`;
+
+// ---- A position, in the reader's frame --------------------------------------
+
+/**
+ * The model's cell is [right, up, forwards]; the post's axes are x left, y
+ * forwards, z up (docs/coordinates.md): the last two swap and x is negated.
+ */
+export const readerFrame = ([right, up, forwards]) => [0 - right, forwards, up];
+
+/**
+ * Where `to` is from `from`, written as `from` were `(x, y, z)` in the reader's
+ * frame: two cubes left and one forwards is `(x + 2, y + 1, z)`.
+ */
+export function describeDelta(from, to) {
+  const d = readerFrame(to.map((v, a) => v - from[a]));
+  const term = (name, n) => (n === 0 ? name : `${name} ${n > 0 ? '+' : '−'} ${Math.abs(n)}`);
+  return `(${['x', 'y', 'z'].map((name, a) => term(name, d[a])).join(', ')})`;
+}
