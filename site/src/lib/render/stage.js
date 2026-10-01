@@ -31,7 +31,7 @@
 // it is not, an invalidation asks for one frame and draws in it. So a still viewer
 // is drawn once and then costs nothing.
 
-import { AmbientLight, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, OrthographicCamera, ReplaceStencilOp, Scene, Vector3 } from 'three';
+import { AmbientLight, Box3, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, OrthographicCamera, ReplaceStencilOp, Scene, Vector3 } from 'three';
 import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js';
 import { createLoop } from './loop.js';
 import { createCamera, viewBetween } from './camera.js';
@@ -514,11 +514,36 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
    * through the camera and the canvas's place on the page.
    */
   function originTips() {
+    return project(tips.map(({ at }) => at)).map((spot, i) => ({ name: tips[i].name, ...spot }));
+  }
+
+  /**
+   * The screen rectangle everything drawn fits in, `{ left, top, right, bottom }` in
+   * client pixels, or null for an empty scene: the corners of the scene's bounding
+   * box, projected. Callouts go outside it, so they never cover what is drawn.
+   */
+  function outline() {
+    scene.updateMatrixWorld();
+    const box = new Box3().setFromObject(scene);
+    if (box.isEmpty()) return null;
+    const { min, max } = box;
+    const spots = project([0, 1, 2, 3, 4, 5, 6, 7].map(i =>
+      [i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z]));
+    const xs = spots.map(({ x }) => x);
+    const ys = spots.map(({ y }) => y);
+    return { left: Math.min(...xs), top: Math.min(...ys), right: Math.max(...xs), bottom: Math.max(...ys) };
+  }
+
+  /**
+   * Where world points land on screen, `{ x, y }` in client pixels each: projected
+   * through the camera and the canvas's place on the page.
+   */
+  function project(points) {
     const { left, top, width, height } = canvas.getBoundingClientRect();
     const point = new Vector3();
-    return tips.map(({ name, at }) => {
+    return points.map(at => {
       point.set(...at).project(camera);
-      return { name, x: left + (point.x + 1) / 2 * width, y: top + (1 - point.y) / 2 * height };
+      return { x: left + (point.x + 1) / 2 * width, y: top + (1 - point.y) / 2 * height };
     });
   }
 
@@ -651,6 +676,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     setGrid,
     setOrigin,
     originTips,
+    project,
+    outline,
     setGhosts,
     setFill,
     markTrainCell,
