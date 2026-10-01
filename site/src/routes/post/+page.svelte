@@ -1,4 +1,5 @@
 <script>
+	import Highlight from "$lib/components/Highlight.svelte";
 	import KnownTracks from "$lib/components/KnownTracks.svelte";
 	import LayoutViewer from "$lib/components/LayoutViewer.svelte";
 	import PieceCardGrid from "$lib/components/PieceCardGrid.svelte";
@@ -80,7 +81,7 @@
 />
 <p>
 	The coordinates of the train are given by how many cubes along it is from the
-	starting highlighted cube, expressed in x, y and z. It's directional, so
+	starting <Highlight colour="grid-color">highlighted cube</Highlight>, expressed in x, y and z. It's directional, so
 	negative numbers means it going in the other direction that the arrows show.
 </p>
 
