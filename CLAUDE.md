@@ -529,12 +529,22 @@ stuck track, so the key does nothing, while pasting a *different* shape over it 
 
 **A piece with nowhere to go is drawn where it was asked to go**, overlapping whatever it
 ran into, pulsing between `ALARM` and `ALARM_FLASH`. Owen's call, over blanking the viewer
-or drawing the legal prefix: the overlap is the explanation. Three things about it:
+or drawing the legal prefix: the overlap is the explanation. It is not `Sketch`'s alone:
+`TrackViewer` takes it as an `alarm` prop (a cube ID), so `Layout` pulses too, whatever
+its transition. Four things about it:
 
-- The pulse is `recolour` on **one** cube about twice a second: a swap to that colour's
-  shared geometry, so nothing is rebuilt.
-- It lives inside `growPhase` rather than in a phase of its own, so that exactly one thing
-  ever writes to a cube in a frame — the same rule `onPickUp` exists to protect.
+- The pulse is `restyle` on **one** cube about twice a second: a swap to that colour's
+  shared geometry and to a material, so nothing is rebuilt.
+- **What it hit shows through it.** The two pieces share faces exactly, and left to the
+  depth buffer that is z-fighting — stripes of both. So once down, the rejected piece is
+  drawn as a `clash`: swollen by `ALARM_SWELL` about the middle of its bounds, so no face
+  is shared, and see-through at `ALARM_OPACITY` (`paint.clash` in `stage.js`), so the
+  colours blend. Owen's call, over a `polygonOffset` that took the cell in turns: that
+  left small red patches showing through the other piece's rail, which read as strange.
+- It is `alarmFor` in `build.js`, run by `trackPhase`, `buildPhase` and `growPhase` each
+  rather than by a phase of its own, so that exactly one thing ever writes to a cube in a
+  frame — the same rule `onPickUp` exists to protect. Because any viewer can be handed one,
+  every `TrackViewer` gates its loop on being on screen, not only one that animates at mount.
 - **Which step is at fault is not always which cube is.** A cross traversed a third time
   places nothing, so what flashes is the cross already in that cell. `openScene` handles
   that; `cubeIds` is `identify` with revisits kept as `null` so the two line up.
@@ -553,7 +563,7 @@ wrong way and the largest single step was 0.009.
 the keystroke that closes and drives from there.
 
 Under `prefers-reduced-motion` the arrivals are instant, the camera snaps instead of
-panning, and the rejected piece is a flat red rather than a pulsing one — a pulsing element
+panning, and the rejected piece is a steady see-through red rather than a pulsing one — a pulsing element
 is precisely what that preference is about.
 
 **Taking a piece off slides it back out.** `showGrown` does not `drop` the cubes past the

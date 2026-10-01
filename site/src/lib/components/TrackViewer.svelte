@@ -28,14 +28,14 @@
     //           `{ pace, speed, handover, drop, reach }`.
     //   grow    the layout *extends* the one that is there: whatever the two have in
     //           common is left standing and only the rest arrives. The one kind whose
-    //           camera moves — see `showGrown`. `{ pace, speed, from, offender }`.
+    //           camera moves — see `showGrown`. `{ pace, speed, from }`.
     //
     // `speed` is one tempo over the whole assembly (see `timingFor` in build.js).
     // `handover` is when the build starts, measured from the moment the track is let
     // go of: the two run *together*. `reach` is how far the fixed frame reaches, in
     // cells — unset, the JS solver's own box constraint (see `fixedFrame`). `from` is
     // the box a growing frame starts from — unset, the tight one a sketch starts in
-    // (see `growBox`). `offender` is the piece the model rejects, flashed red.
+    // (see `growBox`).
     transition = { kind: 'redraw' },
     // The train, as callbacks, or null for none. Read once, at mount.
     //   at()       who holds it: a piece index to hold it there, null to let it drive.
@@ -69,11 +69,18 @@
     // outside what is drawn with a leader line to the middle of `cell`, and kept
     // there as the camera moves. See `placeLabels`.
     notes = [],
+    // The ID of a cube the model has rejected, `5L` say, or null. It is drawn where
+    // it was asked to go and pulses there, whatever the transition — see `alarmFor`
+    // in build.js. Read when a layout is shown.
+    alarm = null,
   } = $props();
 
   // The settings a transition leaves out.
   const DEFAULTS = { pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 };
   const settings = () => ({ ...DEFAULTS, ...transition });
+  // What a phase is told of the rejected piece. Held still for a reader who has
+  // asked for reduced motion: a pulsing element is the whole of what that is about.
+  const flagged = () => alarm && { id: alarm, pulse: !reduced };
 
   // How long the collapse is simulated for at the outside.
   //
@@ -132,17 +139,15 @@
 
   /**
    * The four kinds of transition. Each says how it shows a layout, where it frames
-   * (null for one that frames itself), what it loads first, and whether it animates
-   * with no train on it — the assembly being the animation. A reader who has asked
+   * (null for one that frames itself) and what it loads first. A reader who has asked
    * for reduced motion gets the redraw from the two that would otherwise assemble,
    * and a tumble with nothing standing has nothing to knock down.
    */
   const CHANGES = {
-    redraw: { show: showStatic, frame: () => camera, animates: false },
+    redraw: { show: showStatic, frame: () => camera },
     build: {
       show: next => (reduced ? showStatic : showBuilt)(next),
       frame: () => camera,
-      animates: true,
     },
     tumble: {
       show: next => (shown && !reduced ? showSequenced : showStatic)(next),
@@ -153,9 +158,8 @@
         return fixedFrame({ drop: Number(drop), reach });
       },
       load: async () => ({ tumblePhase } = await import('../render/tumble.js')),
-      animates: true,
     },
-    grow: { show: showGrown, frame: null, animates: true },
+    grow: { show: showGrown, frame: null },
   };
 
   /**
@@ -198,13 +202,13 @@
       if (cube) leaving.push({ cube, piece: before[i] });
     }
 
-    const { pace, speed, from, offender } = settings();
+    const { pace, speed, from } = settings();
     stage.run([growPhase(stage, next, {
       leaving,
       pace: Number(pace),
       speed: Number(speed),
       drive: Boolean(train),
-      alarm: offender?.id ?? null,
+      alarm: flagged(),
       instant: reduced,
     })]);
 
@@ -221,14 +225,18 @@
   /** Draw it finished and drive it, off an emptied stage. */
   function showStatic(next) {
     stage.clear();
-    stage.run([trackPhase(stage, next, { drive: Boolean(train), trainAt: train?.at, onTrainAt: train?.onAt })]);
+    stage.run([trackPhase(stage, next, {
+      drive: Boolean(train), trainAt: train?.at, onTrainAt: train?.onAt, alarm: flagged(),
+    })]);
   }
 
   /** Empty the stage and click the whole layout together, every piece a mint. */
   function showBuilt(next) {
     stage.clear();
     const { pace, speed } = settings();
-    stage.run([buildPhase(stage, next, { pace: Number(pace), speed: Number(speed), drive: Boolean(train) })]);
+    stage.run([buildPhase(stage, next, {
+      pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(),
+    })]);
   }
 
   /**
@@ -249,6 +257,7 @@
       delay: Number(handover),
       onPickUp: collapse.release,
       drive: Boolean(train),
+      alarm: flagged(),
     }))]);
   }
 
@@ -285,8 +294,10 @@
 
         // Animate only what is on screen. A page of viewers each running its own
         // rAF loop for ever is the one thing that would make this unusable on a
-        // phone; a still viewer costs nothing.
-        if ((train || change.animates) && !reduced) {
+        // phone; a still viewer costs nothing. Every viewer is gated, not only one
+        // that animates at mount, because any can come to: a static one is handed a
+        // rejected piece, which pulses, as soon as its shape stops being legal.
+        if (!reduced) {
           // Runs while both hold. Each signal re-checks the pair rather than only
           // stopping, because the observer does not fire again when the page comes
           // back: switching desktops leaves the viewer exactly as in view as it was.

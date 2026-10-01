@@ -241,6 +241,38 @@ function departuresFor(leaving, { beat, flight }) {
   });
 }
 
+// A piece the model has rejected is drawn where it was asked to go, overlapping
+// whatever it ran into, so there the two pieces' faces lie in the very same planes.
+// Left to the depth buffer that is stripes of both, shifting as the camera moves. So
+// once it is down it is drawn as a clash — a touch larger and see-through (see
+// `ALARM_SWELL`) — and the piece it hit shows through it as it pulses.
+const STEADY = { color: ALARM, look: 'clash' };
+const FLASH = { color: ALARM_FLASH, look: 'clash' };
+
+/**
+ * The rejected piece saying so, from `from` on: a function of the phase's clock that
+ * restyles the cube when its half of the pulse changes, and says whether it still
+ * wants frames. `alarm` is `{ id, pulse }`, or null for none; `pulse` false holds it
+ * at `STEADY`, which is what a reader who has asked for reduced motion gets.
+ *
+ * Each phase runs its own, because a cube must only ever have one thing writing to
+ * it in a frame — and the phase is what owns the cube.
+ */
+function alarmFor(stage, slots, alarm, from = () => 0) {
+  const slot = alarm && slots.find(s => s.id === alarm.id);
+  if (!slot) return null;
+  const starts = from(slot);
+  let lit = null;
+  return elapsed => {
+    if (elapsed < starts) return true;
+    const half = ALARM_PERIOD / 2;
+    const want = alarm.pulse && Math.floor((elapsed - starts) / half) % 2 === 1 ? FLASH : STEADY;
+    if (want !== lit) stage.cube(slot.id, slot).restyle(want);
+    lit = want;
+    return alarm.pulse;
+  };
+}
+
 /**
  * A finished track, drawn all at once and driven — no assembly at all.
  *
@@ -256,10 +288,16 @@ function departuresFor(leaving, { beat, flight }) {
  * whatever its length, then jumps to the next one's entry — and `onTrainAt`
  * is told the piece it is on, every frame, so a slider can follow. A train standing
  * on a piece is written once, when it gets there, so it costs no draws.
+ *
+ * `alarm` is a rejected piece to flag — see `alarmFor`. A track with one never
+ * closes, so it is never driven.
  */
-export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } = {}) {
-  for (const slot of slotsFor(stage, pieces)) finish(stage, slot);
-  if (!drive) return { advance: () => false };
+export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, alarm = null } = {}) {
+  const slots = slotsFor(stage, pieces);
+  for (const slot of slots) finish(stage, slot);
+  const flag = alarmFor(stage, slots, alarm);
+  flag?.(0);
+  if (!drive) return { advance: (_, elapsed) => (flag?.(elapsed) ? undefined : false) };
 
   const driver = createDriver(stage);
   driver.setRoute(pieces);
@@ -319,11 +357,9 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt } =
  * phase disposes them — at the end of the slide, or at once if it is itself
  * replaced first, so a quick second change never strands one half-way out.
  *
- * `alarm` is the ID of a cube the model has rejected — a piece that has been asked
- * to go somewhere it cannot. It pulses between two reds from the moment it lands
- * and does not stop, so the phase never finishes while one is showing. It is done
- * here rather than in a phase of its own because a cube must only ever have one
- * thing writing to it in a frame.
+ * `alarm` is a cube the model has rejected — a piece that has been asked to go
+ * somewhere it cannot; see `alarmFor`. It pulses from the moment it lands and does
+ * not stop, so the phase never finishes while one is pulsing.
  */
 export function growPhase(stage, pieces, {
   pace = PACE, speed = 1, drive = false, alarm = null, instant = false, leaving = [],
@@ -354,11 +390,9 @@ export function growPhase(stage, pieces, {
   }
   arriving.sort((a, b) => a.at - b.at);
 
-  const alarmed = alarm ? slots.find(slot => slot.id === alarm) : null;
   // It is minted in ALARM already — `openScene` paints it — so the first repaint
   // due is the pale one, half a period after it lands.
-  let lit = ALARM;
-  const alarmFrom = alarmed && (arriving.includes(alarmed) ? alarmed.lands : 0);
+  const flag = alarmFor(stage, slots, alarm, slot => (arriving.includes(slot) ? slot.lands : 0));
 
   const driver = drive ? createDriver(stage) : null;
   const closes = arriving.reduce((last, s) => Math.max(last, s.lands), clear) + timing.hold;
@@ -366,15 +400,6 @@ export function growPhase(stage, pieces, {
   let next = 0;
   let flying = [];
   let closedAt = null;
-
-  function pulse(elapsed) {
-    if (elapsed < alarmFrom) return;
-    const half = ALARM_PERIOD / 2;
-    const want = Math.floor((elapsed - alarmFrom) / half) % 2 === 0 ? ALARM : ALARM_FLASH;
-    if (want === lit) return;
-    stage.cube(alarmed.id, alarmed).recolour(want);
-    lit = want;
-  }
 
   function leave(elapsed) {
     for (const d of departing) {
@@ -414,14 +439,8 @@ export function growPhase(stage, pieces, {
         });
       }
 
-      // A piece that cannot go down keeps saying so. Not under `instant`, which is
-      // what a reader who has asked for reduced motion gets: it stays the flat red
-      // it was minted in, because a pulsing element is the whole of what that
-      // preference is about.
-      if (alarmed && !instant) {
-        pulse(elapsed);
-        return undefined;
-      }
+      // A piece that cannot go down keeps saying so.
+      if (flag?.(elapsed)) return undefined;
       if (!driver) {
         const settled = next === arriving.length && !flying.length && !leavingStill();
         return instant || settled ? false : undefined;
@@ -441,13 +460,15 @@ export function growPhase(stage, pieces, {
 
 /**
  * A track clicking itself together. Pieces already on the stage are picked up off
- * the floor; anything else is minted from off-frame.
+ * the floor; anything else is minted from off-frame. `alarm` is a rejected piece to
+ * flag once it has landed — see `alarmFor`.
  */
 export function buildPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = true, delay = 0, onPickUp = null,
+  pace = PACE, speed = 1, drive = true, delay = 0, onPickUp = null, alarm = null,
 } = {}) {
   const timing = timingFor(pace, speed, delay);
   const slots = slotsFor(stage, pieces, timing);
+  const flag = alarmFor(stage, slots, alarm, slot => slot.lands);
   const driver = drive ? createDriver(stage) : null;
   // The train sets off once the loop is closed, which is the *last* landing —
   // and with two kinds of arrival that is no longer simply the last piece.
@@ -491,6 +512,7 @@ export function buildPhase(stage, pieces, {
         return true;
       });
 
+      if (flag?.(elapsed)) return undefined;
       if (!driver) return next === slots.length && !flying.length ? false : undefined;
       if (closedAt === null && slots.length && elapsed >= closes) {
         closedAt = elapsed;

@@ -25,7 +25,7 @@ import { createStage, together, OVERLAY } from '../site/src/lib/render/stage.js'
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT, STEP } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
-import { ALARM_PERIOD, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
+import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
 import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
@@ -797,7 +797,7 @@ function typing({ pace = 0.1 } = {}) {
     }
 
     stage.run([growPhase(stage, view.pieces, {
-      pace, leaving, drive: view.closed, alarm: view.offender?.id ?? null,
+      pace, leaving, drive: view.closed, alarm: view.offender && { id: view.offender.id, pulse: true },
     })]);
     stage.start();
     shown = view.pieces;
@@ -958,6 +958,65 @@ test('a piece with nowhere to go is drawn there, and pulses', () => {
 
   // And it really is drawn on top of the first curve rather than off to one side.
   assert.deepEqual(stage.cubes.get('5L').position, stage.cubes.get('1L').position);
+});
+
+// The rejected piece lies exactly on top of the one it ran into, so left alone the
+// two would share faces and the depth buffer would draw stripes of both. Once down,
+// it is drawn a touch larger and see-through, so they never share a face and the
+// piece it hit shows through it.
+const widthOf = mesh => {
+  mesh.geometry.computeBoundingBox();
+  return mesh.geometry.boundingBox.max.x - mesh.geometry.boundingBox.min.x;
+};
+
+/** Is this mesh drawn as a clash over `under`, a piece of the same type? */
+const clashing = (mesh, under) => mesh.material.transparent && mesh.material.opacity < 1
+  && Math.abs(widthOf(mesh) / widthOf(under) - ALARM_SWELL) < 1e-6;
+
+const ALARMED = {
+  'a finished drawing': (stage, pieces, alarm) => trackPhase(stage, pieces, { drive: false, alarm }),
+  'a build': (stage, pieces, alarm) => buildPhase(stage, pieces, { drive: false, alarm }),
+};
+
+for (const [name, phaseOf] of Object.entries(ALARMED)) {
+  test(`a rejected piece in ${name} is drawn see-through over what it hit, and pulses`, () => {
+    const clock = fakeClock();
+    const { stage } = staged();
+    const view = openScene('LLLLL');
+    stage.run([phaseOf(stage, view.pieces, { id: view.offender.id, pulse: true })]);
+    stage.start();
+    clock.run(1);
+
+    const offender = stage.cubes.get('5L').mesh.mesh;
+    const others = ['1L', '2L', '3L', '4L'].map(id => stage.cubes.get(id).mesh.mesh);
+    let flashes = 0;
+    let showing = offender.geometry;
+    clock.run(ALARM_PERIOD * 2, () => {
+      assert.ok(clashing(offender, others[0]), 'it is not drawn swollen and see-through');
+      if (offender.geometry !== showing) flashes += 1;
+      showing = offender.geometry;
+    });
+    assert.ok(flashes >= 3 && flashes <= 5, `${flashes} repaints over two periods`);
+    for (const [i, mesh] of others.entries()) {
+      assert.equal(mesh.material.transparent, false, `cube ${i} is see-through`);
+    }
+    assert.equal(clock.running(), true, 'the pulse stopped');
+  });
+}
+
+test('held still, a rejected piece is see-through dark red, and the drawing finishes', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  const view = openScene('LLLLL');
+  stage.run([trackPhase(stage, view.pieces, { drive: false, alarm: { id: view.offender.id, pulse: false } })]);
+  const offender = stage.cubes.get('5L').mesh.mesh;
+  const held = offender.geometry;
+  stage.start();
+  clock.run(ALARM_PERIOD * 2);
+
+  assert.ok(clashing(offender, stage.cubes.get('1L').mesh.mesh), 'it is not drawn swollen and see-through');
+  assert.equal(offender.geometry, held, 'it was repainted');
+  assert.equal(clock.running(), false, 'a still drawing is asking for frames');
 });
 
 test('a stuck track keeps asking for frames, and an unstuck one stops', () => {

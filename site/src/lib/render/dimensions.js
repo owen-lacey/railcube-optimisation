@@ -75,6 +75,13 @@ export const ALARM = '#dc2626';
 export const ALARM_FLASH = '#fca5a5';
 export const ALARM_PERIOD = 0.9;  // seconds for a full dark-pale-dark cycle
 
+// The piece it is drawn over shows through it. It lies exactly on top of whatever it
+// ran into, so it is swollen a little about its own middle — enough that the two
+// never share a face for the depth buffer to fight over — and drawn see-through, so
+// the colours blend rather than one piece's faces poking through the other's.
+export const ALARM_SWELL = 1.05;  // times its own size
+export const ALARM_OPACITY = 0.6;
+
 // The one light rig, shared by every viewer so there is a single number to tune.
 //
 // A face is shaded `base × (ambient + directional × max(0, n·L̂)) / π`, in linear

@@ -74,11 +74,22 @@ export function carriedShade(_poly, n, base) {
 // the page — which is also what makes a repaint free: it is a swap to another one.
 const pieceGeometry = new Map();
 
-/** The geometry of a `type` piece painted `hex`, authored about its own cube. */
-export function geometryFor(type, hex) {
-  const key = `${type}|${hex}`;
-  if (!pieceGeometry.has(key)) pieceGeometry.set(key, soupGeometry(GEOMETRY[type](hex)));
+/**
+ * The geometry of a `type` piece painted `hex`, authored about its own cube, and
+ * scaled by `swell` about the middle of its own bounds.
+ */
+export function geometryFor(type, hex, swell = 1) {
+  const key = `${type}|${hex}|${swell}`;
+  if (!pieceGeometry.has(key)) pieceGeometry.set(key, swollen(soupGeometry(GEOMETRY[type](hex)), swell));
   return pieceGeometry.get(key);
+}
+
+function swollen(geometry, swell) {
+  if (swell === 1) return geometry;
+  geometry.computeBoundingBox();
+  const middle = geometry.boundingBox.getCenter(new Vector3());
+  return geometry.translate(-middle.x, -middle.y, -middle.z).scale(swell, swell, swell)
+    .translate(middle.x, middle.y, middle.z);
 }
 
 /** A rotation basis (the images of the local axes) and a position, as one matrix. */
@@ -106,6 +117,8 @@ export function movingMesh(scene, geometry, material, basis, position) {
     },
     /** Show a different geometry in the same place — a repaint, for a piece pointed at. */
     reshape(next) { mesh.geometry = next; },
+    /** Draw it with a different material — for a piece drawn see-through. */
+    repaint(next) { mesh.material = next; },
     dispose() { mesh.removeFromParent(); },
   };
 }

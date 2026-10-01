@@ -123,7 +123,8 @@
 >
   <TrackViewer
     pieces={view.pieces}
-    transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR, offender: view.offender }}
+    transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR }}
+    alarm={view.offender?.id ?? null}
     train={view.closed ? {} : null}
     controls={attachControls}
     aspect={shapeOfViewer}

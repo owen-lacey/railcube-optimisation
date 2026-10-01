@@ -56,6 +56,7 @@
       origin={result.scene.origin ?? null}
       train={result.scene.closed ? train : null}
       {transition}
+      alarm={result.scene.offender?.id ?? null}
       {controls}
       {aspect}
       {paused}

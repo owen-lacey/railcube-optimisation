@@ -40,7 +40,7 @@ import { cellBox, cellFace } from './grid.js';
 import { backdropOf } from './blueprint.js';
 import { PROJ } from '../../../../src/track.js';
 import { originCell, axisArrows, axisAnchor, LABEL_SPOTS } from './axes.js';
-import { TRAIN_CELL_INSET, LIGHT } from './dimensions.js';
+import { TRAIN_CELL_INSET, LIGHT, ALARM_SWELL, ALARM_OPACITY } from './dimensions.js';
 import { toWorld } from './vec.js';
 import { trainAt } from './rail.js';
 import { trainBody } from './train.js';
@@ -137,6 +137,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
 
   const paint = {
     solid: new MeshLambertMaterial({ vertexColors: true }),
+    // A piece drawn over another (one the model has rejected), which shows through.
+    clash: new MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: ALARM_OPACITY }),
     // The driven train's lighting is baked into its colours, so it is drawn unlit.
     carried: new MeshBasicMaterial({ vertexColors: true }),
     grid: overlay(theme.grid, theme.gridOpacity, once),
@@ -229,9 +231,13 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
         made.position = at;
         invalidate();
       },
-      // Repaint where it stands: a swap to that colour's shared geometry.
-      recolour(next) {
-        mesh.reshape(geometryFor(type, next));
+      // Repaint where it stands: a swap to that colour's shared geometry, drawn as
+      // a `solid` piece or as a `clash` — swollen and see-through, over whatever it
+      // ran into.
+      restyle({ color: next, look = 'solid' }) {
+        const clash = look === 'clash';
+        mesh.reshape(geometryFor(type, next, clash ? ALARM_SWELL : 1));
+        mesh.repaint(clash ? paint.clash : paint.solid);
         made.color = next;
         invalidate();
       },

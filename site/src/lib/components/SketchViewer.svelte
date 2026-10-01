@@ -85,7 +85,8 @@
 
 <TrackViewer
   pieces={view.pieces}
-  transition={{ kind: 'grow', pace, speed, offender: view.offender }}
+  transition={{ kind: 'grow', pace, speed }}
+  alarm={view.offender?.id ?? null}
   train={view.closed ? {} : null}
   {aspect}
   {controls}
