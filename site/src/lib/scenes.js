@@ -349,7 +349,7 @@ export function pieceMove(type) {
     pieces,
     drive: false,
     ghosts: [
-      { ...before, type, tint: 'before' },
+      { ...before, type, tint: 'before', floor: false },
       { ...after, type: 'straight', tint: 'after', floor: false },
     ],
     grid,

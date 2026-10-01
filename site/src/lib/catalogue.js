@@ -84,12 +84,12 @@ const AXES = [
   { axis: 0, more: 'right', less: 'left' },
   { axis: 1, more: 'up', less: 'down' },
 ];
-const FACING = { L: 'left', R: 'right', U: 'upwards', D: 'downwards', B: 'backwards' };
+const TURNING = { L: 'left', R: 'right', U: 'upwards', D: 'downwards', B: 'backwards' };
 
 /**
  * What one piece does to the train, entered at the start pose: how far it moves
  * between riding over the piece and riding over the next one, and which way it
- * faces afterwards if that has changed. Read off the model, never written out.
+ * turns afterwards if that has changed. Read off the model, never written out.
  */
 export function describeMove(type) {
   const before = { cell: startCell('DF'), pose: 'DF' };
@@ -99,8 +99,8 @@ export function describeMove(type) {
     .map(({ axis, more, less }) => ({ n: to[axis] - from[axis], more, less }))
     .filter(({ n }) => n !== 0)
     .map(({ n, more, less }) => `${Math.abs(n)} ${n > 0 ? more : less}`);
-  const facing = after.pose[1] === 'F' ? '' : `, facing ${FACING[after.pose[1]]}`;
-  return `Train moves ${moved.join(' and ')}${facing}`;
+  const turning = after.pose[1] === 'F' ? '' : `, turning ${TURNING[after.pose[1]]}`;
+  return `Train moves ${moved.join(' and ')}${turning}`;
 }
 
 // ---- A pose, in words -------------------------------------------------------
