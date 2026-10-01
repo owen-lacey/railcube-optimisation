@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { POSES, isValidPose, startCell, step } from "../src/track.js";
-import { describeMove, describePose } from "../site/src/lib/catalogue.js";
+import { describeDelta, describeMove, describePose } from "../site/src/lib/catalogue.js";
 import { pieceMove, poseCycle, poseGhost } from "../site/src/lib/scenes.js";
 
 // Owen's wording, with his convention of digits and upwards/downwards.
@@ -71,4 +71,30 @@ test("a pose is worded as its face and heading, with its code", () => {
 	assert.equal(describePose("UR"), "up face, heading right (UR)");
 	assert.equal(describePose("BD"), "back face, heading down (BD)");
 	assert.equal(describePose("LU"), "left face, heading up (LU)");
+});
+
+test("a move is written as the change from (x, y, z), in the reader's frame", () => {
+	const start = startCell("DF");
+	const after = (type) => step(start, "DF", type).cell;
+	assert.equal(describeDelta(start, start), "(x, y, z)");
+	// Two left and one forwards: x is left and y forwards.
+	assert.equal(describeDelta(start, after("leftCurve")), "(x + 2, y + 1, z)");
+	assert.equal(describeDelta(start, after("rightCurve")), "(x − 2, y + 1, z)");
+	assert.equal(describeDelta(start, after("insideCurve")), "(x, y, z + 1)");
+	assert.equal(describeDelta(start, after("outsideCurve")), "(x, y + 1, z − 2)");
+});
+
+test("from every pose, the lattice holds the piece and both train cells, and the move is the model's", () => {
+	const origin = [0, 0, 0];
+	for (const pose of POSES) {
+		for (const type of Object.keys(CAPTIONS)) {
+			const { pieces, ghosts, grid, after } = pieceMove(type, { pose, cell: origin });
+			assert.deepEqual(after, step(origin, pose, type));
+			for (const cell of [...pieces[0].material, ...ghosts.map((g) => g.cell)]) {
+				cell.forEach((v, a) =>
+					assert.ok(v >= grid.lo[a] && v <= grid.hi[a], `${pose} ${type}: ${cell}`)
+				);
+			}
+		}
+	}
 });
