@@ -488,15 +488,25 @@ type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `Sketch
 together with), `TumbleViewer.svelte` and `BuildViewer.svelte`. The stories are plain JS CSF
 files beside them.
 
-`TrackViewer` mounts a stage one way and shows a layout three, chosen by two flags, which is
-why the wrappers stay thin rather than becoming copies of the plumbing. Plain: new pieces
-are a redraw off an emptied stage. `sequence`: they are a rearrangement — the old layout
-collapses and the new one is built out of what falls. `grow`: they are an *extension* —
-whatever the two layouts have in common is left standing, untouched, and only the rest
-arrives. `sequence` also decides whether `tumble.js` is imported at all: that module reaches
-`cannon-es`, so it is loaded dynamically on mount and only when sequencing, which keeps a
-physics engine out of a page of static piece cards — and out of `Sketch`, which never drops
-anything.
+`TrackViewer` mounts a stage one way and shows a layout four, chosen by one `transition`
+object, `{ kind, ...that kind's settings }`, and looked up in its `CHANGES` table, which is
+why the wrappers stay thin rather than becoming copies of the plumbing. `redraw`: new pieces
+are a redraw off an emptied stage. `build`: they are assembled from off the frame. `tumble`:
+they are a rearrangement — the old layout collapses and the new one is built out of what
+falls. `grow`: they are an *extension* — whatever the two layouts have in common is left
+standing, untouched, and only the rest arrives. A tumble is the only kind that imports
+`tumble.js`: that module reaches `cannon-es`, so it is loaded dynamically on mount, which
+keeps a physics engine out of a page of static piece cards — and out of `Sketch`, which
+never drops anything. The train is a `train` object of callbacks (`at`, `onAt`, `onCell`,
+`onPose`) or null for none, and handling is a `controls` callback or null — Owen prefers
+objects and callbacks to boolean props.
+
+`LayoutViewer` is a viewing pane and a caption: a `scene` factory (`layoutScene`, `cellScene`,
+`axesScene` in `scenes.js`), the `transition`, `train` and `controls` it forwards, and a
+`caption` snippet given the scene, rendered as `LayoutCard`'s footer. Every figure the post
+uses is its own entry component over it — `TrackFigure`, `TrainCoordinates` (which owns the
+train's state and puts `TrainScrubber` in the caption), `KnownTracks` — so the post never
+configures a viewer directly.
 
 **Whether the layout changed cannot be answered by identity, and getting that wrong is not
 a wasted redraw.** `TrackViewer` keys on `type`+`pose`+`cell` per piece (`keyOf`). The mount
@@ -563,8 +573,8 @@ on the stage but not exactly at its slot now finishes from where it got to.
 ### Clicking a track together: `TrackBuilder`
 
 `Sketch` with buttons for a keyboard: six letter buttons in the pieces' colours and a
-backspace (Lucide's `delete` icon, from `@lucide/svelte`), over `TrackViewer grow drive
-interactive`, and no caption. It also takes the six letters, the arrows as a d-pad
+backspace (Lucide's `delete` icon, from `@lucide/svelte`), over `TrackViewer` with a grow
+transition and `attachControls`, and no caption. It also takes the six letters, the arrows as a d-pad
 (↑ straight, ← left curve, → right curve) and Backspace, with no click needed: `keys.js`
 gives the page's keys to whichever registered builder has the largest share of itself in
 view, if that is more than half — otherwise nobody has them and the arrows scroll the page.
@@ -578,7 +588,7 @@ post is Owen's call.
 
 ### Handling a viewer: `render/controls.js`
 
-`interactive` means `attachControls(host, stage)`, on `@use-gesture/vanilla`: one-pointer
+`controls={attachControls}` means `attachControls(host, stage)`, on `@use-gesture/vanilla`: one-pointer
 drag orbits, pinch or wheel zooms, two fingers or a right-/shift-drag pans. A pan is
 measured in `stage.zoom()`, the zoom actually applied.
 
@@ -780,7 +790,7 @@ settle.
 
 **The camera never moves, and the frame is not derived from what is being shown** — *in a
 rearrangement*. `Sketch` is the one exception and it is Owen's, asked for by name; the
-scope of everything below is `sequence` mode, and the difference is what is happening on
+scope of everything below is a tumble, and the difference is what is happening on
 screen. A rearrangement replaces the whole shape at once, so a derived frame moves every
 time you type and moves *while eighteen cubes are collapsing*. A sketch only ever extends,
 so a grow-only box converges and then holds. Attempt 2 below was rejected for `Layout` and
@@ -788,7 +798,7 @@ is right for `Sketch`; that is not a contradiction, and do not "fix" either to m
 other. That is
 `fixedFrame` in `scenes.js`: a box reaching `REACH` = 6 cells around the start cell, from the
 ground up. `TrackViewer` applies it once at mount and nothing touches it again — the framing
-effect deliberately reads neither `pieces` nor `camera` in sequencing mode, so a shape change
+effect deliberately reads neither `pieces` nor `camera` for a tumble, so a shape change
 has nothing to reframe. Verified in the browser: **zero** camera writes over 852 frames
 spanning two shape changes.
 
@@ -820,7 +830,7 @@ an 18-cube layout needs about 8×7×9, so a track is drawn smaller than a tight 
 it *and* sits off-centre, because layouts occupy the box asymmetrically. (The tempting middle
 option — have a viewer declare which shapes it will ever show and frame their union up front,
 which is both tight and fixed — was offered and turned down. One constant beats a prop.) This
-is also why `sequence` is opt-in: a static figure leaves it off and gets the tight per-layout
+is also why a tumble is opt-in: a static figure is a redraw and gets the tight per-layout
 frame.
 
 **Nothing is drawn for the floor.** cannon's floor is an infinite plane and needs no mesh; a
