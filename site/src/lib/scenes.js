@@ -368,8 +368,8 @@ export function singlePiece(type, { pose = 'DF', scale = 1 } = {}) {
  * Framed on the lattice with `frame`'s zoom cap lifted: the cap is for layouts, and
  * a scene this small hits it every time and comes out drawn at half the size.
  */
-export function pieceMove(type) {
-  const before = { cell: startCell('DF'), pose: 'DF' };
+export function pieceMove(type, { pose = 'DF', cell = startCell(pose) } = {}) {
+  const before = { cell, pose };
   const after = step(before.cell, before.pose, type);
   const pieces = [{ ...before, type, color: COLORS[type], ...cellsFor(type, before.pose, before.cell) }];
   const grid = extentOf([...pieces, { material: [], train: [before.cell, after.cell] }]);
@@ -382,6 +382,7 @@ export function pieceMove(type) {
       { ...after, type: 'straight', tint: 'after', floor: false },
     ],
     grid,
+    after,
     camera: { ...frameTight(grid), zoom: 42 / diagonal },
   };
 }
