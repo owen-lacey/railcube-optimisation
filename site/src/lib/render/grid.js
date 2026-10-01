@@ -5,8 +5,16 @@
 //
 // Every polygon is single-sided, so each line is a thin square prism rather than a
 // GL line (which would be one pixel wide at any zoom): four side faces, each wound
-// outward, which between them face every way the camera can look from. One prism per full-length line rather
-// than one per cell edge keeps the polygon count to the lines actually visible.
+// outward, which between them face every way the camera can look from.
+//
+// The paint is see-through, so wherever two prisms overlapped they would be drawn
+// twice and come out darker, and wherever none reaches there is a hole. Running
+// each line the full length of the box did both at once: three lines meeting at a
+// corner overlapped along their centres and left the corner's outer part empty. So
+// the lattice is drawn as the solid it is — one prism per cell edge, stopping half
+// a line short of each end, and a cube at every node where lines meet — with only
+// its outside surface: a node's cube has a face on a side only where no line leaves
+// it, which happens only on the box's own faces.
 
 import { CUBE, GRID_W } from './dimensions.js';
 import { toWorld, windToward } from './vec.js';
@@ -19,13 +27,35 @@ const planes = (lo, hi) => Array.from({ length: hi - lo + 2 }, (_, i) => lo - 0.
 /** A project-frame unit vector along one axis. */
 const along = (axis, sign = 1) => [0, 1, 2].map(k => (k === axis ? sign : 0));
 
+/** The two axes other than `axis`. */
+const others = axis => [0, 1, 2].filter(k => k !== axis);
+
 /**
- * One line of the lattice: a prism running along `axis` from `from` to `to`, its
+ * A square of side `2h` about `centre` (cell units), lying across `axis` at
+ * `sign * h` from the centre and wound to face that way, in world units.
+ */
+function square(centre, axis, sign, h) {
+  const [u, v] = others(axis);
+  const corner = (du, dv) => {
+    const p = [...centre];
+    p[axis] += sign * h;
+    p[u] += du * h;
+    p[v] += dv * h;
+    return toWorld(p);
+  };
+  return {
+    vertices: windToward([corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)],
+      toWorld(along(axis, sign))),
+  };
+}
+
+/**
+ * One edge of the lattice: a prism running along `axis` from `from` to `to`, its
  * centre line at `at` in the other two axes. Everything is built in project cell
  * units and only then sent through `toWorld`, so the axis mapping lives in one place.
  */
-function line(axis, from, to, at, half = HALF) {
-  const [u, v] = [0, 1, 2].filter(k => k !== axis);
+function line(axis, from, to, at, half) {
+  const [u, v] = others(axis);
   const point = (a, du, dv) => {
     const p = [0, 0, 0];
     p[axis] = a;
@@ -47,23 +77,36 @@ function line(axis, from, to, at, half = HALF) {
   }));
 }
 
+/** Every point on all three lists of planes. */
+const nodes = cuts => cuts[0].flatMap(a => cuts[1].flatMap(b => cuts[2].map(c => [a, b, c])));
+
+/** The prisms between neighbouring nodes, each stopping `half` short of both. */
+function edges(cuts, half) {
+  return [0, 1, 2].flatMap(axis => nodes(cuts)
+    .filter(at => at[axis] !== cuts[axis].at(-1))
+    .flatMap(at => {
+      const next = cuts[axis][cuts[axis].indexOf(at[axis]) + 1];
+      return line(axis, at[axis] + half, next - half, at, half);
+    }));
+}
+
+/** The faces of each node's cube that no edge leaves from: the box's outside. */
+function joints(cuts, half) {
+  return nodes(cuts).flatMap(at => [0, 1, 2].flatMap(axis => [1, -1]
+    .filter(sign => at[axis] === (sign > 0 ? cuts[axis].at(-1) : cuts[axis][0]))
+    .map(sign => square(at, axis, sign, half))));
+}
+
+/** The lattice on these planes (cell units, ascending per axis), lines `half` cells thick each side. */
+const lattice = (cuts, half) => [...edges(cuts, half), ...joints(cuts, half)];
+
 /**
  * Every line of the lattice around a box of cells, `{ lo, hi }` inclusive, as
- * polygons in world units: `(ny+1)(nz+1) + (nx+1)(nz+1) + (nx+1)(ny+1)` lines of
- * four faces each.
+ * polygons in world units: four faces per cell edge, plus a face at each node for
+ * every side of the box it lies on.
  */
 export function gridLines({ lo, hi }) {
-  const cuts = [0, 1, 2].map(a => planes(lo[a], hi[a]));
-  return [0, 1, 2].flatMap(axis => {
-    const [u, v] = [0, 1, 2].filter(k => k !== axis);
-    const ends = [cuts[axis][0], cuts[axis].at(-1)];
-    return cuts[u].flatMap(pu => cuts[v].flatMap(pv => {
-      const at = [0, 0, 0];
-      at[u] = pu;
-      at[v] = pv;
-      return line(axis, ...ends, at);
-    }));
-  });
+  return lattice([0, 1, 2].map(a => planes(lo[a], hi[a])), HALF);
 }
 
 /**
@@ -71,16 +114,7 @@ export function gridLines({ lo, hi }) {
  * (world units) — the lattice's own lines, only bolder, for picking one cell out.
  */
 export function cellEdges(width) {
-  const half = width / 2 / CUBE;
-  return [0, 1, 2].flatMap(axis => {
-    const [u, v] = [0, 1, 2].filter(k => k !== axis);
-    return [[-0.5, -0.5], [-0.5, 0.5], [0.5, -0.5], [0.5, 0.5]].flatMap(([pu, pv]) => {
-      const at = [0, 0, 0];
-      at[u] = pu;
-      at[v] = pv;
-      return line(axis, -0.5, 0.5, at, half);
-    });
-  });
+  return lattice([0, 1, 2].map(() => [-0.5, 0.5]), width / 2 / CUBE);
 }
 
 /**
@@ -93,20 +127,7 @@ export function cellEdges(width) {
  */
 export function cellBox(inset) {
   const h = 0.5 - inset / CUBE;   // half the box, in cells
-  return [0, 1, 2].flatMap(axis => [1, -1].map(sign => {
-    const [u, v] = [0, 1, 2].filter(k => k !== axis);
-    const corner = (du, dv) => {
-      const p = [0, 0, 0];
-      p[axis] = sign * h;
-      p[u] = du * h;
-      p[v] = dv * h;
-      return toWorld(p);
-    };
-    return {
-      vertices: windToward([corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)],
-        toWorld(along(axis, sign))),
-    };
-  }));
+  return [0, 1, 2].flatMap(axis => [1, -1].map(sign => square([0, 0, 0], axis, sign, h)));
 }
 
 /**
@@ -116,15 +137,6 @@ export function cellBox(inset) {
  */
 export function cellFace(dir, inset) {
   const axis = dir.findIndex(v => v !== 0);
-  const [u, v] = [0, 1, 2].filter(k => k !== axis);
-  const h = 0.5 - inset / CUBE;
-  const corner = (du, dv) => {
-    const p = [0, 0, 0];
-    p[axis] = dir[axis] * h;
-    p[u] = du * h;
-    p[v] = dv * h;
-    return toWorld(p);
-  };
-  const quad = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
-  return [{ vertices: quad }, { vertices: [...quad].reverse() }];
+  const { vertices } = square([0, 0, 0], axis, dir[axis], 0.5 - inset / CUBE);
+  return [{ vertices }, { vertices: [...vertices].reverse() }];
 }

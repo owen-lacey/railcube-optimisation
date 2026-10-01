@@ -31,7 +31,7 @@
 // it is not, an invalidation asks for one frame and draws in it. So a still viewer
 // is drawn once and then costs nothing.
 
-import { AmbientLight, DirectionalLight, Mesh, MeshBasicMaterial, MeshLambertMaterial, OrthographicCamera, Scene, Vector3 } from 'three';
+import { AmbientLight, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, OrthographicCamera, Scene, Vector3 } from 'three';
 import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js';
 import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
@@ -54,7 +54,17 @@ export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 't
 // The overlays draw after the solids, and in this order among themselves. With
 // depth writes off that is what PolyCSS's painter's order came to, measured to the
 // pixel in the fidelity spike.
-const ORDER = { grid: 1, ghost: 2, fill: 3 };
+//
+// Between the ghosts and the fill, the lattice is drawn again into the depth buffer
+// alone (`gridDepth`), pulled `GRID_DEPTH_SLACK` towards the camera, so a fill or a
+// floor patch is hidden wherever a line is in front of it *or just behind it*. A
+// patch's edges run alongside the lattice lines of its own cell face, some nearer
+// than the patch and some farther depending on the view, and either way two layers
+// of one see-through blue read as a darker band. The slack is a line's width or so,
+// far short of a cell, so lines across the cell still show through a patch, and the
+// lattice and ghosts are drawn exactly as before.
+const ORDER = { grid: 1, ghost: 2, gridDepth: 3, fill: 4 };
+const GRID_DEPTH_SLACK = 4;   // world units; a line is GRID_W thick, a cell CUBE
 
 // Made on first use and shared by every stage on the page: the train as it is lit
 // standing (a ghost), and as it is lit carried round a lap (a driven train).
@@ -122,6 +132,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     // The driven train's lighting is baked into its colours, so it is drawn unlit.
     carried: new MeshBasicMaterial({ vertexColors: true }),
     grid: overlay(theme.grid, theme.gridOpacity),
+    // Transparent only so it is drawn in the overlays' pass, in their order.
+    gridDepth: new MeshBasicMaterial({ transparent: true, colorWrite: false }),
     fill: overlay(theme.grid, theme.gridOpacity),
     // The origin's arrows are the lattice's blue at full strength, so they read as
     // solid marks and not as more lattice.
@@ -404,7 +416,20 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   function setGrid(polygons) {
     if (grid) remove([grid]);
     grid = polygons ? fixedMesh(soupGeometry(polygons), paint.grid, { name: OVERLAY.grid, order: ORDER.grid }) : null;
-    if (grid) scene.add(grid);
+    if (grid) {
+      // A child, so it goes with the lattice and shares its geometry. Moved towards
+      // the camera just before it is drawn — after the scene's matrices are updated,
+      // before its own model-view is taken — which an orthographic view does not
+      // show except in depth.
+      const depth = new Mesh(grid.geometry, paint.gridDepth);
+      depth.renderOrder = ORDER.gridDepth;
+      depth.onBeforeRender = (_renderer, _scene, view) => {
+        const toward = view.getWorldDirection(new Vector3()).multiplyScalar(-GRID_DEPTH_SLACK);
+        depth.matrixWorld.copy(grid.matrixWorld).premultiply(new Matrix4().makeTranslation(toward));
+      };
+      grid.add(depth);
+      scene.add(grid);
+    }
     showTrainCell();
     invalidate();
   }
@@ -507,7 +532,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     remove(floors);
     floors = list.filter(({ floor = true }) => floor).map(({ cell, pose, tint }) => fixedMesh(
       soupGeometry(cellFace(PROJ[pose[0]], TRAIN_CELL_INSET)), tint ? paint[tint] : paint.fill,
-      { name: `${OVERLAY.ghost}-floor-${tint ?? 'solid'}`, order: ORDER.ghost, at: toWorld(cell) },
+      { name: `${OVERLAY.ghost}-floor-${tint ?? 'solid'}`, order: ORDER.fill, at: toWorld(cell) },
     ));
     for (const mesh of floors) scene.add(mesh);
     ghosts = list.map(({ type, cell, pose, tint }) => {

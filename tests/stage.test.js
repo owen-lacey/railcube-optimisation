@@ -949,12 +949,31 @@ test('the lattice box holds the train as well as the cubes', () => {
   }
 });
 
-test('the lattice is one prism per line, and stays on the cell boundaries', () => {
+test('the lattice is one closed surface, and stays on the cell boundaries', () => {
   const box = { lo: [-3, 0, -2], hi: [0, 1, 1] };   // 4 × 2 × 4 cells
   const polygons = gridLines(box);
   const [nx, ny, nz] = [4, 2, 4];
-  const lines = (ny + 1) * (nz + 1) + (nx + 1) * (nz + 1) + (nx + 1) * (ny + 1);
-  assert.equal(polygons.length, 4 * lines);
+  // Four faces per cell edge, and one per node per side of the box it lies on.
+  const edges = nx * (ny + 1) * (nz + 1) + ny * (nx + 1) * (nz + 1) + nz * (nx + 1) * (ny + 1);
+  const outside = 2 * ((ny + 1) * (nz + 1) + (nx + 1) * (nz + 1) + (nx + 1) * (ny + 1));
+  assert.equal(polygons.length, 4 * edges + outside);
+
+  // Closed and never doubled: every directed polygon edge is met by exactly one
+  // edge running the other way. A hole at a corner, or two prisms overlapping
+  // there, leaves an edge unmatched.
+  const key = p => p.map(v => v.toFixed(6)).join(',');
+  const directed = new Map();
+  for (const { vertices } of polygons) {
+    vertices.forEach((p, i) => {
+      const k = `${key(p)}>${key(vertices[(i + 1) % vertices.length])}`;
+      directed.set(k, (directed.get(k) ?? 0) + 1);
+    });
+  }
+  for (const [k, n] of directed) {
+    const [a, b] = k.split('>');
+    assert.equal(n, 1, `edge ${k} is drawn ${n} times`);
+    assert.equal(directed.get(`${b}>${a}`), 1, `edge ${k} is open`);
+  }
 
   // Every vertex sits within half a line's width of the box's outer faces.
   const reach = CUBE / 2 + GRID_W / 2 + 1e-9;
@@ -987,6 +1006,12 @@ test('the lattice is one mesh, which clearing the cubes leaves standing', () => 
   assert.deepEqual(handles.filter(h => h.name === OVERLAY.grid), [first, second]);
   assert.equal(first.mesh.material.transparent, true);
   assert.equal(first.mesh.material.depthWrite, false);
+  // Drawn a second time into depth alone, after the ghosts and before the fill.
+  const [depth] = first.mesh.children;
+  assert.equal(depth.geometry, first.mesh.geometry);
+  assert.equal(depth.material.colorWrite, false);
+  assert.equal(depth.material.depthWrite, true);
+  assert.ok(depth.renderOrder > first.mesh.renderOrder);
 });
 
 test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', () => {
@@ -1168,7 +1193,8 @@ test('the arrows stand outside the box\'s corner and reach left, forwards and up
   assert.ok(ax > 3.5 * CUBE && ay < -CUBE / 2 && az < -CUBE / 2, 'the arrows start inside the box');
 });
 
-test('the train cell\'s fill is six outward faces, clear of the cell\'s own', () => {
+test('the train cell\'s fill is six outward faces, clear of the lattice\'s lines', () => {
+  assert.equal(TRAIN_CELL_INSET, GRID_W / 2, 'the fill and the lines overlap, or leave a gap');
   const faces = cellBox(TRAIN_CELL_INSET);
   assert.equal(faces.length, 6);
   const edge = CUBE / 2 - TRAIN_CELL_INSET;

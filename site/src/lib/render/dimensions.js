@@ -55,12 +55,14 @@ export const AXIS_LABEL = 0.4;    // how far past the tip the letter's label sit
 export const AXIS_GAP = 1;        // how far outside the lattice box's corner the arrows start, in cells
 export const ORIGIN_W = 2;        // the origin cell's outline, bolder than an arrow's shaft so the outline reads as bolder than the lattice
 
-// The lattice cell the train is in is filled, this far inside the cell's faces so
-// the fill never lies flat on a cube — and only half the train's clearance, so the
-// floor it marks never lies flat on the train's underside either. Equal to the
+// The lattice cell the train is in is filled, this far inside the cell's faces:
+// half a lattice line, so the fill stops where the lines' inner faces start and
+// the two see-through paints never overlap into a darker band. That also keeps the
+// fill off the cube below, and it must stay under the train's clearance so the
+// floor it marks never lies flat on the train's underside either — equal to the
 // clearance, the two were one plane and z-fought. Colour and opacity are the
 // stylesheet's.
-export const TRAIN_CELL_INSET = TRAIN_CLEAR / 2;
+export const TRAIN_CELL_INSET = GRID_W / 2;
 
 // A piece that cannot go where it has been asked to go, pulsing between these two
 // until it is taken away again.
