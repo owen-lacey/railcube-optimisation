@@ -20,7 +20,7 @@ const pixelRatio = () => Math.min(globalThis.devicePixelRatio ?? 1, 3);
 
 /** The shared renderer, at least `w`×`h` CSS pixels at the current pixel ratio. */
 function fitted(w, h) {
-  renderer ??= new WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+  renderer ??= new WebGLRenderer({ alpha: true, antialias: true, stencil: true, powerPreference: 'high-performance' });
   renderer.setClearColor(0x000000, 0);
   renderer.setScissorTest(true);
   const ratio = pixelRatio();

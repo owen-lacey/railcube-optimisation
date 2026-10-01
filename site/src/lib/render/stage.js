@@ -31,7 +31,7 @@
 // it is not, an invalidation asks for one frame and draws in it. So a still viewer
 // is drawn once and then costs nothing.
 
-import { AmbientLight, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, OrthographicCamera, Scene, Vector3 } from 'three';
+import { AmbientLight, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, OrthographicCamera, ReplaceStencilOp, Scene, Vector3 } from 'three';
 import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js';
 import { createLoop } from './loop.js';
 import { createCamera } from './camera.js';
@@ -100,7 +100,15 @@ export function together(...phases) {
 }
 
 /** A flat, see-through overlay paint. */
-const overlay = (color, opacity) => new MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+const overlay = (color, opacity, stencil = {}) => new MeshBasicMaterial({
+  color, transparent: true, opacity, depthWrite: false, stencilWrite: true, stencilRef: LATTICE_STENCIL, ...stencil,
+});
+
+// Every see-through overlay paints a pixel once: it stamps what it draws and skips what
+// is already stamped, so where two overlap — a line and a fill, or two faces of the
+// lattice itself — the first drawn is the paint, rather than two layers added.
+const LATTICE_STENCIL = 1;
+const once = { stencilFunc: NotEqualStencilFunc, stencilZPass: ReplaceStencilOp };
 
 /** A mesh of fixed polygons, placed by translation alone. */
 function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {}) {
@@ -131,17 +139,17 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     solid: new MeshLambertMaterial({ vertexColors: true }),
     // The driven train's lighting is baked into its colours, so it is drawn unlit.
     carried: new MeshBasicMaterial({ vertexColors: true }),
-    grid: overlay(theme.grid, theme.gridOpacity),
+    grid: overlay(theme.grid, theme.gridOpacity, once),
     // Transparent only so it is drawn in the overlays' pass, in their order.
     gridDepth: new MeshBasicMaterial({ transparent: true, colorWrite: false }),
-    fill: overlay(theme.grid, theme.gridOpacity),
+    fill: overlay(theme.grid, theme.gridOpacity, once),
     // The cell the train is in: the lattice's blue, stronger, so it can be made out.
-    trainCell: overlay(theme.grid, theme.trainCellOpacity),
+    trainCell: overlay(theme.grid, theme.trainCellOpacity, once),
     // The origin's arrows are the lattice's blue at full strength, so they read as
     // solid marks and not as more lattice.
     origin: new MeshBasicMaterial({ color: theme.grid }),
-    before: overlay(theme.ghostBefore, theme.ghostOpacity),
-    after: overlay(theme.ghostAfter, theme.ghostOpacity),
+    before: overlay(theme.ghostBefore, theme.ghostOpacity, once),
+    after: overlay(theme.ghostAfter, theme.ghostOpacity, once),
   };
   const cellGeometry = soupGeometry(cellBox(TRAIN_CELL_INSET));
 
