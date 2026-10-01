@@ -26,17 +26,11 @@
 
 <p>Consider this instead:</p>
 
-<LayoutViewer
-	shape="XSSLISISSOIILSRISSXSISSOSOIRRSROILSL"
-	interactive={true}
-/>
+<LayoutViewer shape="XSSLISISSOIILSRISSXSISSOSOIRRSROILSL" interactive={true} />
 
 <p>Or this:</p>
 
-<LayoutViewer
-	shape="ILSSXOSSSSSIISLRSISOORSOIRRSXIILSLSI"
-	interactive={true}
-/>
+<LayoutViewer shape="ILSSXOSSSSSIISLRSISOORSOIRRSXIILSLSI" interactive={true} />
 
 <p>
 	In fact, I've got a bunch of these ready to use anytime my three year old
@@ -69,7 +63,8 @@
 <p>
 	Imagine our track was in a box divided into cubes the size of a single <PieceTag
 		letter="S"
-	/>. After the train has travelled a track piece, it is in exactly one box.
+	/>. After the train has travelled a track piece, it enters into a single new
+	cube.
 </p>
 
 <LayoutViewer
@@ -78,11 +73,13 @@
 	trainCaption={true}
 	origin={true}
 	scrub={true}
+	interactive={true}
 />
 <p>
 	The coordinates of the train are given by how many cubes along it is from the
-	starting <Highlight colour="grid-color">highlighted cube</Highlight>, expressed in x, y and z. It's directional, so
-	negative numbers means it going in the other direction that the arrows show.
+	starting <Highlight colour="grid-color">highlighted cube</Highlight>,
+	expressed in x, y and z. It's directional, so negative numbers means it going
+	in the other direction that the arrows show.
 </p>
 
 <p>
@@ -91,6 +88,11 @@
 </p>
 
 <PoseCycle />
+
+<p>
+	We can now represent the position & pose of the train piece at any given time.
+	A complete track is one that returns to the origin cube facing DF.
+</p>
 
 <hr />
 
