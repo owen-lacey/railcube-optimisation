@@ -596,6 +596,10 @@ measured in `stage.zoom()`, the zoom actually applied.
 (`{ rotX, rotY, zoomBy, offset }`) and composes it over the description in `applyCamera`
 (`adjusted`): rotation absolute, zoom a multiple of the frame's, target offset. So the stage
 can reframe as it likes and the turn, zoom and pan survive. The defaults are `CAMERA` in `camera.js`.
+Once the view is touched, `TrackViewer` shows a reset button: `stage.reset()` eases the view
+back to `untouched()` over `HOME` (turning the short way round, zoom by ratio), re-reading
+the description each frame, and then drops it to null. It runs while paused, a gesture
+cancels it, and under reduced motion it is instant.
 
 **A camera description is still PolyCSS's `{ zoom, target, 'rot-x', 'rot-y' }`**, kept
 exactly so every camera in `scenes.js` frames the same shot. `polyView` puts an

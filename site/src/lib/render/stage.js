@@ -34,7 +34,7 @@
 import { AmbientLight, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, OrthographicCamera, ReplaceStencilOp, Scene, Vector3 } from 'three';
 import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js';
 import { createLoop } from './loop.js';
-import { createCamera } from './camera.js';
+import { createCamera, viewBetween } from './camera.js';
 import { sharedRenderer } from './renderer.js';
 import { cellBox, cellFace } from './grid.js';
 import { backdropOf } from './blueprint.js';
@@ -178,7 +178,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   }
 
   const {
-    frameTo: applyDescription, applyCamera, view, adjust, applied,
+    frameTo: applyDescription, applyCamera, view, untouched, adjust: adjustView, reset: resetView, touched, applied,
   } = createCamera(camera, size, () => { invalidate(); onCamera?.(); });
 
   /** Where the blueprint's sheet of dots sits under the camera now — see `backdropOf`. */
@@ -197,6 +197,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   let phaseAt = 0;       // loop time the head phase started, so its clock is its own
   let framed = null;     // the camera description in force, or being panned away from
   let pan = null;        // { to, seconds, spent }, null when the camera is still
+  let homing = null;     // { from, seconds, spent }, while a hand-moved view eases back
   let paused = false;
   let lost = 0;          // loop time spent on paused frames, which is not time that passed
 
@@ -322,6 +323,41 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     return true;
   }
 
+  const HOME = 0.5;      // seconds; a reset can undo a long way round, so a little longer
+
+  /** Put a hand-moved view on the camera, taking over from any reset under way. */
+  function adjust(next) {
+    homing = null;
+    adjustView(next);
+  }
+
+  /**
+   * Take the hand off the camera: ease the view back to the shot as described, or
+   * go there at once when `instant`. It eases towards the description as it is on
+   * each frame, so a reframe part-way through is followed rather than undone.
+   */
+  function reset({ instant = false } = {}) {
+    homing = null;
+    if (!touched()) return;
+    if (instant) return resetView();
+    homing = { from: view(), seconds: HOME, spent: 0 };
+    loop.start();
+  }
+
+  /** Advance a reset, and say whether one is still running. */
+  function stepHome(delta) {
+    if (!homing) return false;
+    homing.spent += delta;
+    const t = Math.min(1, homing.spent / homing.seconds);
+    if (t === 1) {
+      homing = null;
+      resetView();
+      return false;
+    }
+    adjustView(viewBetween(homing.from, untouched(), smooth(t)));
+    return true;
+  }
+
   /**
    * Advance the head phase, and move on when it says it is finished.
    *
@@ -332,6 +368,9 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
    * predecessor.
    */
   function tick(delta, elapsed) {
+    // A reset is the reader's own hand on the camera, so like a gesture it moves
+    // whether or not everything else is held.
+    const homeward = stepHome(delta);
     // Paused, a frame is a still: the head phase is drawn where it has got to and
     // the loop stops. That one frame is what puts a train on a track shown while
     // paused, which would otherwise sit unturned at the origin until play. Its delta
@@ -339,12 +378,12 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     if (paused) {
       lost += delta;
       queue[0]?.advance(0, elapsed - lost - phaseAt);
-      return false;
+      return homeward ? undefined : false;
     }
     const now = elapsed - lost;
     // The camera is stepped first and independently: a pan outlives the phase that
     // asked for it, so the loop must not stop while one is still running.
-    const panning = stepPan(delta);
+    const panning = stepPan(delta) || homeward;
     if (!queue.length) return panning ? undefined : false;
     if (queue[0].advance(delta, now - phaseAt) === false) {
       queue.shift().dispose?.();
@@ -602,6 +641,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     zoom: () => applied().zoom,
     view,
     adjust,
+    reset,
+    touched,
     run,
     start: loop.start,
     stop: loop.stop,

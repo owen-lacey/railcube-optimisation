@@ -60,6 +60,21 @@ export function adjusted(described, view) {
 }
 
 /**
+ * A view part-way from `from` to `to`, at `t` in 0..1: the turn the short way
+ * round, the zoom by equal ratios rather than equal steps, the tilt and the pan
+ * straight.
+ */
+export function viewBetween(from, to, t) {
+  const turn = ((((to.rotY - from.rotY) % 360) + 540) % 360) - 180;
+  return {
+    rotX: from.rotX + (to.rotX - from.rotX) * t,
+    rotY: from.rotY + turn * t,
+    zoomBy: from.zoomBy * (to.zoomBy / from.zoomBy) ** t,
+    offset: from.offset.map((v, a) => v + (to.offset[a] - v) * t),
+  };
+}
+
+/**
  * The zoom a description comes to at this viewer size: pixels per world unit.
  * Whichever dimension runs out first decides the fit, so a tall narrow card and a
  * wide short one are both framed by their tighter side.
@@ -133,15 +148,17 @@ export function createCamera(camera, size, onApply) {
     applyCamera();
   }
 
+  /** The view that changes nothing: the description's own shot. */
+  function untouched() {
+    const base = { ...CAMERA, ...described };
+    return { rotX: Number(base['rot-x']), rotY: Number(base['rot-y']), zoomBy: 1, offset: [0, 0, 0] };
+  }
+
   /**
    * The hand-moved view in force — or, when nobody has touched the camera, the one
    * that changes nothing, which is where a first gesture starts from.
    */
-  function currentView() {
-    if (view) return view;
-    const base = { ...CAMERA, ...described };
-    return { rotX: Number(base['rot-x']), rotY: Number(base['rot-y']), zoomBy: 1, offset: [0, 0, 0] };
-  }
+  const currentView = () => view ?? untouched();
 
   /** Put a hand-moved view on the camera. */
   function adjust(next) {
@@ -149,5 +166,13 @@ export function createCamera(camera, size, onApply) {
     applyCamera();
   }
 
-  return { frameTo, applyCamera, view: currentView, adjust, applied: () => applied };
+  /** Take the hand off the camera, back to the shot as described. */
+  function reset() {
+    view = null;
+    applyCamera();
+  }
+
+  return {
+    frameTo, applyCamera, view: currentView, untouched, adjust, reset, touched: () => view !== null, applied: () => applied,
+  };
 }

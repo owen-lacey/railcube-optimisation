@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import { createStage, together } from '../render/stage.js';
   import { readTheme } from '../render/renderer.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
@@ -78,6 +79,9 @@
   let canvas = $state(null);
   let stage = null;
   let ready = $state(false);
+  // Whether someone has turned, zoomed or panned the camera — which is when there
+  // is something for the reset button to undo.
+  let touched = $state(false);
   let failed = $state('');
   let reduced = false;
   // Loaded on mount, and only for a tumble: `tumble.js` reaches cannon-es,
@@ -258,6 +262,7 @@
           onTrainCell: cell => train?.onCell?.(cell),
           onTrainPose: pose => train?.onPose?.(pose),
           onCamera: () => {
+            touched = stage?.touched() ?? false;
             if (origin) scheduleAxisLabels();
             if (blueprint) placeSheet();
           },
@@ -438,6 +443,20 @@
     <span class="axis-label" style:left="{x}px" style:top="{y}px" aria-hidden="true">{name}</span>
   {/each}
 
+  {#if controls && touched}
+    <!-- Its pointer-down stops here, so a click is not also a drag on the viewer. -->
+    <button
+      type="button"
+      class="reset"
+      onpointerdown={event => event.stopPropagation()}
+      onclick={() => stage?.reset({ instant: reduced })}
+      aria-label="Reset the view"
+      title="Reset the view"
+    >
+      <RotateCcw aria-hidden="true" />
+    </button>
+  {/if}
+
   {#if failed}
     <p class="failed">Could not start the 3D view: {failed}</p>
   {/if}
@@ -497,6 +516,23 @@
     color: var(--grid-color);
     pointer-events: none;
     user-select: none;
+  }
+
+  /* Outlined like PlayPause, over a footer-coloured fill so it reads over the dots. */
+  .reset {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 2px solid currentColor;
+    border-radius: 0.5rem;
+    background: var(--card-footer);
+    color: inherit;
+    cursor: pointer;
   }
 
   .failed {

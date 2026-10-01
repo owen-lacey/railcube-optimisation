@@ -91,3 +91,20 @@ test('a hand-moved view survives the stage reframing and the viewer resizing', (
   assert.equal(camera.applied().zoom.toFixed(3), (3 * 2 * 0.5 * 0.88).toFixed(3));
   assert.equal(camera.applied()['rot-y'], 100);
 });
+
+test('a reset takes the hand off the camera, back to the shot as described', () => {
+  const three = new OrthographicCamera();
+  const camera = createCamera(three, () => ({ width: 900, height: 700 }));
+  camera.frameTo({ zoom: 4, target: '1,2,3' });
+  const untouched = camera.applied();
+  const start = camera.view();
+  assert.equal(camera.touched(), false, 'nobody has moved it yet');
+
+  camera.adjust({ ...start, rotX: 20, rotY: 100, zoomBy: 2, offset: [5, 0, 0] });
+  assert.equal(camera.touched(), true);
+
+  camera.reset();
+  assert.equal(camera.touched(), false);
+  assert.deepEqual(camera.applied(), untouched);
+  assert.deepEqual(camera.view(), start, 'the next gesture starts from the frame again');
+});

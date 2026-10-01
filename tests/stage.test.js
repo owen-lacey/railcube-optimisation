@@ -1291,3 +1291,48 @@ test('the train cell\'s fill is six outward faces, clear of the lattice\'s lines
     assert.ok(n.reduce((dot, x, k) => dot + x * centre[k], 0) > 0, 'a face is wound inward');
   }
 });
+
+test('a reset eases the hand-moved view back the short way round, and a gesture takes over from it', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  stage.frameTo({ zoom: 2, target: '0,0,0' });
+  const shot = stage.applied();
+  const home = stage.view();
+
+  // Turned to 300°, which is 15° short of −45° going up, and 345° going down.
+  stage.adjust({ ...home, rotX: 20, rotY: 300, zoomBy: 3, offset: [4, -2, 0] });
+  stage.reset();
+  clock.run(0.25);
+  const midway = stage.view();
+  assert.equal(stage.touched(), true, 'still on its way back');
+  assert.ok(midway.rotY > 300 && midway.rotY < 315, `turned the long way: ${midway.rotY}`);
+  assert.ok(midway.zoomBy > 1 && midway.zoomBy < 3);
+
+  clock.run(0.5);
+  assert.equal(stage.touched(), false, 'the hand is off once it gets there');
+  assert.deepEqual(stage.applied(), shot);
+  assert.equal(clock.running(), false, 'a settled camera stops asking for frames');
+
+  // A gesture part-way back is the reader's, and the reset gives way to it.
+  stage.adjust({ ...home, rotY: 100 });
+  stage.reset();
+  clock.run(0.1);
+  stage.adjust(orbit(stage.view(), 40, 0));
+  const taken = stage.view();
+  clock.run(1);
+  assert.deepEqual(stage.view(), taken, 'the reset carried on over the gesture');
+
+  stage.reset({ instant: true });
+  assert.equal(stage.touched(), false, 'an instant reset is there at once');
+});
+
+test('a reset moves while everything else is paused', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  stage.frameTo({ zoom: 2, target: '0,0,0' });
+  stage.setPaused(true);
+  stage.adjust({ ...stage.view(), rotY: 100 });
+  stage.reset();
+  clock.run(1);
+  assert.equal(stage.touched(), false);
+});
