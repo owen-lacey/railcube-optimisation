@@ -109,10 +109,17 @@ export function openScene(letters) {
   };
 }
 
-/** `openScene`, framed on its cubes: a layout shown for its own sake. */
+/**
+ * `openScene`, framed on its cubes: a layout shown for its own sake. Aimed at the
+ * centre of gravity of its material — every material cell weighing the same — and
+ * zoomed as far in as that aim allows from the default angle.
+ */
 export function layoutScene(letters) {
   const scene = openScene(letters);
-  return { ...scene, camera: frame(scene.pieces) };
+  const cells = scene.pieces.flatMap(p => p.material ?? [cubeOf(p.cell, p.pose)]);
+  const gravity = toWorld([0, 1, 2].map(a => cells.reduce((sum, c) => sum + c[a], 0) / cells.length));
+  const corners = cells.flatMap(c => cornersOf({ lo: c, hi: c }));
+  return { ...scene, camera: frameAbout(corners, gravity) };
 }
 
 /**
@@ -255,6 +262,18 @@ export function frameFit(points) {
   const [cx, cy] = onScreen(mid);
   const shift = offScreen([(across[0] + across[1]) / 2 - cx, (down[0] + down[1]) / 2 - cy]);
   return { zoom, target: mid.map((v, a) => v + shift[a]).join(',') };
+}
+
+/**
+ * A camera aimed at `target` that fits `points` (world units) from the default
+ * angle. `frameFit` centres on the points' screen extent; this keeps `target` in
+ * the middle, so whichever side reaches furthest from it sets the zoom.
+ */
+export function frameAbout(points, target) {
+  const [cx, cy] = onScreen(target);
+  const reach = a => Math.max(...points.map(p => Math.abs(onScreen(p)[a] - [cx, cy][a])));
+  const zoom = Math.min(REFERENCE_WIDTH / (2 * reach(0)), REFERENCE_HEIGHT / (2 * reach(1)));
+  return { zoom, target: target.join(',') };
 }
 
 /** The eight outer corners of a box of cells, in world units. */

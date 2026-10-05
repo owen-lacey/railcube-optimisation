@@ -13,11 +13,12 @@
 	// calls for is an empty Placeholder until it is built.
 	import Placeholder from "$lib/components/Placeholder.svelte";
 	import Layout from "../+layout.svelte";
+	import PoseStep from "$lib/components/PoseStep.svelte";
 </script>
 
-<h1>Optimal Rail Cube</h1>
+<h1>Optimising the Rail Cube</h1>
 
-<p>This is a Rail Cube track:</p>
+<p>This is a Rail Cube track. It's as if model trains and LEGO had a baby:</p>
 
 <TrackFigure shape="SIOLLOISLL" />
 
@@ -47,6 +48,8 @@
 	to generate these, and how we can optimise for different things.
 </p>
 
+<h2>Coordinates</h2>
+
 <p>The Rail Cube box comes with these pieces:</p>
 
 <PieceCardGrid full={true} />
@@ -56,11 +59,11 @@
 	<PieceTag letter="L" /> moves it one place forwards and two left, whilst turning
 	left.
 </p>
+<PieceMoves />
 <p>
 	These are relative positions, and our building blocks for how we'll keep track
 	of the train's position in the track.
 </p>
-<!-- Editorial note: I think we should pivot the terminology to say "the cube after the train has travelled a track piece," as opposed to "at any given time." The intermediary points on the track could cause confusion, and really, we only care about the position that the train has ended up in after it's moved.  -->
 <p>
 	Imagine our track was in a box divided into cubes the size of a single <PieceTag
 		letter="S"
@@ -96,44 +99,109 @@
 	scene={cellScene}
 />
 
-<hr />
-
-<h1>scratch</h1>
-<h2>adding costs</h2>
-
-<p>can't have this</p>
-
-<TrackFigure shape="SSLLLSS" />
-
-<p>or this</p>
-
-<TrackFigure shape="SSISLILISS" />
-
-<p>Two approaches here:</p>
-
-<ul>
-	<li>under no circumstances should we drop a piece</li>
-	<li>try not to drop a piece</li>
-</ul>
-
 <p>
-	Pick either based on what you want the output to be. One is a suggestion, one
-	is a command.
+	To make our own tracks, we need to know the effect of adding each track piece
+	to any position or pose.
 </p>
 
-<p>I opted for the former</p>
+<p>
+	To do this, we create a map from every pose to its new pose, plus a position
+	delta.
+</p>
+<PoseStep />
 
-<p>Many ways we can optimise this:</p>
+<h2>Track building</h2>
+
+<p>
+	Now that we can now express a Rail Cube in terms of generic positions and
+	poses, we need to add some rules. Firstly, we need a complete track, so this
+	would be invalid:
+</p>
+
+<TrackFigure shape="SLLSSLL" />
+
+<p>A track like this would also cause some fatalities:</p>
+<TrackFigure shape="SSLLLSS" />
+
+<p>And this:</p>
+<TrackFigure shape="SSISLILISS" />
+
+<p>
+	Albeit intuitive, we need to express these rules in our coordinate system:
+</p>
+<ul>
+	<li>
+		<!-- TODO: show tracks again, annotated by this. -->
+		<b>Completeness:</b>The final track piece should end at (x,y-1,z), facing
+		DF.
+	</li>
+	<li>
+		<b>Track collisions:</b>
+		No two track pieces can share share the same (x,y,z) position.
+	</li>
+	<li>
+		<b>Train collisions:</b> No track piece can occupy the same position as the train
+		would.
+	</li>
+</ul>
+<p>
+	The latter is the hardest to generalise because it depends on the face of the
+	pose: if a track piece is on the D face then we must protect (x,y,z+1), if
+	it's on the U face then avoid (x,y,z-1), and so on. I said at the start that
+	leaving pieces in the box is also a deal-breaker, but that's just my
+	undiagnosed OCD / privileged upbringing.
+</p>
+<p>
+	All of this so far has been very boring and diligent, but necessary. I forgive
+	you for wondering when we're gonna make all those sick layouts we saw at the
+	start. We now have everything we need to build a valid Rail Cube track that
+	avoids most lawsuits, and can start optimising for aforementioned awesomeness.
+</p>
+
+<h2>Optimising</h2>
+
+<p></p>
+
+<p>Enter subjectivity. Look at this beauty:</p>
+
+<TrackFigure shape="LSISSXLOSIISSISSLSOROOIRSIRRSXSISLSI" />
+
+<p>On the other hand, this upsets me:</p>
+
+<TrackFigure shape="IORRIIOISIOIILROISRSSSSXSSSSLLSSSLSX" />
+<p>
+	Why? It sprawls about. Loads of boring straight segments, doesn't invert
+	nearly as much as it can.
+</p>
+
+<p>
+	In the previous section we spoke about what invalidates a track. These
+	opinions are different: the track is feasible, it's just we don't like it.
+</p>
+<p>
+	Our ability to express these opinions in a way the model can understand allows
+	us to maximise what's important to us. The model can then give us the "best"
+	track, rather than a working one.
+</p>
+
+<p></p>
+
+<hr />
 
 <ul>
-	<li>score "cool" parts at cool inversions</li>
-	<li>score % of time not flat</li>
-	<li>penalise consecutive pieces of the same type</li>
+	<li>
+		How we score a track. Go back to the solves from previously with a score
+		explainer.
+	</li>
+	<li>
+		Prove that it's infeasible to enumerate all solutions, which is where CP
+		comes in
+	</li>
+	<li>
+		Interactive track builder, with stats on how good the track you built is.
+	</li>
+	<li>Cross cube</li>
 </ul>
-
-<Placeholder caption="Show examples of a track being build and their score" />
-
-<Placeholder caption="Show final optimal route (maybe irl as well)" />
 
 <style>
 	h1 {
