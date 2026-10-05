@@ -3,6 +3,7 @@
  *
  *   node scripts/sweep-crossings.js --min-loop 10 --max 200
  *   node scripts/sweep-crossings.js --out sweep-crossed.jsonl --max 500
+ *   node scripts/sweep-crossings.js --min-loop 10 --engine native
  *
  * Run as a ladder: one process per `--min-loop`, concurrently, each to its own
  * file (the default `--out` is named after it). A crossing splits the route into
@@ -84,6 +85,10 @@ const workers = Number(arg('workers', 6));
 // four each. It halves the search by fixing which handedness appears first; the
 // mirror pass puts the other half back without solving for it.
 const symmetry = !process.argv.includes('--no-symmetry');
+// Which CP-SAT runs the model: cpsat-js, or native OR-Tools (see src/solver/native.js).
+// It changes how fast layouts arrive, never which question they answer, so it is
+// not in the fingerprint.
+const engine = arg('engine', 'wasm');
 
 // A sweep file holds one question. The fingerprint goes on every line so a file
 // of two inventories — a file of incomparable layouts — is caught on sight.
@@ -103,7 +108,7 @@ for (const row of already) {
 if (already.length) console.log(`${out} holds ${already.length} layout(s); appending`);
 
 console.log(`${CUBES} cubes over ${STEPS} steps  box ${BOX}  ${perSolve}s a solve`
-  + `  ${workers} workers  max ${max === Infinity ? 'unbounded' : max}`
+  + `  ${workers} workers  ${engine}  max ${max === Infinity ? 'unbounded' : max}`
   + `  ${minLoop === null ? 'loops unbounded' : `smaller loop >= ${minLoop}`}`);
 
 const shapes = new Set(already.map(r => r.shape));
@@ -196,6 +201,7 @@ try {
     maxSolutions: max === Infinity ? undefined : max,
     maxTimeInSeconds: perSolve,
     numWorkers: workers,
+    engine,
     onSolution: record,
   });
   console.log(`status ${result.status}${result.truncated ? ' (truncated at --max)' : ''}`);
