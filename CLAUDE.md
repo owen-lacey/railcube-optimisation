@@ -143,7 +143,33 @@ on the old 36-cube set, and the set is now browser-sized, so it was 436 lines of
 duplicate model — transitions, collisions, crossings, inventory, objective — with nothing
 keeping it in step. The DFS oracle in `src/enumerate.js` is the testable version of the same
 idea and runs on every `npm test`. Native CP-SAT has since been rewritten as an exploration
-tool, on different terms — see the next section.
+tool, on different terms — see the next two sections.
+
+### The JS model on native CP-SAT: `engine: 'native'`
+
+`solveTrack({ engine: 'native' })` (default `'wasm'`) solves **the JS model itself** on
+native OR-Tools. `src/solver/native.js` sends the CpModelProto bytes cpsat-js would hand its
+WASM to `src/solver/native.py` in a child process (`uv`), and reads the CpSolverResponse back
+into cpsat-js's result shape. There is no second model to drift, which is what makes this
+different from the deleted Python model: selectors, `report` and the `chainTrack` recount are
+the same code on either engine. `optimise-metric.js` and `sweep-crossings.js` take
+`--engine native`. Node only.
+
+- **Pinned to OR-Tools 9.12**, the version cpsat-js is built from, so the engines differ only
+  in WASM against native code. 9.12 is also the last Python wrapper that holds a plain
+  protobuf; from 9.13 the bytes would need a text-format round trip. 9.15 measured no faster.
+- **Measured on one proto, uncontended, 8 workers, median of 3:** 18-cube `SET` proved in
+  5.1 s against 11.7 s; a crossed min10 rung's first layout in 42.5 s against 74.8 s; the
+  `3x5x17` prove box refuted in 39.5 s against 61.6 s. So 1.6–2.4×. The bigger gain is the
+  tail, which is far shorter: the rung ranged 21–47 s natively against 33–396 s.
+  **14 workers was slower than 8** on both crossed questions.
+- **`onSolution` is always live** natively, at any worker count, since the search is in
+  another process. A throw from it kills the search and rejects the solve.
+- About 0.27 s per solve is spent spawning `uv` and Python, which matters only for many tiny solves.
+- It needs `cpsat-js/proto` (schemas plus the matching `toBinary`/`fromBinary`/`create`), added
+  for this in cpsat-js 1.3.1.
+- `tests/native.test.js` checks the engine against the oracle, and every metric objective in
+  `tests/metric-objectives.test.js` runs on both engines.
 
 ### Exploration on native CP-SAT: `scripts/explore.py`
 
@@ -161,7 +187,7 @@ from the JS model's steps-are-an-upper-bound reading above: it legitimately mean
 inventory cannot be fully spent in this box*, not "box too small or a bug". Full spend also
 means every solution ties on score (see "SCORES is inert" above), so there is no
 `model.maximize` by default — the model is satisfiability-only and the score is computed
-arithmetically for reporting. (`--random` is the exception, below.) This is faster, not just simpler: the 18-cube `SET` goes from proving optimal
+arithmetically for reporting. (`--random` and `--objective` are the exceptions, below.) This is faster, not just simpler: the 18-cube `SET` goes from proving optimal
 in ~21 s cold (~7 s hinted) down to ~3 s feasible, because there is no search over shorter
 loops and no improvement phase to prove past. If fill-always ever needs an
 arrangement-reading objective back (consecutive-piece penalties etc.), that is a separate
@@ -228,6 +254,109 @@ that is the cost of new weights. `--random` does not exclude what it has already
 long runs do re-discover layouts (the round line marks each `new` or `seen`). Feeding the
 recorded shapes back as no-good cuts would make a long sweep strictly productive, and is
 follow-up work rather than something this does.
+
+### Optimising the aesthetic metrics: `--objective`
+
+The six readings in `src/metrics.js` (faces, volume, repeats, faceUp, ceiling, height) are
+arrangement-reading terms, so unlike `SCORES` they are real questions under full spend.
+ceiling is the steps ridden upside down (floor facing up); height is the train's up
+coordinate summed over the steps. Both are counted over every step, revisits included,
+like faceUp, and both are good when high — height's direction is provisional, Owen's call.
+Each is an objective on both solvers: `OBJECTIVES` in `src/solver/index.js` (keyed by
+metric name, plus `combined`) and `explore.py --objective`. `scripts/optimise-metric.js`
+asks the crossed sweep's question with one, since explore.py cannot cross. The direction
+is `SIGNS` in `src/metrics.js`, and it is not cosmetic:
+
+- **faces and volume are sound in one direction only.** faces' `seen` booleans are
+  claimed, never forced, so they are only right when maximised. The volume bounds are
+  forced on, never off, so they are only right when minimised (`longestSide` too).
+  `combined` respects this because its weights carry the same signs. Flip a direction
+  and the answer is silently wrong.
+- **repeats, faceUp, ceiling and height are exact both ways**, so their worst can be
+  asked for: `solveTrack({ direction: 'worst' })`, `optimise-metric.js --direction worst`.
+  faceUp and ceiling are plain sums of selectors, height a plain sum of the head's up
+  coordinate, and none of the three adds a variable; repeats has one `trip` per (step,
+  type), forced on by the triple and off by any one of its three missing. `direction`
+  throws for anything else, and for a `combined` whose ranges name a one-way metric. Its
+  shape is provisional, Owen's call.
+- **The floor holds the train up as well as the material.** A train riding under a cube
+  on the ground would be inside the ground, so with `minY` set the head's up domain
+  starts at the floor (solver, oracle and explore.py alike); no piece books a train cell
+  below both its heads, so that bounds the whole train. Without it the worst height
+  goes underground. Owen's call, over measuring height from the lowest point: it is a
+  smaller domain rather than an extra min variable. The sweep tooling (`check-route.js`
+  `onTheGround`, `merge-sweeps.js`, `meet.py`) still checks material only, and ~2% of
+  `sweeps.db` (224,136 rows) breaks the rule — also his call. `score-sweeps.js` counts
+  those rows' `underground` steps and `rank-scores.js` leaves them out.
+- **They need `fill`.** Left free in length, the best volume is a four-piece ring. The
+  wrap would also read the switched-off tail as track. The JS throws
+  without it; explore.py is always full spend.
+- **Volume has no multiplication in cpsat-js**, so the JS takes a one-hot table of span
+  triples (2,601 booleans at box 8). Native CP-SAT uses `add_multiplication_equality`.
+- **`combined` is exact integers, over the metrics its ranges name.** `combinedWeights`
+  multiplies through by the LCM of the ranges in one `POPULATION_RANGES` entry (13,734 /
+  121,212 / 5,373), and a metric the entry leaves out weighs nothing. `sweep28` and
+  `crossed` are the four-metric combination; `crossedCeilingHeight` (ceiling 0–27,
+  height 27–226, over every floor-legal crossed row) is the pair the post weighs. Pick
+  one with `--ranges`, on `optimise-metric.js` and explore.py. One entry per pair is
+  provisional, Owen's call. Both runners recount the answer through the
+  JS and exit nonzero if the solver's objective value disagrees, since that is an
+  encoding bug.
+- **faces saturates.** It is out of 6, and 6 is common: 47% of the 28-cube sweep and 29%
+  of the crossed one already sit there. So a faces objective proves its optimum almost at
+  once and picks out a large slice of the population rather than one layout. Owen chose
+  it knowing that, over `poses`, whose only bound was "every pose".
+- **repeats counts runs of three, not pairs**: the steps that start three of a kind in
+  a row, wrapping, so a run of n costs n − 2 and `SS` is free. Owen's call, for more
+  interesting layouts — the pair version's optimum forbade any two alike side by side.
+  It saturates too: 56% of the 28-cube sweep and 20% of the crossed one score 0.
+
+`tests/metric-objectives.test.js` checks every objective, on both solvers, against the
+oracle's best over the 25 full-spend loops of a 14-cube, box-3 set. That is the one small
+instance found where all four metrics vary (ceiling and height vary there too), and it
+asks the two-way metrics and the pair's combination for their worst as well. The floor
+has its own case: 4 S, 2 L, 2 R, 4 I, 4 O in box 3, the smallest found where a
+material-only floor admits a loop with the train below it (`IOLSOSOLOSIRSIIR`, faceUp 5,
+height 22), so the worst height with faceUp ≥ 5 is 22 without the rule and 24 with it.
+(Asked for the worst, a limit holds a metric at least this *bad*, so the limit is
+`{ faceUp: 5 }`.) The crossed-oracle cases are the slow tier,
+over the 56 crossed 16-step loops of 6 S, 2 L, 3 R, 4 I and a cross in box 4: at 14
+steps every crossed loop has exactly one run of three, so repeats cannot vary there.
+
+**Proving an optimum: `limits`, `spans` and `--prove`.** The combined objective on the
+crossed question stalls at FEASIBLE with a wide gap, because the incumbent is already best
+on faces, repeats and faceUp, so the whole gap is volume — and volume's bound comes from
+hi/lo edge bounds and a product, which is loose (a standalone volume solve: 210, bound 20).
+So a proof is asked as many yes/no questions instead of one optimisation. JS only;
+explore.py has neither option, accepted because the crossed question needs the JS model.
+
+- **`limits`** holds metrics at least this good, each in its SIGNS direction (`combined`
+  in `combinedWeights` integers, maximised). The terms are the objectives', so the same
+  one-way soundness applies, and limits only ever bound them from their good side. Needs
+  `fill`.
+- **`spans`** (`[across, up, along]`) caps the material's extent, wherever it sits in the
+  box. It also narrows the **region** the whole model is built over — head domains, claim
+  grid and sentinels, material bounds, the volume table — to n − 1 either side of the
+  origin (0..n − 1 up, on the floor), intersected with the box. Sound because the start
+  cube is always material at the origin (checked for every piece and start pose). There
+  is one region, derived once in `buildModel` from box, floor and spans; nothing past
+  that reads the scalar box. Narrowing is not a global box reduction: a better layout
+  can be 17 long, so it is sound only per question.
+- **`scripts/optimise-metric.js --prove SHAPE --out FILE`** splits "is anything better?"
+  into cases, one per value of faces, repeats and faceUp, each with the volume it leaves
+  to spend (derived from `combinedWeights`, never by hand), and asks every largest box
+  under that volume (`largestBoxes`, none inside another) with the case as `limits` plus
+  `combined ≥ incumbent + 1`. PROVED means every box of every case came back INFEASIBLE;
+  a FEASIBLE box is a better layout, recounted and made the incumbent. Every box is a
+  line in `--out`, and a box held by one already refuted under limits asking no more is
+  skipped, so it resumes and a refutation outlives a better incumbent.
+- **The incumbent cannot help as a hint.** Every question demands strictly better, so the
+  incumbent breaks it, and a hint never shrinks the space a refutation has to cover. Its
+  useful form is the cutoff, `combined ≥ incumbent + 1`, which every question carries.
+
+What moved the hard boxes, measured: the region alone did not — the 3-wide boxes were all
+UNKNOWN at 120 s over the full ±8 model and still were over the narrowed one. The case
+split did: `3x5x17` under repeats 0, faceUp ≤ 1 is INFEASIBLE in ~135–175 s.
 
 ### The crossed sweep is a ladder: `scripts/sweep-crossings.js --min-loop k`
 
@@ -380,6 +509,77 @@ A crossed cross keys on *both* its passes' headings, because which pass comes fi
 where the route starts. Keying costs ~3–7 ms a shape — which is why the database stores the key
 hashed (`track_hash`, sha256, UNIQUE per question) rather than a merge re-keying every row it
 holds, and why an exact-string match is checked first and pays nothing.
+
+### Readings as columns: `scripts/hydrate-sweeps.js`
+
+`sweeps.db` holds per-layout readings as columns, so a weighting can be asked of every
+layout in SQL rather than of a scores file in a temp dir: `faces`, `repeats`, `poses`,
+`close_calls`, `underground` (steps the train rides below the floor) and the two knot
+readings `knot_over`/`knot_under`. The first five are `derive` columns in
+`scripts/sweep-data.js`, so a merge writes them and `merge-sweeps.js --check` re-derives
+them. They were added to the live database by hand with `ALTER TABLE` (backup:
+`sweeps.db.backup-2026-10-05`), so its column order differs from `SCHEMA`'s; nothing reads
+columns by position. `hydrate-sweeps.js --readings` / `--knots` fills the NULLs, by id
+range, resuming by itself.
+
+Two readings, both Owen's definitions, neither in `METRICS` (every `METRICS` name needs a
+solver term):
+
+- **`poses`** is how many of the 24 poses the train takes. Over every row 6–20, mean
+  12.5; none reaches 24, which is why it is a count and not "all 24".
+- **`close_calls`** counts distinct cells the train is in — booked train cells and the
+  cells between pieces — that share a face with another piece's material. Not the piece
+  being ridden, nor its route neighbours, which always touch at the joints; both passes of
+  the cross are one piece. Over every row 0–27, mean 0.9, 62.7% zero; more is better.
+  The inside curve's hollow is not counted.
+
+**Knots** (`scripts/knot-curves.js` → `scripts/knots.py`, topoly on Python 3.11 via `uv`).
+The curve is the rail, `trackPath` at 8 samples a piece. The real cross is flat, so the
+second pass is bumped 2 units along its `up` × sin(πs), once over and once under; a track
+is **knotted if either reading is** (Owen's call) and its type is unknot / trefoil /
+figure-eight / `other:<poly>` by Alexander polynomial (`knotOf`). Both columns are kept raw
+because re-reading costs ~60 ms a layout. Things learned:
+
+- **A random rotation is required**: a grid-aligned projection gives `0`, which topoly reads
+  as a link. The rotation is seeded by the row id and attempt, so a reading is reproducible.
+- **`0` and `ErrTMC` are about the projection, not the curve.** Retried on a new rotation
+  (up to 16), only a real polynomial is kept, and a curve that never gives one stops the run.
+  ErrTMC is not only on unknots: a grid-snapped figure-eight gives it on ~half its rotations.
+- **Never both ways yet**: every knotted layout seen is knotted over or under, never both;
+  `knotOf` throws if two different knots ever turn up.
+- **Front first: `--knots --front`.** With every weight positive, a layout dominated by a
+  knotted one can never be the best, so only the groups (layouts tied on the other metrics)
+  no read knotted dominator rules out need reading, front inwards; the worst end is the same
+  flipped, with an unknotted dominator ruling out (`scripts/knot-front.js`, checked against
+  brute force over every weighting 1–5 in `tests/knot-front.test.js`). It covers both ends
+  of two metric sets — poses, close calls, repeats and longest side, with and without
+  faces — and is exact only for positive weights: a zero weight lets dominated layouts tie the best, and only the full
+  `--knots` pass covers that. A wave is counted in unread layouts, not groups: counted in
+  groups, a toy population read 92% of itself. Direction matters to the cost, not just the
+  answer: with fewer close calls as better the front is the 0-close-call groups, thousands
+  of layouts each, and it had read 13k a few groups in when it was stopped. More is better
+  (Owen's call), and that front read in minutes.
+- `--check` does not re-read knots (hours). `hydrate-sweeps.js --recheck N --seed S` re-reads N
+  uniform rows and every knotted one on fresh rotations and exits nonzero on disagreement.
+- `tests/knots.test.js` has positive controls (trefoil, figure-eight, grid-snapped copies,
+  circle) and spawns `uv`, as does `tests/hydrate-sweeps.test.js`.
+
+### The weighted best and worst: `scripts/tally-weights.js` → `WeightedTracks`
+
+Five sliders, 0 to `maxWeight` (5): knotted, poses, close calls (more is better, all three),
+repeats and longest side (fewer/shorter). `tally-weights.js` reads `sweeps.db`'s columns
+and writes `site/src/lib/data/sweep-crossed-weights.json`: one row per distinct five values
+over the legal rows (10,648), `knotted: null` for layouts whose knot is unread, and
+`weighting.js` ranks the rows, so the ends are exact over all 11.1M. Examples are kept only
+for rows that are an end under some slider setting (3,677 rows, 13k examples, 245 KB
+gzipped), and every one is re-derived, its knot re-read on a fresh rotation.
+
+Unread knots are reported, not guessed: an end says how many unread layouts could reach it.
+That is none when every weight is positive (the front read, `tests/weighting.test.js` over
+all 3,125 such settings) and none when knotted weighs 0, since then a knot cannot move a
+score — those unread layouts simply tie, and are shown with "knot not read". Only knotted
+positive with another weight at 0 can leave an end unsure, and the full `--knots` pass is
+what closes that.
 
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 
