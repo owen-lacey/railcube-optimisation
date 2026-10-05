@@ -18,21 +18,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { assertSpends, DB_PATH, derive, openDb } from './sweep-data.js';
+import { assertSpends, DB_PATH, derive, openDb, random } from './sweep-data.js';
 
 const COLUMNS = ['span_across', 'span_up', 'span_along', 'revisits', 'loop_small', 'loop_large'];
-
-/** mulberry32: a small seeded PRNG, so a draw is a function of its seed. */
-function random(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 2 ** 32;
-  };
-}
 
 /**
  * `count` distinct rows of the question, uniformly. Row ids are drawn over the

@@ -22,28 +22,30 @@ const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, {
 
 const stepsFor = inventory => Object.values(inventory).reduce((a, b) => a + b, 0) + 1;
 
-/** Every full-spend loop that crosses itself, as tracks. */
-function oracleTracks(inventory, box) {
+/** Every full-spend loop that crosses itself, as tracks; with `run`, only those holding that many straights in a row. */
+function oracleTracks(inventory, box, run = 0) {
   const steps = stepsFor(inventory);
   return new Set(enumerateLoops({ inventory, maxPieces: steps, minPieces: steps, box, minY: 0 })
     .filter(route => {
       const spent = countPieces(chainTrack(route));
-      return POOLS.every(pool => spent[pool] === (inventory[pool] ?? 0));
+      const shape = shapeOf(route);
+      return POOLS.every(pool => spent[pool] === (inventory[pool] ?? 0))
+        && (shape + shape).includes('S'.repeat(run));
     })
     .map(route => trackKey(shapeOf(route))));
 }
 
-function meetShapes(inventory, box) {
+function meetShapes(inventory, box, run = 0) {
   return execFileSync('uv', [
     'run', '--quiet', 'scripts/meet.py', '--set', JSON.stringify(inventory),
-    '--box', String(box), '--exhaustive',
+    '--box', String(box), '--exhaustive', '--run', String(run),
   ], { encoding: 'utf8' }).split('\n').filter(Boolean);
 }
 
-function agree(inventory, box) {
-  const oracle = oracleTracks(inventory, box);
+function agree(inventory, box, run = 0) {
+  const oracle = oracleTracks(inventory, box, run);
   assert.ok(oracle.size > 0, 'the oracle must actually be finding crossed tracks');
-  const shapes = meetShapes(inventory, box);
+  const shapes = meetShapes(inventory, box, run);
   const tracks = new Set(shapes.map(trackKey));
   // One line per track: the generator's own dedupe is exact, not merely close.
   assert.equal(tracks.size, shapes.length, 'a track was printed twice');
@@ -70,3 +72,13 @@ test('meet finds exactly the oracle\'s crossed tracks: 4 S, 3 L, 3 R, 2 I', () =
 slow('meet finds exactly the oracle\'s crossed tracks: 4 S, 3 L, 3 R, 2 I, 2 O', () => {
   agree({ straight: 4, leftCurve: 3, rightCurve: 3, insideCurve: 2, outsideCurve: 2, cross: 1 }, 4);
 });
+
+// --run puts a run of straights in lobe B as one fixed motion. 192 crossed
+// routes, whose longest runs are 2 or 3: run 2 must find every track and run 3
+// only the sixteen routes' worth that hold three.
+const RUNS = { straight: 8, leftCurve: 3, rightCurve: 3, insideCurve: 2, outsideCurve: 0, cross: 1 };
+for (const run of [2, 3]) {
+  test(`meet --run ${run} finds exactly the oracle's crossed tracks with ${run} straights in a row`, () => {
+    agree(RUNS, 4, run);
+  });
+}

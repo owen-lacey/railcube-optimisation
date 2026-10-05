@@ -22,6 +22,7 @@ import { createInterface } from 'node:readline';
 
 import { chainTrack, countPieces, POOLS, SET } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
+import { metricsOf, spanOf } from '../src/metrics.js';
 
 const againstSet = !process.argv.includes('--any');
 const streaming = process.argv.includes('--stdin');
@@ -32,8 +33,7 @@ function reportOf(shape) {
   const cubes = placed.filter(p => !p.revisit);
   const spent = countPieces(placed);
   const cells = placed.flatMap(p => p.material);
-  const span = [0, 1, 2].map(a =>
-    Math.max(...cells.map(c => c[a])) - Math.min(...cells.map(c => c[a])) + 1);
+  const span = spanOf(placed);
 
   const report = {
     shape,
@@ -45,6 +45,7 @@ function reportOf(shape) {
     span: span.join('x'),
     onTheGround: cells.every(c => c[1] >= 0),
     box: Math.max(...cells.flatMap(c => c.map(Math.abs))),
+    metrics: metricsOf(placed),
   };
 
   if (againstSet) {

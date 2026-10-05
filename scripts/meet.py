@@ -37,6 +37,12 @@ chosen afterwards: each piece is tried as the start until one reading fits.
 Pinning the start to the cross instead would reach only the tracks whose cross
 lies face up on the ground, about 39% of the known ones.
 
+`--run k` asks only for tracks holding at least k straights in a row. A run
+lies inside one lobe, and reading from the other pass swaps the lobes, so it
+is put in lobe B, which is then half · S^k · half: the run is one fixed motion
+and only the halves either side of it are searched. That gives up drawing A no
+longer than B.
+
 Geometry comes from `node scripts/export-geometry.js` on every run, and the
 rotations it exports are checked against its transition table before anything
 is built. Every layout this prints or records has been re-chained by
@@ -309,7 +315,31 @@ def build_lobes(geo, spec, pools, p, stats):
     return lobes
 
 
-def join_halves(geo, u, u_claims, u_end, v, target, p, stats):
+def build_run_lobes(geo, spec, pools, p, stats, before=None):
+    """Every lobe B that is a half, the run of straights, then a half: one per
+    length of the half before the run, or only `before` when given."""
+    start, target, n = spec
+    aim = geo.then(geo.invert(start), target)
+    free = n - p.run
+    lobes = []
+    for m in (range(free + 1) if before is None else (before,)):
+        for u in pools(m).halves.values():
+            u_claims, u_end = place(geo, u.letters, start)
+            if clash(u_claims, p.cross_claims):
+                continue
+            run_claims, run_end = place(geo, p.run_letters, u_end)
+            if clash(run_claims, p.cross_claims) or clash(run_claims, u_claims):
+                continue
+            key = geo.then(geo.invert(geo.then(u.end, p.run_motion)), aim)
+            led = Claims(u_claims.solid | run_claims.solid, u_claims.wanted | run_claims.wanted)
+            for v in pools(free - m).by_end.get(key, ()):
+                lobe = join_halves(geo, u, led, run_end, v, target, p, stats, p.run_letters)
+                if lobe:
+                    lobes.append(lobe)
+    return lobes
+
+
+def join_halves(geo, u, u_claims, u_end, v, target, p, stats, between=()):
     stats["matches"] += 1
     counts = tuple(x + y for x, y in zip(u.counts, v.counts))
     if any(c > m for c, m in zip(counts, p.cap)):
@@ -321,7 +351,7 @@ def join_halves(geo, u, u_claims, u_end, v, target, p, stats):
         return None
     stats["lobes"] += 1
     merged = Claims(u_claims.solid | v_claims.solid, u_claims.wanted | v_claims.wanted)
-    return Lobe(u.letters + v.letters, counts, merged)
+    return Lobe(u.letters + tuple(between) + v.letters, counts, merged)
 
 
 def join_lobes(geo, lobes_a, lobes_b, p, stats):
@@ -402,6 +432,7 @@ def verify(shape, p, checker):
         ("revisits", report["revisits"] == 1),
         ("floor", report["onTheGround"]),
         ("box", report["box"] <= p.box),
+        ("run", "S" * p.run in shape + shape),
     ) if not ok]
     if wrong:
         raise SystemExit(f"VERIFICATION FAILED ({', '.join(wrong)}): {json.dumps(report)}")
@@ -468,7 +499,8 @@ def splits(p, parity):
     """Lengths of the shorter lobe worth trying. Drawing A no longer than B loses
     nothing, and --min-loop bounds it from below."""
     lo = 0 if p.min_loop is None else p.min_loop - 1
-    options = [a for a in range(lo, (p.steps - 2) // 2 + 1) if parity(a)]
+    most = p.steps - 2 - max(p.run, lo) if p.run else (p.steps - 2) // 2
+    options = [a for a in range(lo, most + 1) if parity(a)]
     if not options:
         raise SystemExit("no lobe length satisfies --min-loop and parity")
     return options
@@ -482,16 +514,21 @@ def lobe_parity(geo, p):
     return lambda a: a % 2 == odd[0] and (p.steps - 2 - a) % 2 == odd[1]
 
 
-def one_round(geo, p, a, revisit, pools, stats):
+def one_round(geo, p, a, revisit, pools, stats, before=None):
     """Every track with lobe A of length `a` and the given second pass, from these pools."""
     spec_a, spec_b = lobe_specs(geo, p.steps, a, revisit)
     lobes_a = build_lobes(geo, spec_a, pools, p, stats)
-    lobes_b = build_lobes(geo, spec_b, pools, p, stats) if lobes_a else []
+    if not lobes_a:
+        lobes_b = []
+    elif p.run:
+        lobes_b = build_run_lobes(geo, spec_b, pools, p, stats, before)
+    else:
+        lobes_b = build_lobes(geo, spec_b, pools, p, stats)
     return join_lobes(geo, lobes_a, lobes_b, p, stats)
 
 
 def run_exhaustive(geo, p):
-    pools = all_pools(geo, (p.steps - 1) // 2, p)
+    pools = all_pools(geo, max((p.steps - 1) // 2, p.steps - 2 - p.run if p.run else 0), p)
     out, stats = Output(p), defaultdict(int)
     stats["halves"] = sum(len(pool.halves) for pool in pools)
     lengths = splits(p, lambda _: True)
@@ -520,6 +557,7 @@ def run_sampled(geo, p):
 def sample_round(geo, p, n, seed, lengths, out):
     rng, stats, started = random.Random(seed), defaultdict(int), time.time()
     a, revisit = rng.choice(lengths), rng.choice(geo.revisits)
+    before = rng.randrange(p.steps - 2 - a - p.run + 1) if p.run else None
     cache = {}
 
     def pools(length):
@@ -528,9 +566,10 @@ def sample_round(geo, p, n, seed, lengths, out):
         return cache[length]
 
     meta = {"round": n, "seed": seed, "loops": [a + 1, p.steps - 1 - a]}
-    for route, *claims in one_round(geo, p, a, revisit, pools, stats):
+    for route, *claims in one_round(geo, p, a, revisit, pools, stats, before):
         stats["new"] += out.offer(geo, route, [*claims, p.cross_claims], meta)
-    print(f"  round {n}  a={a:2d} {geo.poses[revisit]}  {time.time() - started:6.1f}s  "
+    split = f" before run {before:2d}" if p.run else ""
+    print(f"  round {n}  a={a:2d} {geo.poses[revisit]}{split}  {time.time() - started:6.1f}s  "
           f"{summary(stats)}", flush=True)
 
 
@@ -554,6 +593,8 @@ def check_flags(ap, a, geo):
          "--exhaustive enumerates everything once and prints it: no --rounds, --halves, "
          "--seed or --out"),
         (a.halves is not None and a.halves < 1, "--halves must be at least 1"),
+        (a.run < 0 or a.run > a.inventory.get("straight", 0),
+         "--run must be between 0 and the straights in --set"),
     ]
     for refused, reason in refusals:
         if refused:
@@ -571,6 +612,8 @@ def parse_args(geo):
     ap.add_argument("--min-loop", type=int, default=None,
                     help="the smaller of the crossing's two loops, in steps, at least this")
     ap.add_argument("--out", type=Path, default=None, help="append verified layouts here")
+    ap.add_argument("--run", type=int, default=0,
+                    help="only tracks with at least this many straights in a row")
     ap.add_argument("--exhaustive", action="store_true",
                     help="every half and every split, printed — for checking against the oracle")
     a = ap.parse_args()
@@ -586,6 +629,11 @@ def settle(geo, a):
     a.rounds = 1 if a.rounds is None else a.rounds
     a.steps = sum(a.inventory.values()) + 1
     a.cap = [0 if t == geo.cross else a.inventory[name] for t, name in enumerate(geo.types)]
+    straight = geo.types.index("straight")
+    # The run's straights are spent before any half is grown.
+    a.cap[straight] -= a.run
+    a.run_letters = (straight,) * a.run
+    a.run_motion = place(geo, a.run_letters, (ORIGIN, geo.start))[1]
     a.kinds = [t for t, n in enumerate(a.cap) if n]
     a.reach = 2 * a.box
     # A mirror is free output when sampling, and sound only with equal left and right
@@ -594,7 +642,9 @@ def settle(geo, a):
     a.score = sum(geo.score[t] * a.inventory[name] for t, name in enumerate(geo.types))
     a.cross_claims = place(geo, (geo.cross,), (ORIGIN, geo.start))[0]
     a.config = {"inventory": a.inventory, "steps": a.steps, "box": a.box, "minY": 0,
-                "startPose": START, "minLoopLength": a.min_loop}
+                "startPose": START, "minLoopLength": a.min_loop,
+                # A run asks a narrower question; without one the config is as it was.
+                **({"run": a.run} if a.run else {})}
     return a
 
 
