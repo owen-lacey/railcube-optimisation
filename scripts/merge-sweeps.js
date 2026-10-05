@@ -64,10 +64,11 @@ const statementsFor = db => ({
   byShape: db.prepare('SELECT 1 FROM layouts WHERE question_id = ? AND shape = ?'),
   byTrack: db.prepare('SELECT shape FROM layouts WHERE question_id = ? AND track_hash = ?'),
   insert: db.prepare(`INSERT INTO layouts (question_id, shape, track_hash, span_across,
-    span_up, span_along, volume, revisits, mirrored, loop_small, loop_large, source_log,
-    merged_at) VALUES (@question_id, @shape, @track_hash, @span_across, @span_up,
-    @span_along, @volume, @revisits, @mirrored, @loop_small, @loop_large, @source_log,
-    @merged_at)`),
+    span_up, span_along, volume, revisits, mirrored, loop_small, loop_large, faces, repeats,
+    poses, close_calls, underground, source_log, merged_at) VALUES (@question_id, @shape,
+    @track_hash, @span_across, @span_up, @span_along, @volume, @revisits, @mirrored,
+    @loop_small, @loop_large, @faces, @repeats, @poses, @close_calls, @underground,
+    @source_log, @merged_at)`),
 });
 
 /** The question row a record answers, admitted first if `admit` allows. */
@@ -191,7 +192,10 @@ function mergeClaims({ db, claims, admit, say, duplicates }) {
 
 const flip = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
 
-const COLUMNS = ['span_across', 'span_up', 'span_along', 'volume', 'revisits', 'loop_small', 'loop_large'];
+// The knot columns are not here: re-reading them is hours of topoly, which
+// `hydrate-sweeps.js --recheck` does on a sample instead.
+const COLUMNS = ['span_across', 'span_up', 'span_along', 'volume', 'revisits', 'loop_small', 'loop_large',
+  'faces', 'repeats', 'poses', 'close_calls', 'underground'];
 
 /** What is wrong with one stored row, re-derived from its shape alone. */
 function rowFaults(row, held, question) {

@@ -22,6 +22,7 @@ import Database from 'better-sqlite3';
 
 import { chainTrack, countPieces, POOLS } from '../src/track.js';
 import { loopsOf, routeOf, shapeOf, trackKey } from '../src/layouts.js';
+import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
 
 export const DB_PATH = fileURLToPath(new URL('../sweeps.db', import.meta.url));
 
@@ -54,6 +55,13 @@ const SCHEMA = `
     mirrored    INTEGER,
     loop_small  INTEGER,
     loop_large  INTEGER,
+    faces       INTEGER,
+    repeats     INTEGER,
+    poses       INTEGER,
+    close_calls INTEGER,
+    underground INTEGER,
+    knot_over   TEXT,
+    knot_under  TEXT,
     source_log  TEXT NOT NULL,
     merged_at   TEXT NOT NULL,
     UNIQUE (question_id, shape),
@@ -71,6 +79,18 @@ export function openDb(path = DB_PATH) {
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   return db;
+}
+
+/** mulberry32: a small seeded PRNG, so a draw is a function of its seed. */
+export function random(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 2 ** 32;
+  };
 }
 
 /** `trackKey`, hashed to the 32 bytes the database keys on. */
@@ -133,12 +153,6 @@ function visitLines(bytes, visit) {
   return bytes.subarray(end);
 }
 
-export const spanOf = placed => {
-  const cells = placed.flatMap(p => p.material);
-  return [0, 1, 2].map(a =>
-    Math.max(...cells.map(c => c[a])) - Math.min(...cells.map(c => c[a])) + 1);
-};
-
 /**
  * Chain a shape and read off everything a row stores that the geometry decides.
  * Shared by the way in and the audit, so the two cannot disagree about what a
@@ -157,6 +171,7 @@ export function derive(shape) {
   const span = spanOf(placed);
   const cubes = placed.filter(p => !p.revisit).length;
   const loops = loopsOf(placed);
+  const { faces, repeats } = metricsOf(placed);
   return {
     placed,
     cubes,
@@ -169,6 +184,11 @@ export function derive(shape) {
       revisits: placed.length - cubes,
       loop_small: loops === null ? null : loops[0],
       loop_large: loops === null ? null : loops[1],
+      faces,
+      repeats,
+      poses: posesOf(placed),
+      close_calls: closeCallsOf(placed),
+      underground: placed.filter(p => p.cell[1] < 0).length,
     },
   };
 }

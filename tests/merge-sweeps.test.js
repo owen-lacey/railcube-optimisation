@@ -15,7 +15,8 @@ import { join } from 'node:path';
 
 import { chainTrack, SCORES } from '../src/track.js';
 import { LAYOUTS, routeOf } from '../src/layouts.js';
-import { eachStaged, openDb, spanOf } from '../scripts/sweep-data.js';
+import { spanOf } from '../src/metrics.js';
+import { eachStaged, openDb } from '../scripts/sweep-data.js';
 import { audit, mergePass } from '../scripts/merge-sweeps.js';
 
 const SET = LAYOUTS.set.shape;
@@ -199,6 +200,11 @@ test('a crossed layout is stored with every column the geometry decides', () => 
   assert.equal(row.revisits, 1);
   // The two X's are letters 2 and 8 of 36: loops of 6 and 30, countable by hand.
   assert.deepEqual([row.loop_small, row.loop_large], [6, 30]);
+  // faces, repeats, poses, close calls, steps below the floor; tests/metrics.test.js
+  // checks the readings themselves.
+  assert.deepEqual([row.faces, row.repeats, row.poses, row.close_calls, row.underground], [5, 5, 11, 7, 0]);
+  // Knots are read by hydrate-sweeps.js, never on the way in.
+  assert.deepEqual([row.knot_over, row.knot_under], [null, null]);
   assert.equal(row.mirrored, 0);
   assert.equal(db.prepare('SELECT mirrored FROM layouts WHERE shape = ?').get(MIRROR).mirrored, 1);
   assert.equal(row.source_log, 'sweep-crossed-test.jsonl');
