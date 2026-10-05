@@ -10,6 +10,7 @@
     uv run scripts/explore.py --random --rounds 5
     uv run scripts/explore.py --random --rounds 0 --time 5 --out sweep.jsonl
     uv run scripts/explore.py --random --rounds 0 --time 5 --out sweep.jsonl --resume
+    uv run scripts/explore.py --set '{...}' --objective volume --symmetry --hint ...
 
 Native CP-SAT threads are worth 5-10x over the browser WASM build, so this is
 the place to try inventories, boxes and objectives quickly. It is the core
@@ -31,6 +32,12 @@ of that tie: a random weight per (step, piece type) is a term that reads the
 arrangement, so it picks one full-spend loop out of the many rather than
 changing which loops are legal. It costs the speed the satisfiability model was
 built for, since there is now an optimum to prove.
+
+`--objective` is the other: one of the six metrics of src/metrics.js, in its
+good direction, or their combination weighted for `--ranges`. Those read the
+arrangement too, so they are real questions under full spend. The answer is
+recounted by check-route.js, and a recount that disagrees with the solver's own
+objective value is an encoding bug and exits nonzero.
 
 A previous Python model was deleted for being a hand-ported duplicate nothing
 kept in step with src/track.js. This one avoids that by construction: geometry
@@ -95,7 +102,12 @@ def add_transitions(model, rows, selectors, x, y, z, pose):
 
 
 def bound_material(model, geo, rows, selectors, x, y, z, box, min_y):
-    """The box and the floor bind material cells, not the head."""
+    """The box and the floor bind material cells; the floor binds the head in its domain.
+
+    Returns every material slot as (used, coord), for anything else that reads
+    where the material is — the volume objective.
+    """
+    material = []
     for i, sels in enumerate(selectors):
         for k in range(MAX_FOOT):
             def cell_at(row, k=k):
@@ -104,11 +116,14 @@ def bound_material(model, geo, rows, selectors, x, y, z, box, min_y):
 
             used = model.new_bool_var(f"inBox_{i}_{k}")
             model.add(used == pick(sels, rows, lambda r: 1 if cell_at(r) else 0))
-            for a, axis in enumerate((x, y, z)):
-                coord = axis[i] + pick(sels, rows, lambda r: (cell_at(r) or (0, 0, 0))[a])
-                model.add(coord <= box).only_enforce_if(used)
+            coord = [axis[i] + pick(sels, rows, lambda r, a=a: (cell_at(r) or (0, 0, 0))[a])
+                     for a, axis in enumerate((x, y, z))]
+            for a, at in enumerate(coord):
+                model.add(at <= box).only_enforce_if(used)
                 floor = min_y if a == 1 and min_y is not None else -box
-                model.add(coord >= floor).only_enforce_if(used)
+                model.add(at >= floor).only_enforce_if(used)
+            material.append((used, coord))
+    return material
 
 
 def grid(box):
@@ -178,6 +193,17 @@ def break_mirror_symmetry(model, geo, rows, selectors):
         lefts_so_far += of_type(sels, "leftCurve")
 
 
+def handed(shape, symmetry):
+    """The mirror break allows a right curve only after a left one, so a hint that
+    meets a right curve first is asked for as its mirror — the same rule as
+    sweep-crossings.js."""
+    if not symmetry or "R" not in shape:
+        return shape
+    if "L" in shape and shape.index("L") < shape.index("R"):
+        return shape
+    return shape.translate(str.maketrans("LR", "RL"))
+
+
 def hint_route(model, geo, rows, selectors, route, start_pose):
     """Walk the route through the transition table and hint the true selectors."""
     if len(route) != len(selectors):
@@ -207,10 +233,12 @@ def build_model(geo, rows, p):
 
     # Head position and pose before each step, plus one more for after the last.
     # The head's own domain is one wider than the box, because the box binds
-    # material cells and a head is the train's cell, one beyond its cube.
+    # material cells and a head is the train's cell, one beyond its cube — except
+    # below the floor, where the train cannot be either. No piece books a train
+    # cell lower than both of its heads, so bounding the heads bounds the train.
     reach = box + 1
     x = [model.new_int_var(-reach, reach, f"x_{i}") for i in range(steps + 1)]
-    y = [model.new_int_var(-reach if min_y is None else min_y - 1, reach, f"y_{i}")
+    y = [model.new_int_var(-reach if min_y is None else min_y, reach, f"y_{i}")
          for i in range(steps + 1)]
     z = [model.new_int_var(-reach, reach, f"z_{i}") for i in range(steps + 1)]
     pose = [model.new_int_var(0, len(geo["poses"]) - 1, f"pose_{i}") for i in range(steps + 1)]
@@ -230,16 +258,147 @@ def build_model(geo, rows, p):
                     (x[steps], hx), (y[steps], hy), (z[steps], hz), (pose[steps], start)]:
         model.add(v == want)
 
-    bound_material(model, geo, rows, selectors, x, y, z, box, min_y)
+    material = bound_material(model, geo, rows, selectors, x, y, z, box, min_y)
     if p.collisions:
         add_collisions(model, geo, rows, selectors, x, y, z, box, steps, p.check_train)
     add_inventory(model, geo, rows, selectors, p.inventory)
     if p.symmetry:
         break_mirror_symmetry(model, geo, rows, selectors)
 
+    if p.objective:
+        add_objective(model, geo, rows, selectors, material, y, p)
     if p.hint:
         hint_route(model, geo, rows, selectors, p.hint, p.start_pose)
     return model, selectors
+
+
+UP = 1
+
+
+def rows_where(selectors, rows, test):
+    """The selectors, across all steps, whose row passes a test."""
+    return [v for sels in selectors for v, r in zip(sels, rows) if test(r)]
+
+
+def faces_term(model, geo, rows, selectors, material, y, p):
+    """A face is seen only if some step is entered riding on it: sound only when maximised."""
+    seen = []
+    for f in dict.fromkeys(pose[0] for pose in geo["poses"]):
+        s = model.new_bool_var(f"seen_{f}")
+        model.add(s <= sum(rows_where(selectors, rows, lambda r, f=f: geo["poses"][r["pose"]][0] == f)))
+        seen.append(s)
+    return sum(seen)
+
+
+def volume_term(model, geo, rows, selectors, material, y, p):
+    """The material's bounding box, as bounds every material cell sits inside.
+
+    Nothing pulls the bounds in but the objective: sound only when minimised.
+    Native CP-SAT multiplies, so the span triple table the JS needs is not here.
+    """
+    floors = [-p.box, -p.box if p.min_y is None else p.min_y, -p.box]
+    spans = []
+    for a, floor in enumerate(floors):
+        hi = model.new_int_var(floor, p.box, f"hi_{a}")
+        lo = model.new_int_var(floor, p.box, f"lo_{a}")
+        for used, coord in material:
+            model.add(hi >= coord[a]).only_enforce_if(used)
+            model.add(lo <= coord[a]).only_enforce_if(used)
+        span = model.new_int_var(1, p.box - floor + 1, f"span_{a}")
+        model.add(span == hi - lo + 1)
+        spans.append(span)
+    most = (2 * p.box + 1) ** 2 * (p.box - floors[1] + 1)
+    volume = model.new_int_var(1, most, "volume")
+    model.add_multiplication_equality(volume, spans)
+    return volume
+
+
+# The longest run of each curve a closed track can hold. Four of a curve close a
+# ring and every piece after one collides; three inside or outside curves have
+# been found in no closed track but the IIII ring. src/solver/index.js has the
+# evidence. Wrapping, which full spend makes sound; a four-step loop is exempt.
+RUN_CAPS = [("leftCurve", 3), ("rightCurve", 3), ("insideCurve", 2), ("outsideCurve", 2)]
+
+
+def cap_runs(model, geo, selectors, type_is, at):
+    if len(selectors) <= 4:
+        return
+    for name, most in RUN_CAPS:
+        t = geo["pieceTypes"].index(name)
+        for i in range(len(selectors)):
+            model.add(sum(type_is(at(i + k), t) for k in range(most + 1)) <= most)
+
+
+def repeats_term(model, geo, rows, selectors, material, y, p):
+    """Steps that start three of a kind in a row, wrapping.
+
+    One `trip` per step and type, true exactly when that type fills all three:
+    forced on by the triple and off by any one of them missing, so sound in both
+    directions.
+    """
+    types = {r["type"] for r in rows}
+
+    def type_is(sels, t):
+        return sum(v for v, r in zip(sels, rows) if r["type"] == t)
+
+    def at(i):
+        return selectors[i % len(selectors)]
+
+    cap_runs(model, geo, selectors, type_is, at)
+    trips = []
+    for i, sels in enumerate(selectors):
+        for t in types:
+            run = [type_is(s, t) for s in (sels, at(i + 1), at(i + 2))]
+            trip = model.new_bool_var(f"trip_{i}_{t}")
+            model.add(trip >= sum(run) - 2)
+            for one in run:
+                model.add(trip <= one)
+            trips.append(trip)
+    return sum(trips)
+
+
+def face_up_term(model, geo, rows, selectors, material, y, p):
+    """Steps entered riding face up: the floor faces down."""
+    return sum(rows_where(selectors, rows,
+                          lambda r: geo["proj"][geo["poses"][r["pose"]][0]][UP] < 0))
+
+
+def ceiling_term(model, geo, rows, selectors, material, y, p):
+    """Steps entered riding upside down: the floor faces up."""
+    return sum(rows_where(selectors, rows,
+                          lambda r: geo["proj"][geo["poses"][r["pose"]][0]][UP] > 0))
+
+
+def height_term(model, geo, rows, selectors, material, y, p):
+    """The train's up coordinate summed over the steps: the head before each one."""
+    return sum(y[:len(selectors)])
+
+
+METRIC_TERMS = {"faces": faces_term, "volume": volume_term, "repeats": repeats_term,
+                "faceUp": face_up_term, "ceiling": ceiling_term, "height": height_term}
+
+
+def add_objective(model, geo, rows, selectors, material, y, p):
+    """One metric in its good direction, or the combination in exact integers."""
+
+    def term(name):
+        return METRIC_TERMS[name](model, geo, rows, selectors, material, y, p)
+
+    if p.objective == "combined":
+        weights = geo["combined"][p.ranges]["weights"]
+        model.maximize(sum(w * term(name) for name, w in weights.items() if w))
+    elif geo["signs"][p.objective] > 0:
+        model.maximize(term(p.objective))
+    else:
+        model.minimize(term(p.objective))
+
+
+def recount_objective(geo, p, metrics):
+    """What the objective should have read, from check-route.js's recount."""
+    if p.objective == "combined":
+        weights = geo["combined"][p.ranges]["weights"]
+        return sum(w * metrics[name] for name, w in weights.items())
+    return metrics[p.objective]
 
 
 def add_random_objective(model, geo, rows, selectors, rng):
@@ -487,6 +646,10 @@ def check_flags(ap, a):
         (a.symmetry and a.random,
          "--symmetry fixes which handedness comes first, so it cuts away exactly the "
          "mirrored layouts --random is there to find"),
+        (a.objective and a.random,
+         "--objective and --random are two objectives; pick one"),
+        (a.objective and a.all_solutions,
+         "--all-solutions enumerates without an objective"),
         ((a.out or a.resume) and not a.random,
          "--out and --resume record a stream of randomised solves, so they need --random"),
         (a.resume and not a.out, "--resume needs the --out file it is resuming"),
@@ -528,6 +691,11 @@ def parse_args(geo):
                     help="append each verified layout to this JSON Lines file")
     ap.add_argument("--resume", action="store_true",
                     help="carry on the run recorded in --out, skipping rounds already done")
+    ap.add_argument("--objective", choices=[*geo["signs"], "combined"], default=None,
+                    help="optimise one metric of src/metrics.js in its good direction, "
+                         "or their equal-weighted combination")
+    ap.add_argument("--ranges", choices=list(geo["combined"]), default="sweep28",
+                    help="which population's ranges --objective combined rescales by")
     ap.add_argument("--symmetry", action="store_true", help="mirror break (needs equal L/R curve counts)")
     ap.add_argument("--no-collisions", action="store_true")
     ap.add_argument("--no-train", action="store_true", help="skip material-vs-train clearance")
@@ -543,7 +711,7 @@ def parse_args(geo):
     a.exclude = [t for t in a.exclude.split(",") if t]
     check_flags(ap, a)
     letters_to_type = {l: t for t, l in geo["letters"].items()}
-    a.hint = [letters_to_type[l] for l in a.hint] if a.hint else None
+    a.hint = [letters_to_type[l] for l in handed(a.hint, a.symmetry)] if a.hint else None
     return a
 
 
@@ -581,8 +749,14 @@ def main():
     route = read_route(lambda v: solver.value(v) == 1, geo, rows, selectors)
     score = sum(geo["scores"][t] for t in route)
     shape = "".join(geo["letters"][t] for t in route)
-    print(f"feasible in {solver.wall_time:.1f}s: {score} pts, {len(route)}/{held} cubes "
-          "(satisfiability only — no objective, every full-inventory loop ties on score)")
+    if p.objective:
+        value, bound = solver.objective_value, solver.best_objective_bound
+        gap = abs(bound - value) / max(abs(value), 1)
+        print(f"{name.lower()} in {solver.wall_time:.1f}s: {p.objective} {value:g}, "
+              f"bound {bound:g}, gap {100 * gap:.2f}%")
+    else:
+        print(f"feasible in {solver.wall_time:.1f}s: {score} pts, {len(route)}/{held} cubes "
+              "(satisfiability only — no objective, every full-inventory loop ties on score)")
     print(f"  {shape}")
 
     if not p.no_verify:
@@ -592,6 +766,12 @@ def main():
                              f"the solver claims {len(route)}")
         print(f"verified legal: {report['cubes']} cubes, span {report['span']}, "
               f"{'on the ground' if report['onTheGround'] else 'below ground'}")
+        if p.objective:
+            recount = recount_objective(geo, p, report["metrics"])
+            print(f"recounted: {json.dumps(report['metrics'])}")
+            if recount != round(solver.objective_value):
+                raise SystemExit(f"OBJECTIVE MISMATCH: the solver reads {solver.objective_value:g}, "
+                                 f"the recount {recount}")
 
 
 if __name__ == "__main__":

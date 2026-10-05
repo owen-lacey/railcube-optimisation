@@ -16,8 +16,10 @@
 
 import { CpModel, CpSolver, CpSolverStatus, LinearExpr } from 'cpsat-js';
 import {
-  POSES, FACES, PIECE_TYPES, POOLS, POOL_OF, SCORES, cellsFor, chainTrack, startCell,
+  POSES, FACES, PIECE_TYPES, POOLS, POOL_OF, PROJ, SCORES, cellsFor, chainTrack, startCell,
 } from '../track.js';
+import { METRICS, SIGNS, combinedWeights } from '../metrics.js';
+import { solveNative } from './native.js';
 import { transitionTable } from './transitions.js';
 
 /** The most cells any one piece's material fills — the 2×2 curves. */
@@ -26,6 +28,18 @@ const MAX_FOOT = 4;
 // Loading the WASM costs far more than solving a small model, so do it once.
 let solverPromise = null;
 const getSolver = () => (solverPromise ??= CpSolver.create());
+
+/**
+ * The engines a model can be solved on, each `(model, params) => result` in
+ * cpsat-js's shape. The model is the same either way; see native.js.
+ */
+const ENGINES = {
+  wasm: async () => {
+    const solver = await getSolver();
+    return (model, params) => solver.solve(model, params);
+  },
+  native: async () => solveNative,
+};
 
 // LinearExpr.plus takes another LinearExpr or a number — not an IntVar, which
 // only IntVar.plus accepts. Fold in expression space and the asymmetry is gone.
@@ -77,7 +91,192 @@ export const OBJECTIVES = {
       vars.map((v, r) => v.times(SCORES[PIECE_TYPES[rows[r].type]]))));
     model.maximize(revisit ? scored.minus(sum(revisit).times(SCORES.cross)) : scored);
   },
+  // The readings of src/metrics.js, each in its good direction (SIGNS) or,
+  // asked for the worst, the other, and their equal-weighted combination. Each
+  // solves for the number metricsOf would count off the chained route, which is
+  // what the answer is then checked by.
+  ...Object.fromEntries(METRICS.map(name => [name, context =>
+    aim(context, SIGNS[name], METRIC_TERMS[name](context))])),
+  combined: context => aim(context, 1, combinedTerm(context)),
+  // The material's longest extent on any axis: one bound per axis, no product.
+  // Nothing pulls the extents in but the objective, so this is sound only when
+  // minimised.
+  longestSide: context => {
+    const extents = materialExtent(context);
+    const longest = context.model.newIntVar(1, Math.max(...extents.map(e => e.most)), 'longest');
+    extents.forEach(({ at }) => context.model.add(longest.ge(at)));
+    context.model.minimize(longest);
+  },
 };
+
+/** Post a term towards its good end (sign +1 is up), or away from it when asked for the worst. */
+function aim({ model, direction }, sign, term) {
+  if (sign * (direction === 'worst' ? -1 : 1) > 0) model.maximize(term);
+  else model.minimize(term);
+}
+
+/**
+ * The metrics whose encoding is exact both ways, so their worst can be asked
+ * for. Every other is sound only in its good direction.
+ */
+const TWO_WAY = new Set(['repeats', 'faceUp', 'ceiling', 'height']);
+
+/** Whether an objective's worst can be asked for: combined only if every metric it weighs can. */
+const twoWay = (objective, ranges) => (objective === 'combined'
+  ? Object.entries(combinedWeights(ranges).weights).every(([name, w]) => !w || TWO_WAY.has(name))
+  : TWO_WAY.has(objective));
+
+/** The combination, exact in integers: every term multiplied through by the LCM of the ranges. */
+function combinedTerm(context) {
+  if (!context.ranges) throw new Error('the combined objective needs ranges to rescale by');
+  const { weights } = combinedWeights(context.ranges);
+  return sum(Object.keys(weights).filter(name => weights[name])
+    .map(name => METRIC_TERMS[name](context).times(weights[name])));
+}
+
+/**
+ * Hold metrics at least this good, in their good direction (SIGNS; combined is
+ * maximised), or at least this bad when `direction` is worst. The same terms as
+ * the objectives, so the same soundness: a one-way term is only right bounded
+ * from its good side, so the worst is refused for it.
+ */
+function addLimits(context, limits) {
+  const flip = context.direction === 'worst' ? -1 : 1;
+  for (const [name, value] of Object.entries(limits)) {
+    if (flip < 0 && !twoWay(name, context.ranges)) {
+      throw new Error(`the ${name} limit is sound only in its good direction, so it cannot be held at its worst`);
+    }
+    if (name === 'combined') {
+      const term = combinedTerm(context);
+      context.model.add(flip > 0 ? term.ge(value) : term.le(value));
+    } else if (METRIC_TERMS[name]) {
+      const term = METRIC_TERMS[name](context);
+      context.model.add(SIGNS[name] * flip > 0 ? term.ge(value) : term.le(value));
+    } else {
+      throw new Error(`unknown limit ${name}`);
+    }
+  }
+}
+
+/**
+ * The material's extent along each axis, [across, up, along], from bounds every
+ * material cell must sit inside. Nothing pulls the bounds in but what reads the
+ * extent, so it is sound only as something kept small.
+ */
+function materialExtent({ model, material, region }) {
+  return region.map(([floor, ceiling], a) => {
+    const hi = model.newIntVar(floor, ceiling, `hi_${a}`);
+    const lo = model.newIntVar(floor, ceiling, `lo_${a}`);
+    for (const { used, coord } of material) {
+      model.add(hi.ge(coord[a])).onlyEnforceIf(used);
+      model.add(lo.le(coord[a])).onlyEnforceIf(used);
+    }
+    return { most: ceiling - floor + 1, at: hi.minus(lo).plus(1) };
+  });
+}
+
+/**
+ * Where material may sit, as [lo, hi] along each axis [across, up, along]: the
+ * box and the floor, narrowed by `spans`. The start cube is material at the
+ * origin, so an extent of n cells reaches at most n − 1 either side of it.
+ */
+function regionOf(box, minY, spans) {
+  return [0, 1, 2].map(a => {
+    const floor = a === UP && minY !== null ? minY : -box;
+    const reach = spans ? spans[a] - 1 : box;
+    return [Math.max(floor, -reach), Math.min(box, reach)];
+  });
+}
+
+/** The selectors, across all steps, whose row passes a test. */
+const rowsWhere = (selectors, rows, test) =>
+  selectors.flatMap(vars => vars.filter((_, r) => test(rows[r])));
+
+const UP = 1;
+
+/**
+ * Each metric of src/metrics.js as a linear expression, read the same way
+ * `metricsOf` reads a chained route: step i's head is the train's cell and pose
+ * there, and a crossed cross's second pass is a step like any other.
+ */
+const METRIC_TERMS = {
+  // A face is seen only if some step is entered riding on it. Nothing forces it
+  // on, so this is sound only when maximised.
+  faces: ({ model, rows, selectors }) => sum(FACES.map(f => {
+    const seen = model.newBoolVar(`seen_${f}`);
+    model.add(seen.le(sum(rowsWhere(selectors, rows, row => POSES[row.pose][0] === f))));
+    return seen;
+  })),
+
+  // The material's bounding box, then its volume off a one-hot table of span
+  // triples — there is no multiplication here. Nothing pulls the bounds in or
+  // picks the smallest triple but the objective, so this is sound only when
+  // minimised.
+  volume: context => {
+    const { model } = context;
+    const spans = materialExtent(context);
+    const triples = [];
+    for (let across = 1; across <= spans[0].most; across++) {
+      for (let up = 1; up <= spans[1].most; up++) {
+        for (let along = 1; along <= spans[2].most; along++) {
+          triples.push({ span: [across, up, along], b: model.newBoolVar(`span_${across}_${up}_${along}`) });
+        }
+      }
+    }
+    model.add(sum(triples.map(t => t.b)).equals(1));
+    spans.forEach(({ at }, a) => model.add(sum(triples.map(t => t.b.times(t.span[a]))).ge(at)));
+    return sum(triples.map(t => t.b.times(t.span[0] * t.span[1] * t.span[2])));
+  },
+
+  // Steps that start three of a kind in a row, wrapping to the first. One `trip`
+  // per step and type, true exactly when that type fills all three: forced on by
+  // the triple and off by any one of them missing, so sound in both directions.
+  repeats: ({ model, rows, selectors }) => {
+    const types = [...new Set(rows.map(row => row.type))];
+    const typeIs = (vars, t) => sum(vars.filter((_, r) => rows[r].type === t));
+    const at = i => selectors[i % selectors.length];
+    capRuns(model, selectors, typeIs, at);
+    return sum(selectors.flatMap((vars, i) => types.map(t => {
+      const run = [vars, at(i + 1), at(i + 2)].map(v => typeIs(v, t));
+      const trip = model.newBoolVar(`trip_${i}_${t}`);
+      model.add(trip.ge(run[0].plus(run[1]).plus(run[2]).minus(2)));
+      run.forEach(one => model.add(trip.le(one)));
+      return trip;
+    })));
+  },
+
+  // Steps entered riding face up: the floor faces down.
+  faceUp: ({ rows, selectors }) => sum(rowsWhere(selectors, rows,
+    row => PROJ[POSES[row.pose][0]][UP] < 0)),
+
+  // Steps entered riding upside down: the floor faces up.
+  ceiling: ({ rows, selectors }) => sum(rowsWhere(selectors, rows,
+    row => PROJ[POSES[row.pose][0]][UP] > 0)),
+
+  // The train's up coordinate summed over the steps: the head before each one,
+  // which is the cell metricsOf reads off each placed piece.
+  height: ({ y, selectors }) => sum(y.slice(0, selectors.length)),
+};
+
+/**
+ * The longest run of each curve a closed track can hold, so a run objective's
+ * bound need not discover it by search. Four of a curve close a ring, and every
+ * piece after one collides with its first. Three inside or outside curves pass
+ * an open chain, but no closed track has been found to hold them: none of the
+ * 11.3M crossed sweep layouts, and no loop up to 12 pieces but the IIII ring
+ * itself. Wrapping, so only under `fill`, which the metrics need; a four-step
+ * loop is exempt, since it can be that ring.
+ */
+const RUN_CAPS = [['leftCurve', 3], ['rightCurve', 3], ['insideCurve', 2], ['outsideCurve', 2]];
+
+function capRuns(model, selectors, typeIs, at) {
+  if (selectors.length <= 4) return;
+  for (const [name, most] of RUN_CAPS) {
+    const t = PIECE_TYPES.indexOf(name);
+    selectors.forEach((_, i) => model.add(
+      sum(Array.from({ length: most + 1 }, (__, k) => typeIs(at(i + k), t))).le(most)));
+  }
+}
 
 /** What a chained track is worth, in plain JavaScript. Never a solver variable. */
 const scoreOf = placed => placed.reduce(
@@ -169,7 +368,7 @@ function addCrossings({
 
   for (let c = 0; c < slotCount; c++) {
     const on = model.newBoolVar(`crossing_${c}`);
-    const cell = ['X', 'Y', 'Z'].map(a => model.newIntVar(-reach, reach, `cross${a}_${c}`));
+    const cell = ['X', 'Y', 'Z'].map((a, k) => model.newIntVar(...reach[k], `cross${a}_${c}`));
     const face = model.newIntVar(0, FACES.length - 1, `crossFace_${c}`);
     const at = [], axis = [];
 
@@ -263,20 +462,17 @@ const cellsOf = (row, kind) => cellsFor(PIECE_TYPES[row.type], POSES[row.pose], 
  * offset is a constant, so a claim is just the head's id plus a number the
  * selectors pick out — no multiplication anywhere.
  *
- * The span has to cover every cell any claim can reach, or two different cells
- * would fold onto the same id. Material lives within the box, and every head and
- * train cell is one cell from material, so within box + 1; the span keeps one
- * cell of room past that.
+ * Each axis has to cover every cell any claim can reach, or two different cells
+ * would fold onto the same id. Material lives within the region, and every head
+ * and train cell is one cell from material, so within one of it; each axis keeps
+ * one cell of room past that.
  */
-function grid(box) {
-  const span = box + 2;
-  const n = 2 * span + 1;
-  return {
-    n,
-    size: n ** 3,
-    idOf: offset => offset[0] + offset[1] * n + offset[2] * n * n,
-    shift: span * (1 + n + n * n),
-  };
+function grid(region) {
+  const lows = region.map(([lo]) => lo - 2);
+  const sizes = region.map(([lo, hi]) => hi - lo + 5);
+  const stride = [1, sizes[0], sizes[0] * sizes[1]];
+  const idOf = offset => offset.reduce((id, v, a) => id + v * stride[a], 0);
+  return { stride, size: stride[2] * sizes[2], idOf, shift: -idOf(lows) };
 }
 
 /**
@@ -292,7 +488,7 @@ function claimSlots({ model, rows, selectors, x, y, z, g, kind, sentinel, revisi
   const maxSlots = Math.max(...rows.map(row => cellsOf(row, kind).length));
 
   selectors.forEach((vars, i) => {
-    const head = sum([x[i], y[i].times(g.n), z[i].times(g.n * g.n)]).plus(g.shift);
+    const head = sum([x[i], y[i].times(g.stride[1]), z[i].times(g.stride[2])]).plus(g.shift);
     for (let k = 0; k < maxSlots; k++) {
       const cellAt = row => cellsOf(row, kind)[k];
       const used = model.newBoolVar(`${kind}Used_${i}_${k}`);
@@ -313,20 +509,23 @@ function claimSlots({ model, rows, selectors, x, y, z, g, kind, sentinel, revisi
   return claims;
 }
 
-/** The box and the floor bind material cells, not the head — as the oracle reads them. */
-function boundMaterial({ model, rows, selectors, x, y, z, box, minY }) {
-  selectors.forEach((vars, i) => {
-    for (let k = 0; k < MAX_FOOT; k++) {
-      const cellAt = row => cellsOf(row, 'material')[k];
-      const used = model.newBoolVar(`inBox_${i}_${k}`);
-      model.add(used.equals(pick(vars, rows, row => (cellAt(row) ? 1 : 0))));
-      [x, y, z].forEach((axis, a) => {
-        const coord = axis[i].plus(pick(vars, rows, row => (cellAt(row) ? cellAt(row)[a] : 0)));
-        model.add(coord.le(box)).onlyEnforceIf(used);
-        model.add(coord.ge(a === 1 && minY !== null ? minY : -box)).onlyEnforceIf(used);
-      });
-    }
-  });
+/** The region binds material cells, not the head — as the oracle reads the box and floor. */
+//
+// Returns every material slot as `{ used, coord }`, for anything else that reads
+// where the material is — the volume objective.
+function boundMaterial({ model, rows, selectors, x, y, z, region }) {
+  return selectors.flatMap((vars, i) => Array.from({ length: MAX_FOOT }, (_, k) => {
+    const cellAt = row => cellsOf(row, 'material')[k];
+    const used = model.newBoolVar(`inBox_${i}_${k}`);
+    model.add(used.equals(pick(vars, rows, row => (cellAt(row) ? 1 : 0))));
+    const coord = [x, y, z].map((axis, a) =>
+      axis[i].plus(pick(vars, rows, row => (cellAt(row) ? cellAt(row)[a] : 0))));
+    coord.forEach((at, a) => {
+      model.add(at.le(region[a][1])).onlyEnforceIf(used);
+      model.add(at.ge(region[a][0])).onlyEnforceIf(used);
+    });
+    return { used, coord };
+  }));
 }
 
 /**
@@ -399,22 +598,28 @@ function addClearance(model, material, train) {
 function buildModel({
   steps, box, minY, exclude, startPose, collisions, checkTrain,
   inventory, objective, symmetryBreaking, crossings, minCrossings, minLoopLength,
-  require: forced, hint, fill,
+  require: forced, hint, fill, ranges, limits, spans, direction,
 }) {
   const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
   const model = new CpModel();
   const start = POSES.indexOf(startPose);
 
+  // Everything is built over the region, never the whole box: a narrower span
+  // is a smaller model, not just a capped one.
+  const region = regionOf(box, minY, spans);
+
   // Head position and pose before each step, plus one more for after the last:
   // that final head is what has to be back where it started. The head's own
-  // domain is one wider than the box, because the box binds material cells and
-  // a head is the train's cell, one beyond the cube it stands on.
-  const reach = box + 1;
+  // domain is one wider than the region, because the region binds material cells
+  // and a head is the train's cell, one beyond the cube it stands on — except
+  // below the floor, where the train cannot be either: riding under a cube on the
+  // ground would put it inside the ground. No piece books a train cell lower than
+  // both of its heads, so bounding the heads bounds the whole train.
+  const reach = region.map(([lo, hi], a) =>
+    [a === UP && minY !== null ? Math.max(lo - 1, minY) : lo - 1, hi + 1]);
   const x = [], y = [], z = [], pose = [];
   for (let i = 0; i <= steps; i++) {
-    x.push(model.newIntVar(-reach, reach, `x_${i}`));
-    y.push(model.newIntVar(minY === null ? -reach : minY - 1, reach, `y_${i}`));
-    z.push(model.newIntVar(-reach, reach, `z_${i}`));
+    [x, y, z].forEach((axis, a) => axis.push(model.newIntVar(...reach[a], `${'xyz'[a]}_${i}`)));
     pose.push(model.newIntVar(0, POSES.length - 1, `pose_${i}`));
   }
 
@@ -458,7 +663,7 @@ function buildModel({
 
   // The box and the floor apply whether or not the collision rules are on, so
   // that switching a rule off changes exactly one thing.
-  boundMaterial({ model, rows, selectors, x, y, z, box, minY });
+  const material = boundMaterial({ model, rows, selectors, x, y, z, region });
 
   // How many crossings could there be at most? One per cross in the box; with no
   // inventory the only limit is that a crossing takes two steps.
@@ -484,7 +689,7 @@ function buildModel({
                      minCrossings, minLoopLength })
     : null;
 
-  const g = grid(box);
+  const g = grid(region);
   const slots = kind => claimSlots({
     model, rows, selectors, x, y, z, g, kind, revisit,
     sentinel: g.size + (kind === 'train' ? steps * MAX_FOOT : 0),
@@ -502,7 +707,28 @@ function buildModel({
   if (objective) {
     const apply = OBJECTIVES[objective];
     if (!apply) throw new Error(`unknown objective ${objective}`);
-    apply({ model, active, revisit, rows, selectors });
+    // The metrics rank arrangements of one whole inventory. Leave the length free
+    // and the best volume is a four-piece ring, and the wrap would read the
+    // switched-off tail as track.
+    if (objective !== 'maximiseScore' && !fill) {
+      throw new Error(`the ${objective} objective needs fill: true — it compares full-length loops`);
+    }
+    if (direction === 'worst' && !twoWay(objective, ranges)) {
+      throw new Error(`the ${objective} objective is sound only in its good direction, so its worst cannot be asked for`);
+    }
+    apply({ model, active, revisit, rows, selectors, material, region, ranges, direction, y });
+  }
+
+  if (limits) {
+    if (!fill) throw new Error('limits need fill: true — the metrics compare full-length loops');
+    addLimits({ model, active, revisit, rows, selectors, material, region, ranges, direction, y }, limits);
+  }
+
+  // A box per axis: the region only says where the material may be, which for a
+  // span of n is 2n − 1 cells wide, so the extent itself is capped as well.
+  if (spans) {
+    materialExtent({ model, material, region })
+      .forEach(({ at }, a) => model.add(at.le(spans[a])));
   }
 
   if (hint) hintRoute({ model, rows, selectors, active, route: hint, startPose });
@@ -542,14 +768,34 @@ const chosenRows = (result, selectors) =>
  *                so a shorter loop is always available and this model can never
  *                be infeasible for want of somewhere to put a piece
  *   box          no material cell further than this from the origin on any axis
- *   minY         floor; null for none. 0 means nothing below the ground
+ *   minY         floor; null for none. 0 means nothing below the ground, neither
+ *                material nor the train
  *   exclude      piece types to leave out
  *   collisions   enforce at most one piece per cell. Off is only useful for
  *                comparing against an oracle run with the rule off too
  *   checkTrain   enforce clearance as well: no cell both material and train
  *   inventory    pool counts the loop may spend, e.g. SET. Omit for a
  *                bottomless box of pieces
- *   objective    a key of OBJECTIVES, e.g. 'maximiseScore'
+ *   objective    a key of OBJECTIVES, e.g. 'maximiseScore', or one of the metrics
+ *                of src/metrics.js ('faces', 'volume', 'repeats', 'faceUp',
+ *                'ceiling', 'height') or 'combined', each optimised in its good
+ *                direction unless
+ *                `direction` asks for the worst.
+ *                The metric objectives need `fill`
+ *   direction    'best' (the default) or 'worst': which end of the objective to
+ *                ask for. Worst only for repeats, faceUp, ceiling and height,
+ *                the encodings exact both ways, and a combined weighing only
+ *                those; anything else throws
+ *   ranges       each metric's [lo, hi], which `combined` rescales by — one of
+ *                POPULATION_RANGES in src/metrics.js
+ *   limits       metrics held at least this good, e.g. { faces: 6, combined: n },
+ *                each in its good direction (SIGNS; combined is maximised, in the
+ *                integers of combinedWeights), or at least this bad when
+ *                `direction` is worst. Needs `fill`
+ *   spans        [across, up, along]: the most cells the material may extend
+ *                along each axis, wherever it sits inside `box`. The model is
+ *                built over only the cells such a track could reach, since the
+ *                start cube is at the origin: n − 1 either side of it, in the box
  *   symmetryBreaking  rule out mirror-image duplicates. Off by default, because
  *                enumerating every solution has to see them
  *   crossings    let the train pass twice over one cross. Off by default, because
@@ -604,20 +850,25 @@ const chosenRows = (result, selectors) =>
  *                fires for every incumbent of every round, index counting on
  *   maxSolutions stop enumerating after this many and set `truncated` on the
  *                result, so a capped sweep can never be mistaken for a complete one
+ *   engine       'wasm' (cpsat-js, the default and the only one in a browser) or
+ *                'native' (OR-Tools in a child process, Node only, needs `uv`).
+ *                The same model either way; native's onSolution is always live
  *
  * Returns `{ status, route, pieces, dropped, score }`, or `{ status, routes }`
  * when enumerating. `route` is the order the train travels — a crossed cross is
  * in it twice — while `pieces` is that route chained, each entry flagged
  * `revisit` or not, `dropped` counts cubes left in the box, and `score` is what
- * the route is worth under SCORES.
+ * the route is worth under SCORES. With an objective it also carries `value` and
+ * `bound`, the solver's own objective and best bound, for reporting a gap.
  */
 export async function solveTrack({
   steps, box = 6, minY = null, exclude = [], startPose = 'DF',
   collisions = true, checkTrain = true, inventory,
   objective, symmetryBreaking = false, crossings = false, minCrossings,
   minLoopLength = null, require, hint,
-  fill = false, enumerateAllSolutions = false,
+  fill = false, ranges, limits, spans, enumerateAllSolutions = false,
   allSolutions = false, maxSolutions, maxTimeInSeconds, numWorkers, onSolution,
+  engine = 'wasm', direction = 'best',
 }) {
   // Check the numbers before handing them to the solver: a NaN reaches cpsat-js
   // as a BigInt conversion error several frames deep, which says nothing useful.
@@ -629,15 +880,24 @@ export async function solveTrack({
   if (minY !== null && !Number.isInteger(minY)) {
     throw new Error(`minY must be an integer or null, got ${minY}`);
   }
+  if (spans && !(spans.length === 3 && spans.every(n => Number.isInteger(n) && n >= 1))) {
+    throw new Error(`spans must be three positive integers, got ${spans}`);
+  }
   if (minLoopLength !== null && !(Number.isInteger(minLoopLength) && minLoopLength >= 1)) {
     throw new Error(`minLoopLength must be a positive integer or null, got ${minLoopLength}`);
   }
 
-  const solver = await getSolver();
+  if (!['best', 'worst'].includes(direction)) {
+    throw new Error(`direction must be best or worst, got ${direction}`);
+  }
+  if (!(engine in ENGINES)) {
+    throw new Error(`engine must be one of ${Object.keys(ENGINES).join(', ')}, got ${engine}`);
+  }
+  const solve = await ENGINES[engine]();
   const { model, rows, selectors, active } = buildModel({
     steps, box, minY, exclude, startPose, collisions, checkTrain,
     inventory, objective, symmetryBreaking, crossings, minCrossings, minLoopLength,
-    require, hint, fill,
+    require, hint, fill, ranges, limits, spans, direction,
   });
   const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);
   // An inactive step is forbidden by its active flag; an active one by its row.
@@ -694,12 +954,15 @@ export async function solveTrack({
   };
 
   if (!allSolutions) {
-    const result = solver.solve(model, params);
+    const result = await solve(model, params);
     const status = STATUS[result.status];
     if (status !== 'OPTIMAL' && status !== 'FEASIBLE') {
       return { status, route: null, pieces: null, dropped: null, score: null };
     }
-    return { status, ...report(routeOf(chosenRows(result, selectors))) };
+    // The solver's own objective and bound, for reporting how far from proved an
+    // answer is. Never the number an answer is judged by — that is a recount.
+    const solved = objective ? { value: result.objectiveValue, bound: result.bestObjectiveBound } : {};
+    return { status, ...solved, ...report(routeOf(chosenRows(result, selectors))) };
   }
 
   // No-good cuts: forbid the exact set of selectors just used, and solve again.
@@ -708,7 +971,7 @@ export async function solveTrack({
   const routes = [];
   for (;;) {
     if (routes.length === maxSolutions) return { status: 'OPTIMAL', routes, truncated: true };
-    const result = solver.solve(model, params);
+    const result = await solve(model, params);
     const status = STATUS[result.status];
     if (status !== 'OPTIMAL' && status !== 'FEASIBLE') {
       if (status !== 'INFEASIBLE') throw new Error(`enumeration stopped on ${status}`);

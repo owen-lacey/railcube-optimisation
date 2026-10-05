@@ -103,6 +103,22 @@ test('eight workers report the same kind of stream, replayed at the end', async 
     PORTABLE ? 'clamped to one worker, so still live' : 'a threaded search records instead');
 });
 
+test('the native engine reports live at eight workers', async () => {
+  const { seen, result } = await watched({ numWorkers: 8, engine: 'native' });
+
+  assert.equal(result.status, 'OPTIMAL');
+  assertWellFormedStream(seen, result);
+  // The search runs in another process, so nothing has to be recorded and replayed:
+  // the worker count no longer decides the delivery.
+  assert.ok(seen.every(s => s.live), 'a native search is outside this thread at any count');
+});
+
+test('a throw from a native callback abandons the search and rejects the solve', async () => {
+  await assert.rejects(() => watched({ engine: 'native', onSolution: () => {
+    throw new Error('drawn an illegal route');
+  } }), /drawn an illegal route/);
+});
+
 // ---- What the stream must agree with -------------------------------------
 
 test('an incumbent has the same shape as the answer', async () => {

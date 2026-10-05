@@ -18,12 +18,17 @@
 // rail, as isRevisit decides it. `startCells[poseIndex]` is where the train
 // starts in that pose, from startCell: the start cube is the origin, so the
 // train is one cell off it.
+//
+// `proj` is each direction letter's vector, for reading a floor's direction off
+// a pose. `signs` is each metric's good end, and `combined[population]` the
+// integer weights the combined objective uses, from src/metrics.js.
 
 import {
   POSES, PIECE_TYPES, PROJ, SCORES, SET, cellsFor, cubeOf, isRevisit, poseLetters, startCell,
 } from '../src/track.js';
 import { transitionTable } from '../src/solver/transitions.js';
 import { shapeOf } from '../src/layouts.js';
+import { POPULATION_RANGES, SIGNS, combinedWeights } from '../src/metrics.js';
 
 const rotation = pose => {
   const map = poseLetters(pose);
@@ -46,5 +51,9 @@ console.log(JSON.stringify({
   cells: { material: cells('material'), train: cells('train') },
   rotations: POSES.map(rotation),
   startCells: POSES.map(startCell),
+  proj: PROJ,
+  signs: SIGNS,
+  combined: Object.fromEntries(Object.entries(POPULATION_RANGES)
+    .map(([name, ranges]) => [name, combinedWeights(ranges)])),
   crossRevisits: POSES.flatMap((pose, i) => (isRevisit('cross', [0, 0, 0], pose, crossInDF) ? [i] : [])),
 }));

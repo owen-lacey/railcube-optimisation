@@ -65,8 +65,14 @@ function release(board, claimed) {
   }
 }
 
-const inBounds = (piece, box, minY) =>
-  piece.material.every(c =>
+/**
+ * The box and the floor bind the material; the floor binds the train as well,
+ * which cannot ride under a cube on the ground. No piece books a train cell lower
+ * than both of its heads, so the head it leaves is the train's floor check.
+ */
+const inBounds = (piece, head, box, minY) =>
+  (minY === null || head.cell[1] >= minY)
+  && piece.material.every(c =>
     c.every(v => Math.abs(v) <= box) && (minY === null || c[1] >= minY));
 
 /**
@@ -78,7 +84,8 @@ const inBounds = (piece, box, minY) =>
  *               crossed cross is two steps
  *   minPieces   ignore loops shorter than this (they are still found)
  *   box         no material cell further than this from the origin on any axis
- *   minY        floor; null for none. 0 means nothing below the ground
+ *   minY        floor; null for none. 0 means nothing below the ground, neither
+ *               material nor the train
  *   collisions  enforce material collisions at all. Off is only useful for
  *               comparing against a partially-built solver model — a loop that
  *               passes through itself is not a track
@@ -127,11 +134,11 @@ export function enumerateLoops({
       if (!revisit && spent[pool] >= inventory[pool]) continue;
 
       const piece = { type, ...cellsFor(type, pose, cell) };
-      if (!inBounds(piece, box, minY)) continue;
+      const head = step(cell, pose, type);
+      if (!inBounds(piece, head, box, minY)) continue;
       const claimed = revisit || !collisions ? EMPTY_CLAIM : claim(board, piece, checkTrain);
       if (!claimed) continue;
 
-      const head = step(cell, pose, type);
       if (reachable(head.cell, head.pose, left - 1)) {
         if (revisit) board.crossed.add(at);
         else {
