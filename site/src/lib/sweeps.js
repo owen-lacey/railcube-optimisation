@@ -32,12 +32,21 @@
 // plain Node as well as Vite, because that is what puts it under test.
 import sweep28 from './data/sweep-28.json' with { type: 'json' };
 import sweepCrossed from './data/sweep-crossed.json' with { type: 'json' };
+import sweepCrossedWeights from './data/sweep-crossed-weights.json' with { type: 'json' };
 
 /** The 28-cube sweep: the question, the run, and every distinct layout it found. */
 export const SWEEP_28 = sweep28;
 
 /** A uniform sample of the crossed sweep: 35 cubes over 36 steps, so the train drives over one cube twice. */
 export const SWEEP_CROSSED = sweepCrossed;
+
+/**
+ * Every legal layout of the crossed sweep — all of sweeps.db, not a sample —
+ * tallied by knotted, poses, close calls, repeats and longest side, each row
+ * with its count, and example shapes where the row can be a weighted best or
+ * worst. `scripts/tally-weights.js` writes it; `weighting.js` ranks it.
+ */
+export const SWEEP_CROSSED_WEIGHTS = sweepCrossedWeights;
 
 /** Every sweep the site carries, for anything that wants to iterate rather than name one. */
 export const SWEEPS = [SWEEP_28, SWEEP_CROSSED];
