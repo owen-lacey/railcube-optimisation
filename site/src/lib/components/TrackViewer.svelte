@@ -1,11 +1,13 @@
 <script>
   import { onMount } from 'svelte';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
-  import { createStage, together } from '../render/stage.js';
+  import { createStage, together, deferred } from '../render/stage.js';
   import { readTheme } from '../render/renderer.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
+  import { movePhase } from '../render/move.js';
   import { gridLines } from '../render/grid.js';
   import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
+  import { identify } from '../../../../src/layouts.js';
   import { toWorld } from '../render/vec.js';
 
   // How far a callout stands off the outline of what is drawn, in CSS pixels.
@@ -30,6 +32,10 @@
     //   grow    the layout *extends* the one that is there: whatever the two have in
     //           common is left standing and only the rest arrives. The one kind whose
     //           camera moves — see `showGrown`. `{ pace, speed, from }`.
+    //   move    every cube the two layouts share is carried over to its new slot, a
+    //           cube with no slot fades out where it stands, and one with no cube
+    //           comes in from beyond the edge of the picture. Framed on `camera`, as
+    //           a static track is. `{ speed, pan }`.
     //
     // `speed` is one tempo over the whole assembly (see `timingFor` in build.js).
     // `handover` is when the build starts, measured from the moment the track is let
@@ -149,10 +155,10 @@
   }
 
   /**
-   * The four kinds of transition. Each says how it shows a layout, where it frames
+   * The five kinds of transition. Each says how it shows a layout, where it frames
    * (null for one that frames itself) and what it loads first. A reader who has asked
-   * for reduced motion gets the redraw from the two that would otherwise assemble,
-   * and a tumble with nothing standing has nothing to knock down.
+   * for reduced motion gets the redraw from those that would otherwise assemble,
+   * and a tumble or a move with nothing standing has nothing to rearrange.
    */
   const CHANGES = {
     redraw: { show: showStatic, frame: () => camera },
@@ -171,6 +177,10 @@
       load: async () => ({ tumblePhase } = await import('../render/tumble.js')),
     },
     grow: { show: showGrown, frame: null },
+    move: {
+      show: next => (shown && !reduced ? showMoved : showStatic)(next),
+      frame: () => camera,
+    },
   };
 
   /**
@@ -241,9 +251,27 @@
   /** Draw it finished and drive it, off an emptied stage. */
   function showStatic(next) {
     stage.clear();
-    stage.run([trackPhase(stage, next, {
-      drive: Boolean(train), trainAt: train?.at, onTrainAt: train?.onAt, alarm: flagged(),
-    })]);
+    stage.run([finished(next)]);
+  }
+
+  /** The layout drawn finished and driven, over whatever cubes are on the stage. */
+  const finished = next => trackPhase(stage, next, {
+    drive: Boolean(train), trainAt: train?.at, onTrainAt: train?.onAt, alarm: flagged(),
+  });
+
+  /**
+   * Carry the cubes that are there over to the new layout's slots, and drive it
+   * once they have all landed. A cube whose ID the new layout lacks is taken off
+   * the stage first, so its ID is free, and fades out where it stands.
+   */
+  function showMoved(next) {
+    const keep = new Set(identify(next));
+    const leaving = [...stage.cubes.keys()].filter(id => !keep.has(id)).map(id => stage.detach(id));
+    const { speed } = settings();
+    stage.run([
+      movePhase(stage, next, { leaving, frame: camera, speed: Number(speed) }),
+      deferred(() => finished(next)),
+    ]);
   }
 
   /** Empty the stage and click the whole layout together, every piece a mint. */

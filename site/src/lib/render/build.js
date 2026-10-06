@@ -143,30 +143,33 @@ const timingFor = (pace, speed, delay) => ({
 
 /**
  * Put a cube down finished: at its final pose, in its final place. Mints it if it
- * is not on the stage; moves it there if it is.
+ * is not on the stage; moves it there if it is anywhere else, and leaves it be if
+ * it is there already.
  */
 function finish(stage, slot) {
-  const existing = stage.held(slot.id);
+  const existing = stage.cubes.get(slot.id);
   const cube = stage.cube(slot.id, slot);
-  if (existing) cube.place(slot.basis, slot.position);
+  if (existing && !restsAt(existing, slot)) cube.place(slot.basis, slot.position);
   return cube;
 }
 
 /**
- * Off the floor and up to the standoff, turning into the pose on the way.
+ * A cube carried through the air from one place to another, `from` and `to` each
+ * `{ basis, com }`, at `s` in 0..1, turning into its new pose on the way.
  *
- * The turn is over by 80% of the leg, so the piece is square before the slide
- * starts. The arc is a straight line between the two points with a rise added to
+ * The turn is over by 80% of the leg, so the piece is square before it arrives.
+ * The arc is a straight line between the two centres of mass with a rise added to
  * the middle of it — enough that a cube lifts clear of the track rather than
  * dragging along the floor to get where it is going.
  *
- * Only a pick-up has one of these, so only `buildPhase` calls it.
+ * A pick-up's lift to the standoff is one of these, and so is every flight in
+ * `movePhase`.
  */
-function lift(slot, s) {
-  const basis = turnToward(slot.from.basis, slot.basis, liftTurnEase(s));
-  const com = lerp(slot.from.com, slot.to, smooth(s));
+export function arcTo(cube, from, to, s) {
+  const basis = turnToward(from.basis, to.basis, liftTurnEase(s));
+  const com = lerp(from.com, to.com, smooth(s));
   const risen = add(com, scale(UP, Math.sin(Math.PI * clamp(s)) * LIFT_HEIGHT * CUBE));
-  slot.cube.place(basis, originAt(slot.type, basis, risen));
+  cube.place(basis, originAt(cube.type, basis, risen));
 }
 
 /**
@@ -199,7 +202,7 @@ function resume(slot, s) {
 }
 
 /** Is this cube exactly home in its slot — landed, and not still on its way? */
-const restsAt = (cube, slot) => cube
+export const restsAt = (cube, slot) => cube
   && cube.position.every((v, k) => Math.abs(v - slot.position[k]) < 1e-6)
   && cube.basis.every((row, r) => row.every((v, k) => Math.abs(v - slot.basis[r][k]) < 1e-6));
 
@@ -507,7 +510,9 @@ export function buildPhase(stage, pieces, {
           return false;
         }
         const since = elapsed - slot.at;
-        if (slot.pickUp && since < timing.lift) lift(slot, since / timing.lift);
+        if (slot.pickUp && since < timing.lift) {
+          arcTo(slot.cube, slot.from, { basis: slot.basis, com: slot.to }, since / timing.lift);
+        }
         else slide(slot, (since - (slot.pickUp ? timing.lift : 0)) / timing.flight);
         return true;
       });

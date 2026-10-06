@@ -17,14 +17,16 @@
 // so this belongs in the fast tier.
 
 import test from 'node:test';
+import { Vector3 } from 'three';
 import assert from 'node:assert/strict';
 
 import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
-import { createStage, together, OVERLAY } from '../site/src/lib/render/stage.js';
+import { createStage, together, deferred, OVERLAY } from '../site/src/lib/render/stage.js';
+import { movePhase, MOVE } from '../site/src/lib/render/move.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT, STEP } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH } from '../site/src/lib/scenes.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute } from '../site/src/lib/scenes.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
@@ -1074,6 +1076,126 @@ test('a pan outlives the phase that asked for it', () => {
 
   assert.equal(stage.zoom().toFixed(3), (2 * 0.88).toFixed(3));
   assert.equal(clock.running(), false, 'the loop ran on after the pan finished');
+});
+
+// ---- Moving the cubes to a new layout -----------------------------------------
+
+/**
+ * One layout standing, then a move to another, the way `TrackViewer` runs one:
+ * the cubes the new layout has no ID for detached, the move, and then the finished
+ * track. The camera is already on the new layout's frame, as at the end of a pan.
+ */
+function moving(shapeFrom, shapeTo, { drive = false } = {}) {
+  const clock = fakeClock();
+  const { handles, stage } = staged();
+  const from = piecesOf(shapeFrom);
+  const to = piecesOf(shapeTo);
+  const { camera } = sceneFromRoute(routeOf(shapeTo));
+  stage.frameTo(camera);
+
+  stage.run([trackPhase(stage, from, { drive })]);
+  clock.run(0.1);
+  const before = new Map([...stage.cubes].map(([id, cube]) => [id, cube]));
+  const writes = new Map([...before].map(([id, cube]) => [id, handleOf(cube).transforms.length]));
+
+  const keep = new Set(identify(to));
+  const leaving = [...stage.cubes.keys()].filter(id => !keep.has(id)).map(id => stage.detach(id));
+  stage.run([
+    movePhase(stage, to, { leaving, frame: camera }),
+    deferred(() => trackPhase(stage, to, { drive })),
+  ]);
+  stage.start();
+  return { stage, handles, clock, to, before, writes, leaving };
+}
+
+test('a move carries the same cubes to their new slots', () => {
+  const { stage, handles, clock, to, before } = moving(SET, OTHER);
+  const cubes = to.filter(p => !p.revisit);
+  const ids = identify(to);
+
+  clock.run(MOVE / 2);
+  const midway = ids.filter(id => !near(stage.cubes.get(id).position, restingPlace(cubes[ids.indexOf(id)])));
+  assert.ok(midway.length > 0, 'nothing was in the air half-way through');
+  clock.run(MOVE);
+
+  assert.equal(handles.length, 18, 'a cube was minted for a layout that holds the same 18');
+  for (const [i, id] of ids.entries()) {
+    const cube = stage.cubes.get(id);
+    assert.equal(cube, before.get(id), `${id} is not the cube it was`);
+    assert.equal(handleOf(cube).disposed, false, `${id} was taken away`);
+    assert.deepEqual(cube.position, restingPlace(cubes[i]), `${id} landed off its cell`);
+    assert.ok(gap(cube.basis, poseRotation(cubes[i].pose)) < 1e-12, `${id} landed turned`);
+  }
+});
+
+test('a move to the layout already standing writes to no cube', () => {
+  const { clock, before, writes } = moving(SET, SET);
+  clock.run(MOVE * 2);
+  for (const [id, cube] of before) {
+    assert.equal(handleOf(cube).transforms.length, writes.get(id), `${id} was moved into the place it was in`);
+  }
+});
+
+test('a cube the new layout has no slot for fades where it stands, then goes', () => {
+  const { stage, clock, leaving, writes } = moving(SET, RING);
+  assert.equal(leaving.length, 14, 'the ring keeps four left curves of the eighteen');
+  assert.ok(leaving.every(cube => !stage.cubes.has(cube.id)), 'a leaving cube still holds its ID');
+
+  const opacities = [];
+  clock.run(MOVE * 0.9, () => opacities.push(leaving[0].mesh.mesh.material.opacity));
+  assert.ok(opacities.at(-1) < 0.2 && opacities.at(-1) > 0, `it was at ${opacities.at(-1)} near the end`);
+  assert.ok(opacities.every((v, i) => i === 0 || v <= opacities[i - 1]), 'it brightened on the way out');
+  for (const cube of leaving) {
+    assert.equal(handleOf(cube).transforms.length, writes.get(cube.id), `${cube.id} moved as it faded`);
+  }
+
+  clock.run(MOVE);
+  assert.ok(leaving.every(cube => handleOf(cube).disposed), 'a faded cube was never taken away');
+  assert.equal(stage.cubes.size, 4);
+});
+
+test('a move replaced part-way through takes its fading cubes away at once', () => {
+  const { stage, clock, leaving } = moving(SET, RING);
+  clock.run(MOVE / 3);
+  stage.run([trackPhase(stage, piecesOf(RING), { drive: false })]);
+  assert.ok(leaving.every(cube => handleOf(cube).disposed), 'a fading cube was stranded half-seen');
+});
+
+test('a cube with no cube to carry comes in from beyond the nearest edge of the picture', () => {
+  const { stage, clock, to, before } = moving(RING, SET);
+  const cubes = to.filter(p => !p.revisit);
+  const ids = identify(to);
+  const minted = ids.filter(id => !before.has(id));
+  assert.equal(minted.length, 14);
+
+  const screen = at => {
+    const { x, y } = new Vector3(...at).project(stage.camera);
+    return [x * 450, y * 350];   // pixels from the middle of the 900×700 stand-in
+  };
+  for (const id of minted) {
+    const cube = stage.cubes.get(id);
+    const [sx, sy] = screen(restingPlace(cubes[ids.indexOf(id)]));
+    const [ex, ey] = screen(handleOf(cube).transforms[0].position);
+    // The edge nearest the slot, and the start beyond it, on its side.
+    const across = 450 - Math.abs(sx) < 350 - Math.abs(sy);
+    if (across) assert.ok(Math.abs(ex) > 450 && Math.sign(ex) === Math.sign(sx), `${id} set off at ${ex}, ${ey}`);
+    else assert.ok(Math.abs(ey) > 350 && Math.sign(ey) === Math.sign(sy), `${id} set off at ${ex}, ${ey}`);
+  }
+
+  clock.run(MOVE * 2);
+  for (const id of minted) {
+    assert.deepEqual(stage.cubes.get(id).position, restingPlace(cubes[ids.indexOf(id)]), `${id} landed off its cell`);
+  }
+});
+
+test('there is no train while the cubes move, and one once they have landed', () => {
+  const { handles, clock } = moving(SET, OTHER, { drive: true });
+  const alive = () => handles.filter(h => !h.disposed).length;
+  assert.equal(alive(), 18, 'the old train outlived its layout');
+  clock.run(MOVE / 2);
+  assert.equal(alive(), 18, 'a train was put on a track still being moved');
+  clock.run(MOVE);
+  assert.equal(alive(), 19, '18 cubes and exactly one train');
 });
 
 // ---- The cell lattice -------------------------------------------------------

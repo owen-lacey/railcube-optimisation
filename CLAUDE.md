@@ -695,13 +695,18 @@ type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `Sketch
 together with), `TumbleViewer.svelte` and `BuildViewer.svelte`. The stories are plain JS CSF
 files beside them.
 
-`TrackViewer` mounts a stage one way and shows a layout four, chosen by one `transition`
+`TrackViewer` mounts a stage one way and shows a layout five, chosen by one `transition`
 object, `{ kind, ...that kind's settings }`, and looked up in its `CHANGES` table, which is
 why the wrappers stay thin rather than becoming copies of the plumbing. `redraw`: new pieces
 are a redraw off an emptied stage. `build`: they are assembled from off the frame. `tumble`:
 they are a rearrangement — the old layout collapses and the new one is built out of what
 falls. `grow`: they are an *extension* — whatever the two layouts have in common is left
-standing, untouched, and only the rest arrives. A tumble is the only kind that imports
+standing, untouched, and only the rest arrives. `move`: the cubes are carried straight
+over (`movePhase` in `render/move.js`) — matched by piece ID like a tumble, every flight at
+once on the pick-up's arc (`arcTo`), no axial slide at the end; a cube with no slot fades
+out where it stands, and a slot with no cube is filled from beyond the edge of the new
+frame nearest it (`stage.offscreen`). The train comes back once everything has landed. It
+is what the scrolly section uses, with `pan`. A tumble is the only kind that imports
 `tumble.js`: that module reaches `cannon-es`, so it is loaded dynamically on mount, which
 keeps a physics engine out of a page of static piece cards — and out of `Sketch`, which
 never drops anything. The train is a `train` object of callbacks (`at`, `onAt`, `onCell`,
@@ -736,11 +741,12 @@ step must not change how a figure is written in the post, so nothing wraps one. 
 is its own card and viewer. Under a `FigureHost` (context), it hands `show(view, hasFooter)` to
 the section and renders only its footer.
 
-- **One viewer per section, never remounted.** A step change swaps the footer, redraws the track
-  in place, and pans the camera to the new step's tight frame (`transition: { kind: 'redraw',
-  pan: 0.6 }`). A pan picks up from wherever the camera has got to, so a step change mid-pan
-  turns towards the new frame. A bigger track is drawn at the old zoom and panned out, so it
-  starts cropped for ~0.6 s. That was accepted.
+- **One viewer per section, never remounted.** A step change swaps the footer, moves the
+  cubes over to the new track, and pans the camera to the new step's tight frame
+  (`transition: { kind: 'move', pan: 0.6 }`). A pan picks up from wherever the camera has got
+  to, so a step change mid-pan turns towards the new frame. Arrivals set off from beyond the
+  edge of the *new* frame, so a step to a smaller track, panning in from a wider shot, can
+  show them setting off inside the picture.
 - **`TrackViewer` re-shows on a new `train`**, even over the same pieces, because train
   callbacks are captured in `show()`. Without it a section's next step would drive the
   previous figure's train.

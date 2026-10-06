@@ -125,6 +125,30 @@ export function pinnedShot({ target, perUnit, at, ...angles }, width, height) {
 }
 
 /**
+ * A world point beyond the nearest edge of a description's frame from `position`:
+ * where `position` lands on a `width`×`height` viewer, pushed straight out through
+ * whichever edge is closest, far enough that `margin` world units round it are
+ * still off the picture. Where a piece arriving from off-screen sets off.
+ */
+export function offscreen(position, description, width, height, margin) {
+  const base = { ...CAMERA, ...description };
+  const zoom = appliedZoom(base.zoom, width, height);
+  const { right, up } = screenAxes(base);
+  const from = new Vector3(...position).sub(new Vector3(...numbers(base.target)));
+  const x = from.dot(right);
+  const y = from.dot(up);
+  const [halfW, halfH] = [width / 2 / zoom, height / 2 / zoom];
+  const exits = [
+    { axis: right, sign: 1, room: halfW - x },
+    { axis: right, sign: -1, room: halfW + x },
+    { axis: up, sign: 1, room: halfH - y },
+    { axis: up, sign: -1, room: halfH + y },
+  ];
+  const { axis, sign, room } = exits.reduce((best, exit) => (exit.room < best.room ? exit : best));
+  return new Vector3(...position).addScaledVector(axis, sign * (Math.max(room, 0) + margin)).toArray();
+}
+
+/**
  * Put an OrthographicCamera where the description says, for a `width`×`height`
  * viewer, and return the zoom applied.
  *

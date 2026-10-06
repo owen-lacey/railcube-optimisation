@@ -148,7 +148,7 @@
 					{...view}
 					paused={view?.paused || held}
 					{aspect}
-					transition={{ kind: "redraw", pan: PAN }}
+					transition={{ kind: "move", pan: PAN }}
 				>
 					{#snippet caption(drawn)}
 						<FigureHost {show} {drawn}>

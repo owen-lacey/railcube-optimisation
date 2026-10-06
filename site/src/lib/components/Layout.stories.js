@@ -29,7 +29,7 @@ export default {
   args: { kind: 'redraw', pace: 0.04, speed: 1.2, handover: 0.5, drop: 2 },
   argTypes: {
     shape: { control: 'text' },
-    kind: { control: 'inline-radio', options: ['redraw', 'tumble', 'build'] },
+    kind: { control: 'inline-radio', options: ['redraw', 'tumble', 'build', 'move'] },
     pace: { control: { type: 'range', min: 0.02, max: 2, step: 0.02 } },
     speed: { control: { type: 'range', min: 0.5, max: 4, step: 0.1 } },
     handover: { control: { type: 'range', min: 0, max: 3, step: 0.05 } },

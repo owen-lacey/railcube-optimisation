@@ -34,7 +34,7 @@
 import { AmbientLight, Box3, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, OrthographicCamera, ReplaceStencilOp, Scene, Vector3 } from 'three';
 import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js';
 import { createLoop } from './loop.js';
-import { createCamera, viewBetween } from './camera.js';
+import { createCamera, viewBetween, adjusted, offscreen, REFERENCE_WIDTH, REFERENCE_HEIGHT } from './camera.js';
 import { sharedRenderer } from './renderer.js';
 import { cellBox, cellFace } from './grid.js';
 import { backdropOf } from './blueprint.js';
@@ -96,6 +96,23 @@ export function together(...phases) {
       return live.every(phase => phase.done) ? false : undefined;
     },
     dispose() { for (const phase of live) phase.dispose?.(); },
+  };
+}
+
+/**
+ * A phase made on its first frame rather than when it is queued.
+ *
+ * For a phase that does its work as it is made — `trackPhase` puts every cube in
+ * its place at once — queued behind one that has to finish first.
+ */
+export function deferred(make) {
+  let phase = null;
+  return {
+    advance(delta, elapsed) {
+      phase ??= make();
+      return phase.advance(delta, elapsed);
+    },
+    dispose() { phase?.dispose?.(); },
   };
 }
 
@@ -183,6 +200,17 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     frameTo: applyDescription, applyCamera, view, untouched, adjust: adjustView, reset: resetView, touched, applied,
   } = createCamera(camera, size, () => { invalidate(); onCamera?.(); });
 
+  /**
+   * Where a piece at `position` would set off from to arrive from beyond the nearest
+   * edge of the shot `description` frames, with any hand on the camera kept — see
+   * `offscreen` in camera.js. `margin` is world units clear of the edge.
+   */
+  const offscreenFrom = (position, description, margin) => {
+    const { width, height } = size();
+    const shot = adjusted(description, touched() ? view() : null);
+    return offscreen(position, shot, width || REFERENCE_WIDTH, height || REFERENCE_HEIGHT, margin);
+  };
+
   /** Where the blueprint's sheet of dots sits under the camera now — see `backdropOf`. */
   const backdrop = () => {
     const { width, height } = size();
@@ -219,6 +247,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     if (existing) return existing;
 
     const mesh = movingMesh(scene, geometryFor(type, color), paint.solid, basis, position);
+    let faded = null;
     const made = {
       id,
       type,
@@ -241,10 +270,21 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
         made.color = next;
         invalidate();
       },
+      // See-through by `opacity`, 1 being solid. The first fade gives the cube a
+      // material of its own, so the shared paint the rest are drawn in is untouched.
+      fade(opacity) {
+        if (!faded) {
+          faded = new MeshLambertMaterial({ vertexColors: true, transparent: true });
+          mesh.repaint(faded);
+        }
+        faded.opacity = opacity;
+        invalidate();
+      },
       // A detached cube's ID may already belong to a newer one, which this must not
       // take off the stage with it.
       dispose() {
         mesh.dispose();
+        faded?.dispose();
         if (cubes.get(id) === made) cubes.delete(id);
         invalidate();
       },
@@ -669,6 +709,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     applyCamera,
     applied,
     backdrop,
+    offscreen: offscreenFrom,
     zoom: () => applied().zoom,
     view,
     adjust,

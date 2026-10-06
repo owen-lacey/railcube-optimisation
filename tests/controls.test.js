@@ -14,7 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OrthographicCamera, Vector3 } from 'three';
 import { orbit, zoomed, slid, ZOOM_BY } from '../site/src/lib/render/controls.js';
-import { adjusted, createCamera, polyView, CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT } from '../site/src/lib/render/camera.js';
+import { adjusted, createCamera, polyView, offscreen, CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT } from '../site/src/lib/render/camera.js';
 
 const still = { rotX: 65, rotY: 45, zoomBy: 1, offset: [0, 0, 0] };
 
@@ -107,4 +107,30 @@ test('a reset takes the hand off the camera, back to the shot as described', () 
   assert.equal(camera.touched(), false);
   assert.deepEqual(camera.applied(), untouched);
   assert.deepEqual(camera.view(), start, 'the next gesture starts from the frame again');
+});
+
+test('an arrival sets off beyond the edge of the picture nearest where it is going', () => {
+  const [halfW, halfH] = [REFERENCE_WIDTH / 2, REFERENCE_HEIGHT / 2];
+  for (const rotX of [0, 30, 65, 80]) {
+    for (const rotY of [-45, 0, 100, 210]) {
+      for (const point of [[10, 20, 5], [-120, 40, 0], [60, -90, 30], [0, 0, 150]]) {
+        const shot = { rotX, rotY, zoom: 3, target: [5, -5, 10] };
+        const description = { 'rot-x': rotX, 'rot-y': rotY, zoom: 3, target: shot.target.join(',') };
+        const { at: [px, py], applied } = project(point, shot);
+        const start = offscreen(point, description, REFERENCE_WIDTH, REFERENCE_HEIGHT, 40);
+        const { at: [sx, sy] } = project(start, shot);
+        const across = halfW - Math.abs(px) < halfH - Math.abs(py);
+        const label = `rot ${rotX}/${rotY} from ${point}`;
+        // Out through that edge by the margin, and moved along nothing else. A point
+        // already past the edge is only moved the margin further.
+        if (across) {
+          assert.ok(Math.abs(Math.abs(sx) - (Math.max(halfW, Math.abs(px)) + 40 * applied)) < 1e-6 && Math.sign(sx) === Math.sign(px), label);
+          assert.ok(Math.abs(sy - py) < 1e-6, label);
+        } else {
+          assert.ok(Math.abs(Math.abs(sy) - (Math.max(halfH, Math.abs(py)) + 40 * applied)) < 1e-6 && Math.sign(sy) === Math.sign(py), label);
+          assert.ok(Math.abs(sx - px) < 1e-6, label);
+        }
+      }
+    }
+  }
 });
