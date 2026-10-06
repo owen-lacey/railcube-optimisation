@@ -89,9 +89,8 @@
 
 <p>
 	We can now represent the position & pose of the train piece at any given time.
-	A complete track is one that returns to the origin cube facing DF. Putting
-	positions and poses together, here is a track in which the train travels along
-	every face of the cube:
+	Putting positions and poses together, here is a track in which the train
+	travels along every face of the cube:
 </p>
 
 <TrainCoordinates
@@ -152,6 +151,17 @@
 	leaving pieces in the box is also a deal-breaker, but that's just my
 	undiagnosed OCD / privileged upbringing.
 </p>
+
+<p>
+	For <PieceTag letter="X" />, we do something clever, if I say so myself. We
+	essentially treat them as two <PieceTag letter="S" />' and tell the model they
+	must share the same cell at a 90 degree angle. These are logically equivalent,
+	but worth mentioning as it violates our track collisions rule for this special
+	piece.
+</p>
+
+<!-- TODO: needs viz, or separate section? -->
+
 <p>
 	All of this so far has been very boring and diligent, but necessary. I forgive
 	you for wondering when we're gonna make all those sick layouts we saw at the
@@ -280,21 +290,32 @@
 <!-- TODO: Weighted tracks -->
 <TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
 
-<p>Can you do better? Try build one yourself.</p>
+<p>
+	Can you do better? Try build one yourself and see if you can beat my score of
+	X.
+</p>
 <!-- TODO: keeps track of poses. -->
 <TrackBuilder />
 
+<p></p>
+
 <hr />
+
+<h2>Author notes</h2>
+<p>
+	I estimate that there are over <a
+		href="https://bsky.app/profile/owenlacey.dev/post/3mwlhlqenlc2r"
+		target="_blank">28 billion different ways</a
+	> to build a valid Rail Cube track, using every piece. My program generated around
+	10 million - about 0.04% of the total. As such, I'm fairly confident that there
+	are layouts that score higher than the ones you've seen.
+</p>
 
 <ul>
 	<li>
 		Prove that it's infeasible to enumerate all solutions, which is where CP
 		comes in
 	</li>
-	<li>
-		Interactive track builder, with stats on how good the track you built is.
-	</li>
-	<li>Cross cube</li>
 </ul>
 
 <style>
