@@ -20,10 +20,13 @@
 	// The footer's height, in rem: room for the tallest a figure has, a caption over
 	// a slider.
 	const FOOTER = 6.5;
+	// How long the section takes to fade in when revealed, in seconds.
+	const REVEAL = 0.6;
 
 	let { steps = [] } = $props();
 
 	let active = $state(0);
+	let section = $state();
 	let stage = $state(null);
 	let triggers = $state([]);
 	let width = $state(0);
@@ -56,6 +59,15 @@
 	const line = () =>
 		`${Math.round((window.innerHeight + stage.offsetHeight) / 2)}px`;
 
+	// Fade the section in, for a page that brings it on rather than scrolling to it.
+	export function reveal() {
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		section.animate([{ opacity: 0 }, { opacity: 1 }], {
+			duration: REVEAL * 1000,
+			easing: "ease-out"
+		});
+	}
+
 	onMount(() => {
 		const scroller = scrollama();
 		scroller
@@ -79,7 +91,7 @@
 	</div>
 {/snippet}
 
-<section class="scrolly">
+<section class="scrolly" bind:this={section}>
 	<!-- The box is pinned over every step but the last. It lets go as the last one
        arrives in the band, so that one scrolls away with the box, and the page
        carries on as normal, rather than sliding under it. -->

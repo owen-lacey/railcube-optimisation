@@ -772,6 +772,13 @@ stacking under 600px. The whole title fades in once, not under reduced motion.
   cubes tall. `tests/letters.test.js` reads every PNG's header against the table.
 - **The heading is text.** The `<h1>` holds "Optimising the Rail Cube" visually hidden, and
   the letters are `aria-hidden` with empty `alt`, so a screen reader hears one heading.
+- **A ">" button sends it away, and so does the right arrow.** The splash fades out (0.4 s),
+  then calls `onnext`; `/post` removes it for good, scrolls to the top and calls the
+  section's `reveal()`, which fades the whole `ScrollySection` in (0.6 s). The key is
+  `claimKeys` from `keys.js`, so it works only while the splash is mostly on screen.
+  Scrolling past the splash is unchanged — Owen's call. Under reduced motion both are
+  instant. Once the splash is gone the scrolly is `main`'s first child, which is why the
+  layout's no-top-padding rule matches either.
 
 ### Typing a track: `Sketch`
 

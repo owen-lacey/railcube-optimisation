@@ -8,4 +8,5 @@ export default {
   parameters: { layout: 'fullscreen' },
 };
 
-export const Default = {};
+// The page removes the splash once it has faded; here it is left faded.
+export const Default = { args: { onnext: () => {} } };

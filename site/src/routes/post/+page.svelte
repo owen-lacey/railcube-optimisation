@@ -17,6 +17,19 @@
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import ScrollySection from "$lib/components/ScrollySection.svelte";
 	import Splash from "$lib/components/Splash.svelte";
+	import { tick } from "svelte";
+
+	// The splash is there until its button sends it away, and then gone for good, so
+	// the page starts on the scrolly section, which fades in.
+	let opened = $state(false);
+	let scrolly = $state();
+
+	async function open() {
+		opened = true;
+		await tick();
+		window.scrollTo(0, 0);
+		scrolly.reveal();
+	}
 
 	// The opening, told over one viewer.
 	const steps = [
@@ -66,9 +79,11 @@
 	<title>Optimising the Rail Cube</title>
 </svelte:head>
 
-<Splash />
+{#if !opened}
+	<Splash onnext={open} />
+{/if}
 
-<ScrollySection {steps} />
+<ScrollySection bind:this={scrolly} {steps} />
 
 <p>
 	Hopefully the sheer number of tracks convinces you I couldn't have possibly

@@ -26,8 +26,9 @@
   }
 
   /* A page that opens on a splash starts at the top of the screen, so the splash
-     fills the first screen exactly. */
-  main:has(> :global(.splash:first-child)) {
+     fills the first screen exactly. So does one that opens on a scrolly section,
+     which is what /post becomes once its splash is sent away. */
+  main:has(> :global(:is(.splash, .scrolly):first-child)) {
     padding-top: 0;
   }
 </style>
