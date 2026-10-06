@@ -23,7 +23,9 @@ rotation) and it is native code, so nothing in-process can interrupt it. So
 topoly runs in a worker process, and a call that outlasts `--timeout` seconds
 kills the worker and counts like 0 and ErrTMC: a fresh worker, a fresh
 rotation. Twelve scans each stuck on such a curve all night is how this was
-found.
+found. The clock starts once a worker has said it is ready: its imports take
+about 0.6 s, and on a busy machine a timeout that also paid for them expired on
+every rotation.
 
 Geometry is never computed here: the curves come from the JS (trackPath in
 site/src/lib/render/rail.js, via scripts/knot-curves.js), and what the
@@ -44,7 +46,8 @@ ATTEMPTS = 16
 
 
 def alexander(conn):
-    """The worker: rotate each curve it is sent and answer with its polynomial."""
+    """The worker: say it is ready, then rotate each curve it is sent and answer with its polynomial."""
+    conn.send('ready')
     while True:
         points, seed, attempt = conn.recv()
         rng = np.random.default_rng([seed, attempt])
@@ -64,6 +67,8 @@ class Worker:
         self.conn, child = multiprocessing.Pipe()
         self.process = multiprocessing.Process(target=alexander, args=(child,), daemon=True)
         self.process.start()
+        child.close()  # so a worker that dies starting is an EOFError here, not a wait
+        self.conn.recv()  # 'ready'
 
     def call(self, points, seed, attempt):
         """The polynomial, or None if topoly hung on this rotation."""
