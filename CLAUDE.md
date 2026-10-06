@@ -722,6 +722,40 @@ is free to hand over an equal-but-new array — either of which, compared by ref
 as a shape change. In sequencing mode that means the track knocking itself down for no
 reason, which is exactly what the first render did until it was caught in a browser.
 
+### Scrollytelling: `ScrollySection`
+
+The post opens on a `ScrollySection` (scrollama): one viewer in a box stuck to the top of the
+screen, and the prose running through a fixed band below it, each paragraph changing what the
+box shows as it arrives. A step is `{ body, figure, props }` — a snippet of prose, and a figure
+component with its own props.
+
+**A figure is the same component standalone or as a step** — Owen's call: being usable as a
+step must not change how a figure is written in the post, so nothing wraps one. The contract is
+`$lib/figure.js`. Figures (`TrackFigure`, `TrainCoordinates`, `KnownTracks`) draw through
+`Frame`, handing it a `view` (shape, scene, train, paused) and a `footer`. With no host, `Frame`
+is its own card and viewer. Under a `FigureHost` (context), it hands `show(view, hasFooter)` to
+the section and renders only its footer.
+
+- **One viewer per section, never remounted.** A step change swaps the footer, redraws the track
+  in place, and pans the camera to the new step's tight frame (`transition: { kind: 'redraw',
+  pan: 0.6 }`). A pan picks up from wherever the camera has got to, so a step change mid-pan
+  turns towards the new frame. A bigger track is drawn at the old zoom and panned out, so it
+  starts cropped for ~0.6 s. That was accepted.
+- **`TrackViewer` re-shows on a new `train`**, even over the same pieces, because train
+  callbacks are captured in `show()`. Without it a section's next step would drive the
+  previous figure's train.
+- **The card is one size for every step.** A footer is a fixed `FOOTER` (6.5rem). A figure with
+  no footer has no bar, and the viewer takes the whole card.
+- **The box only loads where it sticks if the section is the page's first child.** The
+  `main:has(> .scrolly:first-child)` rule in `site/src/routes/+layout.svelte` drops the
+  layout's top padding for it. That is why `/post` has no title — Owen's call.
+- Steps trigger at the middle of the band, measured in pixels off the stage
+  (`scroller.offset(...)`, scrollama 3.2's name for `offsetTrigger`), because a phone's address
+  bar changes the viewport but not the stage. The last step releases the box, so the page reads
+  normally after it.
+- Synchronous `scrollTo` jumps do not fire scrollama. A CDP check has to scroll a little at a
+  time.
+
 ### Typing a track: `Sketch`
 
 `SketchViewer` is a text box the track is built in front of you, letter by letter. It is
