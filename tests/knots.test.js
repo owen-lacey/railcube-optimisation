@@ -65,3 +65,14 @@ test('an uncrossed track reads the same over and under', () => {
   const { over, under } = curvesOf(chainTrack(routeOf(LAYOUTS.set.shape)));
   assert.deepEqual(over, under);
 });
+
+// topoly never returns on this track's first rotation over the cross: it is the
+// curve one of twelve overnight scans sat on for ten hours. knots.py must give up
+// on that rotation and read another. Seeded as the scan seeds it, by row id.
+test('a rotation topoly hangs on is abandoned for another', async () => {
+  const hung = knotReader({ timeout: 2 });
+  const curves = curvesOf(chainTrack(routeOf('XIRSIOOIRISSRSRLSSXIOSSLILSSSLOIISSS')));
+  const [polys] = await hung.read([{ id: 8507057, seed: 8507057, curves }]);
+  await hung.close();
+  assert.equal(knotOf(polys.over, polys.under), 'unknot');
+});

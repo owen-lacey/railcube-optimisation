@@ -545,6 +545,13 @@ because re-reading costs ~60 ms a layout. Things learned:
 - **`0` and `ErrTMC` are about the projection, not the curve.** Retried on a new rotation
   (up to 16), only a real polynomial is kept, and a curve that never gives one stops the run.
   ErrTMC is not only on unknots: a grid-snapped figure-eight gives it on ~half its rotations.
+- **topoly can hang forever** on some rotations (native code, so nothing in-process can stop
+  it): the first overnight scan lost ten hours with all twelve readers each stuck on one
+  curve. knots.py now runs topoly in a worker process and kills it after `--timeout`
+  seconds (10; `knotReader({ timeout })`), counting a hang like `0`/`ErrTMC` and moving
+  on to a fresh rotation. `tests/knots.test.js` pins the track that hung. A scan that looks
+  healthy in its first minutes can still stall later, so check a long one by rows read in
+  the database over time, not by its first log lines.
 - **Never both ways yet**: every knotted layout seen is knotted over or under, never both;
   `knotOf` throws if two different knots ever turn up.
 - **Front first: `--knots --front`.** With every weight positive, a layout dominated by a

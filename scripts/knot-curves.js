@@ -53,10 +53,12 @@ export function knotOf(over, under) {
 /**
  * scripts/knots.py as a long-lived child. `read(records)` sends
  * `{ id, seed, curves }` and resolves to each record's `{ name: polynomial }`, in
- * order. One batch in flight at a time.
+ * order. One batch in flight at a time. `timeout` is the seconds one topoly call
+ * may take before knots.py gives up on that rotation and tries another.
  */
-export function knotReader() {
-  const child = spawn('uv', ['run', '--quiet', KNOTS_PY], { stdio: ['pipe', 'pipe', 'inherit'] });
+export function knotReader({ timeout = 10 } = {}) {
+  const child = spawn('uv', ['run', '--quiet', KNOTS_PY, '--timeout', String(timeout)],
+    { stdio: ['pipe', 'pipe', 'inherit'] });
   const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
   const exited = new Promise(resolve => child.on('exit', resolve));
   const read = async records => {
