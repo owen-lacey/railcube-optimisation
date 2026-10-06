@@ -14,23 +14,30 @@
 	import scrollama from "scrollama";
 	import LayoutViewer from "./LayoutViewer.svelte";
 	import FigureHost from "./FigureHost.svelte";
+	import { layoutScene } from "$lib/scenes.js";
+	import { O_TRACK } from "$lib/letters.js";
 
 	// How long the camera takes to ease to a new step's frame, in seconds.
 	const PAN = 0.6;
 	// The footer's height, in rem: room for the tallest a figure has, a caption over
 	// a slider.
 	const FOOTER = 6.5;
-	// How long the section takes to fade in when revealed, in seconds.
-	const REVEAL = 0.6;
+	// Landing, how long the card's border and dots take to fade in, and then the text,
+	// in seconds.
+	const SETTLE = 0.3;
+	const WORDS = 0.4;
 
 	let { steps = [] } = $props();
 
 	let active = $state(0);
-	let section = $state();
 	let stage = $state(null);
 	let triggers = $state([]);
 	let width = $state(0);
 	let height = $state(0);
+	// Out of sight with its train held, while the title zooms into it; then landing,
+	// with the viewer showing and its border, dots and text about to fade in.
+	let held = $state(false);
+	let settling = $state(false);
 
 	/** @type {import('$lib/figure.js').FigureView | undefined} */
 	let view = $state();
@@ -59,13 +66,40 @@
 	const line = () =>
 		`${Math.round((window.innerHeight + stage.offsetHeight) / 2)}px`;
 
-	// Fade the section in, for a page that brings it on rather than scrolling to it.
-	export function reveal() {
-		if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-		section.animate([{ opacity: 0 }, { opacity: 1 }], {
-			duration: REVEAL * 1000,
-			easing: "ease-out"
-		});
+	// The title's O is the first step's track, and a page zooms from it into this
+	// section's viewer: `hold` hides the section while it does, `landing` says what
+	// the zoom is to end on, and `land` hands over.
+
+	/**
+	 * Out of sight, the train waiting at its start, and already without the border,
+	 * dots and text, so that showing it does not fade them out first.
+	 */
+	export function hold() {
+		held = true;
+		settling = true;
+	}
+
+	/**
+	 * The first step's camera, and the box on screen its canvas fills: what the
+	 * zoom has to end on to be this viewer's own picture.
+	 */
+	export function landing() {
+		if (view.shape !== O_TRACK.shape) {
+			throw new Error(`the first step is ${view.shape}, not the title's O, ${O_TRACK.shape}`);
+		}
+		return {
+			camera: (view.scene ?? layoutScene)(view.shape).camera,
+			rect: stage.querySelector("canvas").getBoundingClientRect()
+		};
+	}
+
+	/**
+	 * In sight with the train let go, the picture already the zoom's last; then the
+	 * card's border and dots fade in, and after them the text.
+	 */
+	export function land() {
+		held = false;
+		requestAnimationFrame(() => requestAnimationFrame(() => (settling = false)));
 	}
 
 	onMount(() => {
@@ -91,7 +125,13 @@
 	</div>
 {/snippet}
 
-<section class="scrolly" bind:this={section}>
+<section
+	class="scrolly"
+	class:held
+	class:settling
+	style:--settle="{SETTLE}s"
+	style:--words="{WORDS}s"
+>
 	<!-- The box is pinned over every step but the last. It lets go as the last one
        arrives in the band, so that one scrolls away with the box, and the page
        carries on as normal, rather than sliding under it. -->
@@ -106,6 +146,7 @@
 			>
 				<LayoutViewer
 					{...view}
+					paused={view?.paused || held}
 					{aspect}
 					transition={{ kind: "redraw", pan: PAN }}
 				>
@@ -135,6 +176,36 @@
 
 	.pinned {
 		position: relative;
+	}
+
+	.held {
+		visibility: hidden;
+	}
+
+	/* Settling: what the zoom did not draw — the border, the dots and the text — fades
+	   in as this class comes off, the text once the rest has. */
+	.box :global(.card) {
+		transition: border-color var(--settle) ease-out;
+	}
+
+	.box :global(.viewer.blueprint) {
+		transition: --blueprint-dot var(--settle) ease-out;
+	}
+
+	.step {
+		transition: opacity var(--words) ease-out var(--settle);
+	}
+
+	.settling .box :global(.card) {
+		border-color: transparent;
+	}
+
+	.settling .box :global(.viewer.blueprint) {
+		--blueprint-dot: transparent;
+	}
+
+	.settling .step {
+		opacity: 0;
 	}
 
 	/* The box. Opaque and on top, so text that has been read goes underneath. */

@@ -32,3 +32,10 @@ export function rowWidth(words) {
 export function rowsHeight(rows) {
   return HEIGHT * rows + GAPS.row * (rows - 1);
 }
+
+/**
+ * The O is the post's first track, and this is how it was snapped: the shape, and
+ * the face of its box it was looked at square on from, unturned (see `squareOn` in
+ * scenes.js). The title zooms out of it into the post.
+ */
+export const O_TRACK = { shape: 'SIOSLLSOISLL', view: 'above', turn: 0 };

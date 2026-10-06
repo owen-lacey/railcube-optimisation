@@ -7,20 +7,22 @@
 	// every letter. The length is the largest at which the widest row fits across the
 	// screen and every row fits down it.
 	//
-	// The button under it, or the right arrow, fades the splash away and then tells the
-	// page, through `onnext`, that it has gone.
+	// The button under it, or the right arrow, fades away every letter but the O, and
+	// then hands the page, through `onnext`, the O's box on screen: the O is the post's
+	// first track, and the page zooms into it from there.
 	import { onMount } from "svelte";
 	import ChevronRight from "@lucide/svelte/icons/chevron-right";
 	import { GAPS, WIDTHS, HEIGHT, rowWidth, rowsHeight } from "$lib/letters.js";
 	import { claimKeys } from "$lib/keys.js";
 
-	// How long the splash takes to fade away, in seconds.
+	// How long the other letters take to fade away, in seconds.
 	const FADE = 0.4;
 
 	let { onnext } = $props();
 
 	let splash = $state();
 	let leaving = $state(false);
+	let left = false;
 
 	const TEXT = "Optimising the Rail Cube";
 	// Two rows on a wide screen. On a narrow one, a row that stacks puts each of its
@@ -43,14 +45,22 @@
 
 	const widest = (rows) => Math.max(...rows.map(rowWidth));
 
+	function next() {
+		if (left) return;
+		left = true;
+		onnext(splash.querySelector("img:not(.fades)").getBoundingClientRect());
+	}
+
 	function leave() {
 		if (leaving) return;
 		leaving = true;
-		if (matchMedia("(prefers-reduced-motion: reduce)").matches) onnext();
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) next();
 	}
 
+	// The first of the letters to finish fading says they all have. (Not the button:
+	// its fade-in animation holds its opacity, so it never transitions.)
 	function faded(event) {
-		if (event.target === splash && event.propertyName === "opacity") onnext();
+		if (event.target.classList.contains("fades") && event.propertyName === "opacity") next();
 	}
 
 	// The page's keys, while the splash is the most of what is on screen.
@@ -86,6 +96,7 @@
 						<span class="word">
 							{#each word as letter}
 								<img
+									class:fades={letter !== "O"}
 									src={src(letter)}
 									alt=""
 									style:--across={WIDTHS[letter]}
@@ -130,7 +141,8 @@
 		place-items: center;
 	}
 
-	.leaving {
+	/* The O stays: the page takes it over. */
+	.leaving :is(.fades, .next) {
 		opacity: 0;
 		transition: opacity var(--fade) ease-out;
 	}

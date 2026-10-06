@@ -17,24 +17,41 @@
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import ScrollySection from "$lib/components/ScrollySection.svelte";
 	import Splash from "$lib/components/Splash.svelte";
+	import TitleZoom from "$lib/components/TitleZoom.svelte";
 	import { tick } from "svelte";
 
 	// The splash is there until its button sends it away, and then gone for good, so
-	// the page starts on the scrolly section, which fades in.
+	// the page starts on the scrolly section. Its O is the section's first track, so
+	// the O is drawn live where it was, and zooms into the section's viewer.
 	let opened = $state(false);
 	let scrolly = $state();
+	// The O's box on screen while the title zooms, and the zoom.
+	let zoomFrom = $state(null);
+	let zoom = $state();
 
-	async function open() {
+	async function gone() {
 		opened = true;
 		await tick();
 		window.scrollTo(0, 0);
-		scrolly.reveal();
+	}
+
+	function open(rect) {
+		if (matchMedia("(prefers-reduced-motion: reduce)").matches) gone();
+		else zoomFrom = rect;
+	}
+
+	// The O is drawn live over its picture, so the splash can go from under it.
+	async function zoomIn() {
+		scrolly.hold();
+		await gone();
+		await zoom.zoomTo(scrolly.landing());
+		scrolly.land();
+		zoomFrom = null;
 	}
 
 	// The opening, told over one viewer.
 	const steps = [
-		{ body: intro, figure: TrackFigure, props: { shape: "SIOLLOISLL" } },
-		{ body: unused, figure: TrackFigure, props: { shape: "SIOLLOISLL" } },
+		{ body: intro, figure: TrackFigure, props: { shape: "SIOSLLSOISLL" } },
 		{
 			body: instead,
 			figure: TrackFigure,
@@ -50,13 +67,14 @@
 </script>
 
 {#snippet intro()}
-	<p>This is a Rail Cube track. It's as if model trains and LEGO had a baby:</p>
-{/snippet}
+	<p>This is a Rail Cube track. It's as if model trains and LEGO had a baby.</p>
 
-{#snippet unused()}
 	<p>
-		It uses two straights, two inner loops, two outer, and four right turns. It
-		leaves 25 Rail Cube pieces in the box, unused. Unacceptable.
+		It uses four <Highlight colour="straight">straights</Highlight>, two <Highlight
+			colour="insideCurve">inner loops</Highlight
+		>, two <Highlight colour="outsideCurve">outer loops</Highlight>, and four <Highlight
+			colour="leftCurve">left turns</Highlight
+		>. It leaves 23 Rail Cube pieces in the box, unused. Unacceptable.
 	</p>
 {/snippet}
 
@@ -84,6 +102,12 @@
 {/if}
 
 <ScrollySection bind:this={scrolly} {steps} />
+
+<!-- After the section, so the section is still the page's first child once the
+     splash has gone (see the layout's padding rule). -->
+{#if zoomFrom}
+	<TitleZoom bind:this={zoom} from={zoomFrom} onready={zoomIn} />
+{/if}
 
 <p>
 	Hopefully the sheer number of tracks convinces you I couldn't have possibly

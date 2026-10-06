@@ -772,13 +772,30 @@ stacking under 600px. The whole title fades in once, not under reduced motion.
   cubes tall. `tests/letters.test.js` reads every PNG's header against the table.
 - **The heading is text.** The `<h1>` holds "Optimising the Rail Cube" visually hidden, and
   the letters are `aria-hidden` with empty `alt`, so a screen reader hears one heading.
-- **A ">" button sends it away, and so does the right arrow.** The splash fades out (0.4 s),
-  then calls `onnext`; `/post` removes it for good, scrolls to the top and calls the
-  section's `reveal()`, which fades the whole `ScrollySection` in (0.6 s). The key is
-  `claimKeys` from `keys.js`, so it works only while the splash is mostly on screen.
-  Scrolling past the splash is unchanged — Owen's call. Under reduced motion both are
-  instant. Once the splash is gone the scrolly is `main`'s first child, which is why the
-  layout's no-top-padding rule matches either.
+- **A ">" button sends it away, and so does the right arrow, by zooming into the O.** The
+  O is the post's first track, `SIOSLLSOISLL`, snapped from above unturned (`O_TRACK` in
+  `letters.js`, its outline under test). Every other letter and the button fade (0.4 s),
+  and `onnext` is handed the O's box on screen. `/post` mounts `TitleZoom` there — a
+  full-screen transparent canvas drawing the same track square on, pixel-identical to the
+  picture — and only once it has drawn does the splash go, from under it. Then the
+  section is `hold()`-ed (hidden, train paused, border/dots/text already transparent),
+  the page scrolls to the top, and the zoom turns from square-on to the default angle
+  while growing into the section's canvas (1.4 s, `render/zoom.js`): the track is pinned
+  to a box moving from the O's to the canvas's, scale by equal ratios, turn the short way.
+  The overlay is full-screen rather than the box so the track can swing past the box's
+  edges mid-turn. Its last frame is the viewer's own picture (`tests/zoom.test.js`
+  projects both ends through real cameras), so `land()` swaps them in one frame; the train
+  appears there, the border and blueprint dots fade in (0.3 s — `--blueprint-dot` is an
+  `@property` colour so it can transition), then the text (0.4 s). The section's
+  `landing()` throws unless its first step is the O's shape. Owen's calls: train at
+  hand-off, full-screen canvas, ~2.5 s overall. The key is `claimKeys` from `keys.js`,
+  so it works only while the splash is mostly on screen. Scrolling past the splash is
+  unchanged — Owen's call. Under reduced motion there is no zoom: the splash goes and the
+  page is at the top at once. `TitleZoom` sits after the section in the page so that,
+  once the splash is gone, the scrolly is `main`'s first child, which is why the layout's
+  no-top-padding rule matches either.
+- **The fade's end is read off the letters, not the button.** The button's `fade-in`
+  animation holds its opacity, so it never fires `transitionend`.
 
 ### Typing a track: `Sketch`
 

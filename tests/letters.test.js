@@ -5,7 +5,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { WIDTHS, HEIGHT, PER_CUBE_PX } from '../site/src/lib/letters.js';
+import { WIDTHS, HEIGHT, PER_CUBE_PX, O_TRACK } from '../site/src/lib/letters.js';
+import { squareOn } from '../site/src/lib/scenes.js';
 
 const DIR = new URL('../site/src/lib/assets/letters/', import.meta.url);
 
@@ -24,4 +25,10 @@ test('every picture is its letter in cubes at PER_CUBE_PX', () => {
   for (const [letter, across] of Object.entries(WIDTHS)) {
     assert.deepEqual(size(`${letter}.png`), { width: across * PER_CUBE_PX, height: HEIGHT * PER_CUBE_PX }, letter);
   }
+});
+
+test('the O is its track, square on as it was snapped', () => {
+  const perCube = 60;
+  const { width, height } = squareOn(O_TRACK.shape, { ...O_TRACK, perCube });
+  assert.deepEqual({ width, height }, { width: WIDTHS.O * perCube, height: HEIGHT * perCube });
 });

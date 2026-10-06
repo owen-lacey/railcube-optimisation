@@ -95,6 +95,36 @@ export function describedZoom(pixelsPerUnit, width, height) {
 }
 
 /**
+ * The screen's axes in the world for a description's tilt, turn and roll: `towards`
+ * the viewer, and `right` and `up` the screen. See `polyView`.
+ */
+export function screenAxes(description) {
+  const base = { ...CAMERA, ...description };
+  const tilt = rad(Number(base['rot-x']));
+  const turn = rad(Number(base['rot-y']));
+  const towards = new Vector3(Math.sin(tilt) * Math.cos(turn), Math.sin(tilt) * Math.sin(turn), Math.cos(tilt));
+  const right = new Vector3(-Math.sin(turn), Math.cos(turn), 0);
+  const level = new Vector3().crossVectors(towards, right);
+  const roll = rad(Number(base.roll ?? 0));
+  const up = level.clone().multiplyScalar(Math.cos(roll)).addScaledVector(right, -Math.sin(roll));
+  right.multiplyScalar(Math.cos(roll)).addScaledVector(level, Math.sin(roll));
+  return { towards, right, up };
+}
+
+/**
+ * A description that draws the world point `target`, `[x, y, z]`, at `at`, `[x, y]`
+ * CSS pixels from a `width`×`height` viewer's top left, at `perUnit` CSS pixels a
+ * world unit, from these angles. A described shot always puts its target in the
+ * middle; this one is moved so the middle is wherever puts `target` at `at`.
+ */
+export function pinnedShot({ target, perUnit, at, ...angles }, width, height) {
+  const { right, up } = screenAxes(angles);
+  const [dx, dy] = [at[0] - width / 2, at[1] - height / 2];
+  const middle = new Vector3(...target).addScaledVector(right, -dx / perUnit).addScaledVector(up, dy / perUnit);
+  return { ...angles, target: middle.toArray().join(','), zoom: describedZoom(perUnit, width, height) };
+}
+
+/**
  * Put an OrthographicCamera where the description says, for a `width`×`height`
  * viewer, and return the zoom applied.
  *
@@ -118,14 +148,7 @@ export function describedZoom(pixelsPerUnit, width, height) {
 export function polyView(camera, description, width, height) {
   const base = { ...CAMERA, ...description };
   const zoom = appliedZoom(base.zoom, width, height);
-  const tilt = rad(Number(base['rot-x']));
-  const turn = rad(Number(base['rot-y']));
-  const towards = new Vector3(Math.sin(tilt) * Math.cos(turn), Math.sin(tilt) * Math.sin(turn), Math.cos(tilt));
-  const right = new Vector3(-Math.sin(turn), Math.cos(turn), 0);
-  const level = new Vector3().crossVectors(towards, right);
-  const roll = rad(Number(base.roll ?? 0));
-  const up = level.clone().multiplyScalar(Math.cos(roll)).addScaledVector(right, -Math.sin(roll));
-  right.multiplyScalar(Math.cos(roll)).addScaledVector(level, Math.sin(roll));
+  const { towards, right, up } = screenAxes(base);
   const target = new Vector3(...numbers(base.target));
   camera.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(right, up, towards));
   camera.position.copy(target).addScaledVector(towards, DISTANCE);

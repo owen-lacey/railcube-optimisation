@@ -565,6 +565,13 @@
 </div>
 
 <style>
+  /* A colour rather than any string, so that it can be transitioned. */
+  @property --blueprint-dot {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: transparent;
+  }
+
   .viewer {
     --grid-opacity: 0.22;
     --train-cell-opacity: 0.4;
