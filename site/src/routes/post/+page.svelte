@@ -14,6 +14,7 @@
 	import Placeholder from "$lib/components/Placeholder.svelte";
 	import Layout from "../+layout.svelte";
 	import PoseStep from "$lib/components/PoseStep.svelte";
+	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 </script>
 
 <h1>Optimising the Rail Cube</h1>
@@ -67,16 +68,16 @@
 <p>
 	Imagine our track was in a box divided into cubes the size of a single <PieceTag
 		letter="S"
-	/>. After the train has travelled a track piece, it enters into a single new
-	cube.
+	/>. After the train has travelled a track piece, it assumes position in a
+	single cube.
 </p>
 
 <TrainCoordinates shape="SSSSLLIOOILL" readout="position" />
 <p>
-	The coordinates of the train are given by how many cubes along it is from the
+	The coordinates of the train are given by how many cubes away it is from the
 	starting <Highlight colour="grid-color">highlighted cube</Highlight>,
-	expressed in x, y and z. It's directional, so negative numbers means it going
-	in the other direction that the arrows show.
+	expressed in x, y and z. It's directional, so negative numbers means it's
+	going in the other direction that the arrows show.
 </p>
 
 <p>
@@ -162,37 +163,130 @@
 
 <p></p>
 
-<p>Enter subjectivity. Look at this beauty:</p>
+<p>Enter subjectivity. Consider this set of layouts:</p>
 
-<TrackFigure shape="LSISSXLOSIISSISSLSOROOIRSIRRSXSISLSI" />
+<!-- TODO cycle through good ones -->
+<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
 
-<p>On the other hand, this upsets me:</p>
+<p>Now these:</p>
 
-<TrackFigure shape="IORRIIOISIOIILROISRSSSSXSSSSLLSSSLSX" />
-<p>
-	Why? It sprawls about. Loads of boring straight segments, doesn't invert
-	nearly as much as it can.
-</p>
+<!-- TODO cycle through bad ones -->
+<TrackFigure shape="IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI" />
 
 <p>
-	In the previous section we spoke about what invalidates a track. These
-	opinions are different: the track is feasible, it's just we don't like it.
+	What do you prefer, the first set or the second? The first set, right? If you
+	prefer the latter, I can't help you. From here on I'll assume you're a
+	rationale person and prefer the former like me. Good? Good.
 </p>
+
+<!-- TODO: anim the box sizes with cube. -->
+<p>
+	Now, why do I love this one? I like that it's so compact; it's surely more
+	difficult to fit these complete tracks in a smaller box. Jamming it in a
+	smaller box also has a knock on effect where it's more likely for a train to
+	have a close call by riding next to another piece of track and narrowly
+	missing it.
+</p>
+<!-- TODO: anim the pose count. -->
+<p>
+	It would also be underwhelming if the train stayed largely face up. One of the
+	selling points of the Rail Cube is that it can ride on walls and go upside
+	down, we must please the creators and cover as many of the 24 poses as we can.
+</p>
+<!-- TODO: anim the repeated section. -->
+<p>
+	Excessive repeats should also be avoided. They're a symptom of poor
+	craftsmanship, bailing the engineer out of suboptimal design decisions.
+	Two-in-a-row is OK for me because hairpin turns are cool.
+</p>
+<p>
+	Saving my favourite for last: knots. How freaking cool is it when you're on a
+	roller coaster and it goes inside one of its inversions, like <a
+		href="https://www.altontowers.com/explore/theme-park/rides-attractions/the-smiler/"
+		target="_blank">The Smiler</a
+	> at Alton Towers. A layout that ties itself in knots gets bonus points in my book.
+</p>
+<!-- TODO: Fix on this one. -->
+<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
+
+<p>
+	All of the good layouts perform well on these five metics I mentioned:
+	compactness, close calls, pose count, repeats and knots.
+</p>
+<!-- TODO: Annotate track with metric count. -->
+<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
+
+<p>
+	On the other hand, we can put something objective against why the bad tracks
+	offend us so:
+</p>
+
+<!-- TODO cycle through bad ones again with metric count  -->
+<TrackFigure shape="IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI" />
+
+<p>
+	There might be some additional things you care about, perhaps time spent
+	upside down is pleasing to you. The real magic happens when you combine
+	different objectives into something combined you can optimise for. These
+	metrics on their own are largely unimpressive.
+</p>
+
+<!-- TODO: cycle through single objectives: here is time spent upside down -->
+<TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
+
 <p>
 	Our ability to express these opinions in a way the model can understand allows
-	us to maximise what's important to us. The model can then give us the "best"
+	us to maximise what's important to us. The model can then give us its "best"
 	track, rather than a working one.
 </p>
 
-<p></p>
+<ul>
+	<li>
+		<b>Compactness:</b> The length of the largest side of the box the track can fit
+		into. Smaller is better.
+	</li>
+	<li>
+		<b>Close calls:</b> The number of times the train is adjacent to a different track
+		piece. More is better.
+	</li>
+	<li>
+		<b>Pose count:</b> The number of distinct poses the train assumes along the track.
+		More is better.
+	</li>
+	<li>
+		<b>Repeats:</b> The number of times the train repeats a track piece more than
+		twice. Fewer is better.
+	</li>
+	<li>
+		<b>Knot:</b> Whether the layout ties itself in a knot (or knot - ha). This is
+		a true or false measure. Just one knot is enough to excite me.
+	</li>
+</ul>
+
+<p>
+	We then put our finger firmly in the air and create a formula for scoring a
+	layout, and pick the one with the best score:
+</p>
+
+<!-- TODO: combined score where user can pick their favourite. Show top 100 tracks and how their score is calculated. -->
+<TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
+
+<p>
+	By making the weighting of each metric dynamic, you can change the formula
+	yourself and see how that affects what layouts score the best. It might be you
+	prefer a different recipe to me.
+</p>
+
+<!-- TODO: Weighted tracks -->
+<TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
+
+<p>Can you do better? Try build one yourself.</p>
+<!-- TODO: keeps track of poses. -->
+<TrackBuilder />
 
 <hr />
 
 <ul>
-	<li>
-		How we score a track. Go back to the solves from previously with a score
-		explainer.
-	</li>
 	<li>
 		Prove that it's infeasible to enumerate all solutions, which is where CP
 		comes in

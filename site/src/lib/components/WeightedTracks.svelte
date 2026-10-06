@@ -84,6 +84,7 @@
           {plural(row.closeCalls, 'close call')}, {plural(row.repeats, 'repeat')},
           longest side {row.longestSide}
         </p>
+        <p class="shape">{shape}</p>
         <p class="ties">
           {ends[end].count.toLocaleString('en-GB')} of {table.legal.toLocaleString('en-GB')} tie{#if ends[end].unsure},
             and {ends[end].unsure.toLocaleString('en-GB')} more whose knots are not read could{/if}
@@ -162,8 +163,15 @@
   }
 
   .reading,
+  .shape,
   .ties {
     margin: 0;
+  }
+
+  /* A 36-letter word: let it break anywhere rather than push the card wide. */
+  .shape {
+    font-family: ui-monospace, monospace;
+    overflow-wrap: anywhere;
   }
 
   .ties {
