@@ -746,15 +746,32 @@ the section and renders only its footer.
   previous figure's train.
 - **The card is one size for every step.** A footer is a fixed `FOOTER` (6.5rem). A figure with
   no footer has no bar, and the viewer takes the whole card.
-- **The box only loads where it sticks if the section is the page's first child.** The
-  `main:has(> .scrolly:first-child)` rule in `site/src/routes/+layout.svelte` drops the
-  layout's top padding for it. That is why `/post` has no title — Owen's call.
+- **`/post` opens on the `Splash`, not the section**, so the box slides up into place as the
+  splash scrolls away. The `main:has(> .splash:first-child)` rule in
+  `site/src/routes/+layout.svelte` drops the layout's top padding for the splash instead.
 - Steps trigger at the middle of the band, measured in pixels off the stage
   (`scroller.offset(...)`, scrollama 3.2's name for `offsetTrigger`), because a phone's address
   bar changes the viewport but not the stage. The last step releases the box, so the page reads
   normally after it.
 - Synchronous `scrollTo` jumps do not fire scrollama. A CDP check has to scroll a little at a
   time.
+
+### The title: `Splash`
+
+A screen-filling title spelled in letters Owen built from track and saved from the
+`Snapshot` story (`site/src/lib/assets/letters/`, imported through Vite so the URLs carry
+`BASE_PATH`). The rows are Owen's: `OPTIMISING THE / RAIL CUBE`, with the first row's words
+stacking under 600px. The whole title fades in once, not under reduced motion.
+
+- **Everything is in cubes.** `site/src/lib/letters.js` holds each letter's width and the
+  gaps (½ letter, 2 word, 1 row). Every image is sized `width × --cube` by `8 × --cube`, and
+  `--cube` is the largest at which the widest row fits across and every row fits down.
+  Never size a letter from one side (`height: auto`, `object-fit`), or its cubes stop
+  matching the others'.
+- **A redone letter must be 120 px a cube** (Snapshot at `perCube` 60, pixel ratio 2) and 8
+  cubes tall. `tests/letters.test.js` reads every PNG's header against the table.
+- **The heading is text.** The `<h1>` holds "Optimising the Rail Cube" visually hidden, and
+  the letters are `aria-hidden` with empty `alt`, so a screen reader hears one heading.
 
 ### Typing a track: `Sketch`
 

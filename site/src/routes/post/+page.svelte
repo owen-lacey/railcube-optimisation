@@ -16,6 +16,7 @@
 	import PoseStep from "$lib/components/PoseStep.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import ScrollySection from "$lib/components/ScrollySection.svelte";
+	import Splash from "$lib/components/Splash.svelte";
 
 	// The opening, told over one viewer.
 	const steps = [
@@ -60,6 +61,12 @@
 		decrees that the existing structure is tiresome.
 	</p>
 {/snippet}
+
+<svelte:head>
+	<title>Optimising the Rail Cube</title>
+</svelte:head>
+
+<Splash />
 
 <ScrollySection {steps} />
 

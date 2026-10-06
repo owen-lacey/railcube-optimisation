@@ -25,9 +25,9 @@
       ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   }
 
-  /* A page that opens on a scrollytelling section starts at the top of the screen,
-     so its box loads where it will stick rather than sliding up into place. */
-  main:has(> :global(.scrolly:first-child)) {
+  /* A page that opens on a splash starts at the top of the screen, so the splash
+     fills the first screen exactly. */
+  main:has(> :global(.splash:first-child)) {
     padding-top: 0;
   }
 </style>
