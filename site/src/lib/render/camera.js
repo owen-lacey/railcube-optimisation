@@ -85,6 +85,16 @@ export function appliedZoom(zoom, width, height) {
 }
 
 /**
+ * `appliedZoom` the other way round: the description zoom that comes to
+ * `pixelsPerUnit` at this viewer size. For a shot that must be an exact scale,
+ * which the margin would otherwise shrink.
+ */
+export function describedZoom(pixelsPerUnit, width, height) {
+  const fit = Math.min(width, height * (REFERENCE_WIDTH / REFERENCE_HEIGHT));
+  return pixelsPerUnit / ((fit / REFERENCE_WIDTH) * MARGIN);
+}
+
+/**
  * Put an OrthographicCamera where the description says, for a `width`×`height`
  * viewer, and return the zoom applied.
  *
@@ -100,6 +110,10 @@ export function appliedZoom(zoom, width, height) {
  * pointing up the screen" stops meaning anything. Screen right is
  * `(−sin rotY, cos rotY, 0)` at every tilt — the limit `lookAt` approaches — and
  * screen up completes the frame.
+ *
+ * `roll`, if the description has one, then turns the picture clockwise by that
+ * many degrees about the line of sight. Tilt and turn alone keep screen right level, so a shot from the side can
+ * never have up anywhere but up the screen; the roll is what can.
  */
 export function polyView(camera, description, width, height) {
   const base = { ...CAMERA, ...description };
@@ -108,7 +122,10 @@ export function polyView(camera, description, width, height) {
   const turn = rad(Number(base['rot-y']));
   const towards = new Vector3(Math.sin(tilt) * Math.cos(turn), Math.sin(tilt) * Math.sin(turn), Math.cos(tilt));
   const right = new Vector3(-Math.sin(turn), Math.cos(turn), 0);
-  const up = new Vector3().crossVectors(towards, right);
+  const level = new Vector3().crossVectors(towards, right);
+  const roll = rad(Number(base.roll ?? 0));
+  const up = level.clone().multiplyScalar(Math.cos(roll)).addScaledVector(right, -Math.sin(roll));
+  right.multiplyScalar(Math.cos(roll)).addScaledVector(level, Math.sin(roll));
   const target = new Vector3(...numbers(base.target));
   camera.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(right, up, towards));
   camera.position.copy(target).addScaledVector(towards, DISTANCE);

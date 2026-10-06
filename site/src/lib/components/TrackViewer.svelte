@@ -141,6 +141,14 @@
   }
 
   /**
+   * The picture as a PNG blob: the canvas's last draw, at its own pixel size —
+   * the viewer's CSS size times the renderer's pixel ratio.
+   */
+  export function snapshot() {
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  }
+
+  /**
    * The four kinds of transition. Each says how it shows a layout, where it frames
    * (null for one that frames itself) and what it loads first. A reader who has asked
    * for reduced motion gets the redraw from the two that would otherwise assemble,

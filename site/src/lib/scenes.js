@@ -6,9 +6,9 @@
 
 import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step, SCORES } from '../../../src/track.js';
 import { routeOf, identify } from '../../../src/layouts.js';
-import { COLORS, ALARM } from './render/dimensions.js';
+import { COLORS, ALARM, CUBE } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
-import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT } from './render/camera.js';
+import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT, describedZoom } from './render/camera.js';
 import { axisAnchor, LABEL_SPOTS } from './render/axes.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
@@ -142,6 +142,44 @@ export function axesScene(letters) {
   const anchor = axisAnchor(scene.grid);
   const labels = LABEL_SPOTS.map(({ position }) => position.map((v, a) => v + anchor[a]));
   return { ...scene, origin: scene.grid, camera: frameFit([...cornersOf(scene.grid), anchor, ...labels]) };
+}
+
+/**
+ * The six faces of the box a layout can be looked at square on: where the camera
+ * stands, its tilt and turn (see `polyView`), and which of the cell axes — 0
+ * across, 1 up, 2 forwards — runs across the screen and which up it, before any
+ * roll. Each is set so that, unrolled, up is up the screen from the side, and
+ * forwards is up it from above or below.
+ */
+export const VIEWS = {
+  above: { 'rot-x': 0, 'rot-y': -90, axes: [0, 2] },
+  below: { 'rot-x': 180, 'rot-y': -90, axes: [0, 2] },
+  front: { 'rot-x': 90, 'rot-y': -90, axes: [0, 1] },
+  behind: { 'rot-x': 90, 'rot-y': 90, axes: [0, 1] },
+  left: { 'rot-x': 90, 'rot-y': 180, axes: [2, 1] },
+  right: { 'rot-x': 90, 'rot-y': 0, axes: [2, 1] },
+};
+
+/**
+ * `openScene` looked at square on from one of `VIEWS`, turned clockwise by `turn`
+ * degrees, at exactly `perCube` CSS pixels a cube — and the viewer size,
+ * `width`×`height`, that is the layout's outline from there and nothing more.
+ * Looking square on down an orthographic camera, every cube projects onto its own
+ * cell, so a viewer that size is clipped to exactly what is drawn. Only quarter
+ * turns, so the outline stays a whole number of cells and the clip stays exact.
+ */
+export function squareOn(letters, { perCube = 60, view = 'above', turn = 0 } = {}) {
+  if (turn % 90 !== 0) throw new Error(`a turn is a quarter or none, not ${turn}°`);
+  const { axes, ...angles } = VIEWS[view];
+  const scene = openScene(letters);
+  const { lo, hi } = boundsOf(scene.pieces);
+  const [across, along] = axes.map(a => (hi[a] - lo[a] + 1) * perCube);
+  const [width, height] = (turn / 90) % 2 === 0 ? [across, along] : [along, across];
+  const target = toWorld([0, 1, 2].map(a => (lo[a] + hi[a]) / 2));
+  const camera = {
+    ...angles, roll: turn, target: target.join(','), zoom: describedZoom(perCube / CUBE, width, height),
+  };
+  return { ...scene, camera, width, height };
 }
 
 /**
