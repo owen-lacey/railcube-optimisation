@@ -1,8 +1,8 @@
 <script>
   // Where the train is, as the post's coordinates: a layout in its cell lattice,
   // a caption reading out the cell the train is entering, and a slider for which
-  // piece it is on.
-  import LayoutViewer from './LayoutViewer.svelte';
+  // piece it is on. A figure — see `$lib/figure.js`.
+  import Frame from './Frame.svelte';
   import TrainScrubber from './TrainScrubber.svelte';
   import { axesScene } from '$lib/scenes.js';
   import { readerFrame } from '$lib/catalogue.js';
@@ -36,11 +36,13 @@
   };
 </script>
 
-<LayoutViewer {shape} {aspect} {scene} {train}>
-  {#snippet caption({ pieces })}
+<Frame view={{ shape, scene, train }} {aspect}>
+  {#snippet footer(drawn)}
     <p class="caption">
       Train entering cell {cell ? `(${readerFrame(cell).join(', ')})` : '—'}{#if readout === 'position-pose'}, pose {pose ?? '—'}{/if}
     </p>
-    <TrainScrubber {pieces} bind:at bind:held />
+    {#if drawn}
+      <TrainScrubber pieces={drawn.pieces} bind:at bind:held />
+    {/if}
   {/snippet}
-</LayoutViewer>
+</Frame>

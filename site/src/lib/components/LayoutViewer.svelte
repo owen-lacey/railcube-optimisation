@@ -22,7 +22,8 @@
     controls = attachControls,
     // Hold the train where it is, and anything else moving.
     paused = false,
-    // The card's footer, given the scene. Unset, the card has none.
+    // The card's footer, given the scene, or undefined while there is nothing drawn.
+    // Unset, the card has none.
     caption = undefined,
   } = $props();
 
@@ -47,7 +48,9 @@
   {@render caption(result.scene)}
 {/snippet}
 
-<LayoutCard footer={caption && result.state === 'ok' ? footer : undefined}>
+<!-- The footer is there whether or not anything is drawn: a figure in it may be
+     what says what to draw. -->
+<LayoutCard footer={caption ? footer : undefined}>
   {#if result.state === 'ok'}
     <TrackViewer
       pieces={result.scene.pieces}

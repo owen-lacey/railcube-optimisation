@@ -15,7 +15,15 @@ html {
      outside the viewer and is written in it. */
   --grid-color: #4f75b8;
 
+  /* The page itself, for anything opaque that has to look like a hole in it. */
+  --page: #fff;
+
   /* The grey outline of the card every layout sits in. */
   --card-border: #aab2bf;
   --card-footer: #e9ecf1;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
 }

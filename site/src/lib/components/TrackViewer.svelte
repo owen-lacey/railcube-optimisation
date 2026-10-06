@@ -19,7 +19,8 @@
     // What a new layout looks like, `{ kind, ...that kind's settings }` — see
     // `CHANGES`. Its kind is read once, at mount; its settings when a layout is shown.
     //
-    //   redraw  drawn finished, off an emptied stage.
+    //   redraw  drawn finished, off an emptied stage. `{ pan }`: seconds the camera
+    //           takes to ease to a new frame; unset, it cuts.
     //   build   the stage is emptied and every piece comes in from off the edge of
     //           the frame, in route order. Framed on `camera`, as a static track is.
     //           `{ pace, speed }`.
@@ -37,7 +38,8 @@
     // the box a growing frame starts from — unset, the tight one a sketch starts in
     // (see `growBox`).
     transition = { kind: 'redraw' },
-    // The train, as callbacks, or null for none. Read once, at mount.
+    // The train, as callbacks, or null for none. Read when a layout is shown, and a
+    // new one shows the layout again.
     //   at()       who holds it: a piece index to hold it there, null to let it drive.
     //   onAt(i)    told the piece it has driven onto. Both redraw only — see `trackPhase`.
     //   onCell(c)  told the cell it is in, `[x, y, z]`, each time it enters a new one,
@@ -108,6 +110,7 @@
   // own write would tumble the track it had only just built.
   let shown = null;
   let shownKey = null;
+  let shownTrain = null;
   // Grow mode's frame, which only ever enlarges. Not `$state` for the same reason
   // as `shown`: `showGrown` owns it, and the framing effect below must not read it.
   let box = undefined;
@@ -164,15 +167,20 @@
 
   /**
    * Show a layout, by this viewer's kind of transition.
+   *
+   * A new `train` shows it again even when the pieces are the same: its callbacks
+   * are handed to the phase here, so a viewer whose figure changes under it (a
+   * scrolly section's next step) would otherwise keep driving the old one's.
    */
   function show(next) {
     const key = keyOf(next);
-    if (key === shownKey) return;
+    if (key === shownKey && train === shownTrain) return;
 
     change.show(next);
 
     shown = next;
     shownKey = key;
+    shownTrain = train;
     stage.start();
   }
 
@@ -347,6 +355,7 @@
 
   $effect(() => {
     const next = pieces;
+    void train;
     if (!ready || !stage) return;
     show(next);
   });
@@ -485,9 +494,16 @@
   //
   // A grow has no frame here at all: the frame is `showGrown`'s, and two things
   // writing the camera would have it snapping back mid-pan.
+  //
+  // A pan is picked up from wherever the camera has got to, so a new frame asked
+  // for mid-pan turns towards it rather than finishing the old one first.
   $effect(() => {
     if (!ready || !stage || !change.frame) return;
-    stage.frameTo(change.frame());
+    const { pan } = settings();
+    if (pan && !reduced) {
+      stage.panTo(change.frame(), Number(pan));
+      stage.start();
+    } else stage.frameTo(change.frame());
   });
 </script>
 

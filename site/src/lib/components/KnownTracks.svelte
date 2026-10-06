@@ -1,30 +1,28 @@
 <script>
   // A sweep, one layout at a time: a random track every `every` ms, numbered from
   // 1 in the sweep file's order. Pausing holds the track and the train on it,
-  // and typing a number pauses on that track; play lets it go again.
-  import { onMount, untrack } from 'svelte';
-  import LayoutViewer from './LayoutViewer.svelte';
+  // and typing a number pauses on that track; play lets it go again. A figure —
+  // see `$lib/figure.js`.
+  import Frame from './Frame.svelte';
   import PlayPause from './PlayPause.svelte';
   import { SWEEP_CROSSED } from '$lib/sweeps.js';
+  import { shuffler } from '$lib/shuffle.svelte.js';
 
-  // `train` is LayoutViewer's: its callbacks, or null for no train.
+  // `train` is the viewer's: its callbacks, or null for no train.
   let { sweep = SWEEP_CROSSED, every = 2000, aspect = '16 / 10', train = {} } = $props();
 
   const shapes = $derived(sweep.shapes);
 
-  // Track 1, not a random one: the page is prerendered, and the server and the
-  // browser must agree on what the HTML says. The first shuffle happens on screen.
-  let index = $state(0);
   let playing = $state(true);
-  let onScreen = $state(false);
-  let host;
-
-  function shuffle() {
-    const pick = () => Math.floor(Math.random() * shapes.length);
-    // One re-roll if the draw lands on what is already showing.
-    const next = pick();
-    index = next === index ? pick() : next;
-  }
+  // What the shuffle watches for being on screen: the footer is, whenever the
+  // track is.
+  let host = $state(null);
+  const pick = shuffler({
+    count: () => shapes.length,
+    every: () => every,
+    running: () => playing,
+    host: () => host,
+  });
 
   // Focusing the number holds the track, or the next shuffle would overwrite
   // whatever is being typed. The number takes effect on blur; anything that is not
@@ -35,64 +33,29 @@
 
   function choose(event) {
     const n = Number(event.currentTarget.value);
-    if (Number.isInteger(n) && n >= 1 && n <= shapes.length) index = n - 1;
-    event.currentTarget.value = String(index + 1);
+    if (Number.isInteger(n) && n >= 1 && n <= shapes.length) pick.index = n - 1;
+    event.currentTarget.value = String(pick.index + 1);
   }
-
-  // Off screen, nothing changes: every swap is a whole layout redrawn.
-  onMount(() => {
-    let visible = false;
-    const update = () => (onScreen = visible && !document.hidden);
-    const io = new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting;
-      update();
-    });
-    io.observe(host);
-    document.addEventListener('visibilitychange', update);
-    return () => {
-      io.disconnect();
-      document.removeEventListener('visibilitychange', update);
-    };
-  });
-
-  $effect(() => {
-    if (!playing || !onScreen) return;
-    // Untracked, or the effect would depend on the `index` it writes and re-run itself.
-    untrack(shuffle);
-    const timer = setInterval(shuffle, every);
-    return () => clearInterval(timer);
-  });
 </script>
 
-<figure bind:this={host}>
-  <LayoutViewer
-    shape={shapes[index].shape}
-    paused={!playing}
-    {aspect}
-    {train}
-  >
-    {#snippet caption()}
-      <label>
-        Track #<input
-          type="number"
-          min="1"
-          max={shapes.length}
-          value={index + 1}
-          onfocus={hold}
-          onblur={choose}
-          aria-label="Track number, 1 to {shapes.length}"
-        />
-      </label>
-      <PlayPause bind:playing label="the tracks" />
-    {/snippet}
-  </LayoutViewer>
-</figure>
+<Frame view={{ shape: shapes[pick.index].shape, train, paused: !playing }} {aspect}>
+  {#snippet footer()}
+    <label bind:this={host}>
+      Track #<input
+        type="number"
+        min="1"
+        max={shapes.length}
+        value={pick.index + 1}
+        onfocus={hold}
+        onblur={choose}
+        aria-label="Track number, 1 to {shapes.length}"
+      />
+    </label>
+    <PlayPause bind:playing label="the tracks" />
+  {/snippet}
+</Frame>
 
 <style>
-  figure {
-    margin: 0 0 1.25rem;
-  }
-
   label {
     font-variant-numeric: tabular-nums;
   }

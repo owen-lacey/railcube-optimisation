@@ -24,4 +24,10 @@
     font-family:
       ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   }
+
+  /* A page that opens on a scrollytelling section starts at the top of the screen,
+     so its box loads where it will stick rather than sliding up into place. */
+  main:has(> :global(.scrolly:first-child)) {
+    padding-top: 0;
+  }
 </style>
