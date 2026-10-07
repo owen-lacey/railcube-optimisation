@@ -752,9 +752,8 @@ the section and renders only its footer.
   previous figure's train.
 - **The card is one size for every step.** A footer is a fixed `FOOTER` (6.5rem). A figure with
   no footer has no bar, and the viewer takes the whole card.
-- **`/post` opens on the `Splash`, not the section**, so the box slides up into place as the
-  splash scrolls away. The `main:has(> .splash:first-child)` rule in
-  `site/src/routes/+layout.svelte` drops the layout's top padding for the splash instead.
+- **`/post` opens on the `Splash`, not the section.** The `main:has(> .splash:first-child)`
+  rule in `site/src/routes/+layout.svelte` drops the layout's top padding for the splash instead.
 - Steps trigger at the middle of the band, measured in pixels off the stage
   (`scroller.offset(...)`, scrollama 3.2's name for `offsetTrigger`), because a phone's address
   bar changes the viewport but not the stage. The last step releases the box, so the page reads
@@ -795,8 +794,13 @@ stacking under 600px. The whole title fades in once, not under reduced motion.
   `@property` colour so it can transition), then the text (0.4 s). The section's
   `landing()` throws unless its first step is the O's shape. Owen's calls: train at
   hand-off, full-screen canvas, ~2.5 s overall. The key is `claimKeys` from `keys.js`,
-  so it works only while the splash is mostly on screen. Scrolling past the splash is
-  unchanged — Owen's call. Under reduced motion there is no zoom: the splash goes and the
+  so it works only while the splash is mostly on screen. **The page cannot be scrolled past
+  the splash** — the button and the right arrow are the only ways on, Owen's call. While the
+  splash is up the layout clips `main` to one screen (`overflow: visible clip`, downwards
+  only, so the splash still reaches the screen's edges). It is clipped rather than
+  `overflow: hidden` on `html`, because turning the page's scrolling off would take
+  pull-to-refresh with it. A page that cannot scroll also makes a reload land on the
+  splash at the top, whatever scroll SvelteKit restores. Under reduced motion there is no zoom: the splash goes and the
   page is at the top at once. `TitleZoom` sits after the section in the page so that,
   once the splash is gone, the scrolly is `main`'s first child, which is why the layout's
   no-top-padding rule matches either.
