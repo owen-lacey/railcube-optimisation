@@ -60,6 +60,12 @@
 		footed = hasFooter;
 	}
 
+	// The band is tall enough for the tallest step to be read whole, clear of the fade:
+	// each step's prose is measured, so a narrow screen, where it wraps onto more
+	// lines, takes the room from the box rather than running off the bottom.
+	let prose = $state([]);
+	const tallest = $derived(Math.max(0, ...prose.slice(0, -1).filter(Boolean)));
+
 	// A step is the one being read once its top is halfway down the band. The line is
 	// in pixels, measured off the stage, rather than a fraction of the viewport: a
 	// phone's address bar coming and going changes the one but not the other.
@@ -102,8 +108,16 @@
 		requestAnimationFrame(() => requestAnimationFrame(() => (settling = false)));
 	}
 
+	let scroller;
+
+	// The band moves the line, and scrollama has to be told.
+	$effect(() => {
+		tallest;
+		scroller?.offset(line());
+	});
+
 	onMount(() => {
-		const scroller = scrollama();
+		scroller = scrollama();
 		scroller
 			.setup({ step: triggers, offset: line() })
 			.onStepEnter(({ index }) => (active = index));
@@ -121,7 +135,9 @@
 
 {#snippet stepAt(i)}
 	<div class="step" class:last={i === steps.length - 1} bind:this={triggers[i]}>
-		{@render steps[i].body()}
+		<div class="prose" bind:clientHeight={prose[i]}>
+			{@render steps[i].body()}
+		</div>
 	</div>
 {/snippet}
 
@@ -131,6 +147,7 @@
 	class:settling
 	style:--settle="{SETTLE}s"
 	style:--words="{WORDS}s"
+	style:--prose-height="{tallest}px"
 >
 	<!-- The box is pinned over every step but the last. It lets go as the last one
        arrives in the band, so that one scrolls away with the box, and the page
@@ -170,8 +187,12 @@
 
 <style>
 	.scrolly {
-		--band-height: 12rem;
 		--fade-height: 3rem;
+		--step-bottom: 0.5rem;
+		--band-height: max(
+			12rem,
+			calc(var(--prose-height) + var(--fade-height) + var(--step-bottom))
+		);
 	}
 
 	.pinned {
@@ -259,7 +280,12 @@
 	.step {
 		min-height: var(--band-height);
 		box-sizing: border-box;
-		padding: var(--fade-height) 0 0.5rem;
+		padding: var(--fade-height) 0 var(--step-bottom);
+	}
+
+	/* Holds its paragraphs' margins, so measuring it measures them too. */
+	.prose {
+		display: flow-root;
 	}
 
 	.step :global(p) {
