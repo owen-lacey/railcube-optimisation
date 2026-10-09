@@ -6,6 +6,7 @@
 //   node scripts/merge-sweeps.js --watch .                  keep passing as logs grow
 //   node scripts/merge-sweeps.js --new-question log.jsonl   admit a question it lacks
 //   --db <path>                                             another database (default sweeps.db)
+//   --readers N                                             knot readers (default 8)
 //
 // The logs are the staging area. A sweep appends to its own, and this reads
 // them, finds the question in the database each record answers (see
@@ -28,6 +29,12 @@
 // idempotent — whatever the database already holds is skipped — so a claim
 // merged twice writes nothing the second time.
 //
+// Every new row's knot is read on the way in, beside the columns `derive`
+// fills: the same curves and knots.py that `hydrate-sweeps.js --knots` read
+// every older row with, across `--readers` children (scripts/knot-curves.js),
+// inside the pass's transaction. One reader manages ~260 layouts/s and meet.py
+// finds ~86/s across four workers, so one reader keeps up.
+//
 // `--watch` is that pass re-run whenever a matching log changes. Run it in tmux;
 // it is meant to sit beside a sweep. Every duplicate is also appended to
 // sweep-duplicates.jsonl — the new shape, the log it came from, and the shape
@@ -40,8 +47,9 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SCORES } from '../src/track.js';
+import { knotInput, knotOf, knotPool } from './knot-curves.js';
 import {
-  assertSpends, DB_PATH, derive, eachStaged, openDb, questionOf, trackHash, verify,
+  assertSpends, DB_PATH, derive, openDb, questionOf, staged, trackHash, verify,
 } from './sweep-data.js';
 
 // Gitignored with the sweep logs, and deliberately outside the crossed-log pattern
@@ -53,6 +61,10 @@ const DUPLICATES = 'sweep-duplicates.jsonl';
 const UNMATCHED = 'sweep-unmatched.jsonl';
 
 const CLAIMED = '.claimed';
+
+// New rows per reader between knot reads: enough to keep every reader busy,
+// few enough that a pass of a handful of layouts is not waiting on a batch.
+const KNOT_BATCH = 25;
 
 // How long a claimed log is left before it is read. A sweep's append is one
 // open, write and close, so this is far longer than any append takes.
@@ -69,6 +81,7 @@ const statementsFor = db => ({
     @track_hash, @span_across, @span_up, @span_along, @volume, @revisits, @mirrored,
     @loop_small, @loop_large, @faces, @repeats, @poses, @close_calls, @underground,
     @source_log, @merged_at)`),
+  setKnots: db.prepare('UPDATE layouts SET knot_over = ?, knot_under = ? WHERE id = ?'),
 });
 
 /** The question row a record answers, admitted first if `admit` allows. */
@@ -80,8 +93,11 @@ function questionFor(sql, record, admit) {
   return sql.question.get(text);
 }
 
-/** Add one record under the question it answers, or say why not. */
-function offer(sql, record, question, log, say, found) {
+/**
+ * Add one record under the question it answers, or say why not. A row goes in
+ * with its knot unread and joins `unread`, to be read before the pass commits.
+ */
+function offer(sql, record, question, log, say, found, unread) {
   // An exact match costs an index lookup; only a new string pays for its key.
   if (sql.byShape.get(question.id, record.shape)) return 'known';
   const hash = trackHash(record.shape);
@@ -95,13 +111,15 @@ function offer(sql, record, question, log, say, found) {
     throw new Error(`${record.shape} scores ${record.score} over ${record.cubes} cubes; `
       + `question ${question.id} holds ${question.score} over ${question.cubes}`);
   }
-  sql.insert.run({
-    ...verify(record, JSON.parse(question.question)),
+  const { placed, row } = verify(record, JSON.parse(question.question));
+  const { lastInsertRowid: id } = sql.insert.run({
+    ...row,
     question_id: question.id,
     track_hash: hash,
     source_log: basename(log),
     merged_at: new Date().toISOString(),
   });
+  unread.push({ id, placed });
   say(`  new     ${record.shape}${record.mirrored ? '  (mirror)' : ''}`);
   return 'inserted';
 }
@@ -116,7 +134,7 @@ function offer(sql, record, question, log, say, found) {
 function duplicateLog(path, db) {
   if (path === null) return () => {};
   const recorded = new Set();
-  if (existsSync(path)) eachStaged(path, r => recorded.add(r.shape));
+  if (existsSync(path)) for (const r of staged(path)) recorded.add(r.shape);
   return (record, log, twin) => {
     if (recorded.has(record.shape)) return;
     recorded.add(record.shape);
@@ -142,15 +160,16 @@ const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0,
 
 /**
  * One pass: claim `logs`, offer every solved record under the question it
- * answers, in one transaction, then drain the claims. `settle` is how long a
- * fresh claim is left before it is read.
+ * answers, read the new rows' knots through `knots` (a `knotPool`), all in one
+ * transaction, then drain the claims. `settle` is how long a fresh claim is left
+ * before it is read.
  */
-export function mergePass({
-  db, logs, admit = false, say = console.log, duplicates = null, settle = SETTLE_MS,
+export async function mergePass({
+  db, logs, knots, admit = false, say = console.log, duplicates = null, settle = SETTLE_MS,
 }) {
   const claims = logs.map(claim).filter(Boolean);
   if (claims.some(c => c.renamed)) pause(settle);
-  const tally = mergeClaims({ db, claims, admit, say, duplicates });
+  const tally = await mergeClaims({ db, claims, knots, admit, say, duplicates });
   for (const { claimed } of claims) unlinkSync(claimed);
   return tally;
 }
@@ -165,35 +184,69 @@ function setAside(log, record) {
   appendFileSync(join(dirname(log), UNMATCHED), `${JSON.stringify(record)}\n`);
 }
 
-function mergeClaims({ db, claims, admit, say, duplicates }) {
+/**
+ * The knots of rows this pass inserted, read the way `hydrate-sweeps.js --knots`
+ * read every row before them: the same curves, rotations seeded by the row id.
+ */
+async function readKnots(sql, knots, unread) {
+  const polys = await knots.read(unread.map(({ id, placed }) => ({ id, seed: id, ...knotInput(placed) })));
+  unread.forEach(({ id }, i) => {
+    knotOf(polys[i].over, polys[i].under);
+    sql.setKnots.run(polys[i].over, polys[i].under, id);
+  });
+}
+
+/**
+ * One transaction, opened by hand, because a knot read is awaited and
+ * better-sqlite3's `transaction` cannot span an await. A throw anywhere, a knot
+ * read included, rolls the whole pass back, so a committed row always has its
+ * knot.
+ */
+async function mergeClaims({ db, claims, knots, admit, say, duplicates }) {
   const sql = statementsFor(db);
   const logDuplicate = duplicateLog(duplicates, db);
   const tally = { inserted: 0, duplicate: 0, known: 0, unmatched: 0 };
-  const noted = new Set();
+  const unmatched = unmatchedNotice(say);
+  const unread = [];
 
-  db.transaction(() => {
+  db.exec('BEGIN IMMEDIATE');
+  try {
     for (const { log, claimed } of claims) {
-      eachStaged(claimed, record => {
+      for (const record of staged(claimed)) {
         const question = questionFor(sql, record, admit);
-        if (question !== undefined) {
-          tally[offer(sql, record, question, log, say, twin => logDuplicate(record, log, twin))] += 1;
-          return;
+        if (question === undefined) {
+          tally.unmatched += 1;
+          unmatched(log, record);
+          continue;
         }
-        tally.unmatched += 1;
-        setAside(log, record);
-        const asked = JSON.stringify(questionOf(record.config));
-        if (!noted.has(`${log}\n${asked}`)) say(`${log}: the database asks no ${asked}`);
-        noted.add(`${log}\n${asked}`);
-      });
+        tally[offer(sql, record, question, log, say, twin => logDuplicate(record, log, twin), unread)] += 1;
+        if (unread.length >= knots.readers * KNOT_BATCH) await readKnots(sql, knots, unread.splice(0));
+      }
     }
-  })();
+    await readKnots(sql, knots, unread.splice(0));
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
   return tally;
+}
+
+/** Set a record aside, saying so once per log and question. */
+function unmatchedNotice(say) {
+  const noted = new Set();
+  return (log, record) => {
+    setAside(log, record);
+    const asked = JSON.stringify(questionOf(record.config));
+    if (!noted.has(`${log}\n${asked}`)) say(`${log}: the database asks no ${asked}`);
+    noted.add(`${log}\n${asked}`);
+  };
 }
 
 const flip = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
 
-// The knot columns are not here: re-reading them is hours of topoly, which
-// `hydrate-sweeps.js --recheck` does on a sample instead.
+// The knot columns are not here: they are read on the way in, and re-reading
+// them is hours of topoly, which `hydrate-sweeps.js --recheck` does on a sample.
 const COLUMNS = ['span_across', 'span_up', 'span_along', 'volume', 'revisits', 'loop_small', 'loop_large',
   'faces', 'repeats', 'poses', 'close_calls', 'underground'];
 
@@ -275,20 +328,27 @@ function report(tally) {
     + `${tally.known} already held${tally.unmatched ? `, ${tally.unmatched} for no question` : ''}`);
 }
 
-function watchLogs(db, dir, match) {
+async function watchLogs(db, dir, match, knots) {
   // A claim left by a failed pass is found by the log it came from, even when
   // that log has not been written to since.
   const logs = () => [...new Set(readdirSync(dir)
     .map(f => (f.endsWith(CLAIMED) ? f.slice(0, -CLAIMED.length) : f)))]
     .filter(f => match.test(f)).map(f => join(dir, f));
   const duplicates = join(dir, DUPLICATES);
-  const pass = () => {
-    const tally = mergePass({ db, logs: logs(), duplicates });
-    if (tally.inserted || tally.duplicate) report(tally);
-  };
   console.log(`watching ${dir} for ${match}, into ${db.name}, draining what it merges`);
-  console.log(`duplicates to ${duplicates}`);
-  report(mergePass({ db, logs: logs(), duplicates }));
+  console.log(`duplicates to ${duplicates}, knots read by ${knots.readers}`);
+  report(await mergePass({ db, logs: logs(), knots, duplicates }));
+
+  // A pass awaits its knot reads, so one asked for while another runs waits its
+  // turn rather than opening a second transaction on the same connection. A
+  // pass that throws is not caught: the watch stops, as it always has.
+  let running = Promise.resolve();
+  const pass = () => {
+    running = running.then(async () => {
+      const tally = await mergePass({ db, logs: logs(), knots, duplicates });
+      if (tally.inserted || tally.duplicate) report(tally);
+    });
+  };
 
   // Debounced: a sweep writes a layout and its mirror as two appends, and a
   // pass between them is harmless but a pass after both is one pass. Claiming a
@@ -302,7 +362,7 @@ function watchLogs(db, dir, match) {
   });
 }
 
-function main(argv) {
+async function main(argv) {
   const flag = name => {
     const i = argv.indexOf(`--${name}`);
     return i === -1 ? undefined : argv.splice(i, 2)[1];
@@ -318,15 +378,21 @@ function main(argv) {
 
   const dir = flag('watch');
   const match = new RegExp(flag('match') ?? '^sweep-crossed-.*\\.jsonl$');
-  if (dir !== undefined) return watchLogs(db, dir, match);
+  // The watch runs until it is stopped, and its readers go with it.
+  const knots = knotPool({ readers: Number(flag('readers') ?? 8) });
+  if (dir !== undefined) return watchLogs(db, dir, match, knots);
 
   const admit = toggle('new-question');
   if (!argv.length) {
     console.error('usage: node scripts/merge-sweeps.js [--db <path>] --check | --watch <dir>'
-      + ' [--match <regex>] | [--new-question] <sweep.jsonl…>');
+      + ' [--match <regex>] [--readers N] | [--new-question] [--readers N] <sweep.jsonl…>');
     process.exit(2);
   }
-  report(mergePass({ db, logs: argv, admit, duplicates: DUPLICATES }));
+  try {
+    report(await mergePass({ db, logs: argv, knots, admit, duplicates: DUPLICATES }));
+  } finally {
+    await knots.close();
+  }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2));
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main(process.argv.slice(2));

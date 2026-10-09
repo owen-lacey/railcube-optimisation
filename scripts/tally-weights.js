@@ -11,9 +11,10 @@
 // layout whose knot is unread (scripts/hydrate-sweeps.js) is counted in a row of
 // its own with `knotted: null`, and `weighting.js` says when one could reach an end.
 //
-// Examples are kept only for rows that can be an end: tied best or worst under
-// some weighting with every weight a whole number from 0 to `--max-weight`, as
-// the sliders offer, not all of them zero. Drawn uniformly per row, with `--seed`,
+// Examples are kept only where an end needs them: enough rows tied best or worst
+// under each weighting with every weight a whole number from 0 to `--max-weight`,
+// as the sliders offer, not all of them zero, to show `--examples` layouts there
+// (`ends`). Drawn uniformly per row, with `--seed`,
 // from rows not stored as a mirror (a mirror reads the same, so its partner
 // stands for both). A row of unread knots can be an end only when knotted weighs
 // nothing, and its examples say `knot: null`. Every example is re-derived and
@@ -28,7 +29,7 @@ import Database from 'better-sqlite3';
 
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
 import { assertSpends, DB_PATH, derive, random } from './sweep-data.js';
-import { curvesOf, knotOf, knotReader } from './knot-curves.js';
+import { knotInput, knotOf, knotReader } from './knot-curves.js';
 import { DIRECTIONS, extremes } from '../site/src/lib/weighting.js';
 
 const QUESTION = 1;
@@ -72,21 +73,28 @@ const valuesOf = r => ({
 function tally(path) {
   const db = new Database(path, { readonly: true, fileMustExist: true });
   const question = JSON.parse(db.prepare('SELECT question FROM questions WHERE id = ?').get(QUESTION).question);
-  const next = random(seed);
-  const rows = new Map();
-  let population = 0, underground = 0;
+  const count = counter(random(seed));
   const query = db.prepare(`SELECT id, shape, mirrored, poses, close_calls, repeats, underground,
     span_across, span_up, span_along, knot_over, knot_under FROM layouts WHERE +question_id = ?`);
-  for (const r of query.iterate(QUESTION)) {
+  for (const r of query.iterate(QUESTION)) count.add(r);
+  db.close();
+  return { question, ...count.result() };
+}
+
+/** Rows of the table, counted one layout at a time. */
+function counter(next) {
+  const rows = new Map();
+  let population = 0, underground = 0;
+  const add = r => {
     population += 1;
     if (r.poses === null) throw new Error(`row ${r.id} has no readings: run hydrate-sweeps.js --readings`);
-    if (r.underground) { underground += 1; continue; }
+    if (r.underground) { underground += 1; return; }
     const values = valuesOf(r);
     const key = NAMES.map(n => values[n]).join(',');
     if (!rows.has(key)) rows.set(key, { ...values, count: 0, offered: 0, examples: [] });
     const row = rows.get(key);
     row.count += 1;
-    if (r.mirrored === 1) continue;
+    if (r.mirrored === 1) return;
     // Reservoir sampling: the k-th example offered replaces a random one with
     // probability examples / k, so every eligible row is equally likely to be kept.
     row.offered += 1;
@@ -96,9 +104,8 @@ function tally(path) {
       const slot = Math.floor(next() * row.offered);
       if (slot < examples) row.examples[slot] = example;
     }
-  }
-  db.close();
-  return { question, population, underground, rows: [...rows.values()] };
+  };
+  return { add, result: () => ({ population, underground, rows: [...rows.values()] }) };
 }
 
 const rangeOf = (rows, name) => {
@@ -106,15 +113,28 @@ const rangeOf = (rows, name) => {
   return [Math.min(...vs), Math.max(...vs)];
 };
 
-/** Every row tied at either end of some weighting the sliders can set. */
+/**
+ * Rows enough to show `examples` layouts at either end of every weighting the
+ * sliders can set. An end's tie count is every row tied there, but its examples
+ * need only be some of them: knotted alone ties every knotted layout at the best
+ * and every other one at the worst, so keeping examples for all of an end's rows
+ * keeps them for the whole table. Rows are added in a seeded order, an end at a
+ * time, until it has enough.
+ */
 function ends(table) {
   const marked = new Set();
+  const next = random(seed);
+  const shown = rows => rows.filter(r => marked.has(r)).reduce((n, r) => n + r.examples.length, 0);
   const weights = NAMES.map(() => 0);
   const total = (maxWeight + 1) ** NAMES.length;
   for (let w = 1; w < total; w++) {
     NAMES.forEach((_, i) => { weights[i] = Math.floor(w / (maxWeight + 1) ** i) % (maxWeight + 1); });
     const { best, worst } = extremes(table, Object.fromEntries(NAMES.map((n, i) => [n, weights[i]])));
-    for (const row of [...best.rows, ...worst.rows]) marked.add(row);
+    for (const { rows } of [best, worst]) {
+      const offered = rows.filter(r => !marked.has(r) && r.examples.length)
+        .map(r => [next(), r]).sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+      while (shown(rows) < examples && offered.length) marked.add(offered.shift());
+    }
   }
   return marked;
 }
@@ -127,7 +147,7 @@ async function audit(rows, question) {
   for (const { row, example } of all.filter(({ example }) => example.knot === null)) recount(row, example, question);
   const placed = listed.map(({ row, example }) => recount(row, example, question));
   const polys = await reader.read(listed.map(({ example }, i) => ({
-    id: example.id, seed: AUDIT_SEED + example.id, curves: curvesOf(placed[i]) })));
+    id: example.id, seed: AUDIT_SEED + example.id, ...knotInput(placed[i]) })));
   await reader.close();
   listed.forEach(({ row, example }, i) => {
     const knot = knotOf(polys[i].over, polys[i].under);
@@ -184,4 +204,4 @@ write(args.out, {
 const unread = rows.filter(r => r.knotted === null).reduce((n, r) => n + r.count, 0);
 console.log(`${rows.length} rows over ${legal.toLocaleString('en-GB')} legal layouts `
   + `(${underground.toLocaleString('en-GB')} below the floor left out, ${unread.toLocaleString('en-GB')} `
-  + `knots unread), ${marked.size} can be an end, ${audited} examples re-derived. wrote ${args.out}`);
+  + `knots unread), ${marked.size} keep examples, ${audited} examples re-derived. wrote ${args.out}`);

@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf, shapeOf, identify, trackKey } from '../src/layouts.js';
 import { chainOpen, chainTrack, countPieces, POOLS, POOL_OF } from '../src/track.js';
+import { knotInput, knotOf, knotReader } from '../scripts/knot-curves.js';
 
 const entries = Object.entries(LAYOUTS);
 
@@ -131,5 +132,22 @@ test('driving a track backwards is not a way of reading it', () => {
     const { closed, faults } = chainOpen(routeOf(relabelled));
     if (!closed || faults.length) continue;   // not a legal track, so not this one
     assert.notEqual(trackKey(relabelled), trackKey(shape), `reversed with ${JSON.stringify(swap)}`);
+  }
+});
+
+// Every entry's knot, read as a sweep's rows are read on the way in. This spawns
+// `uv`. Every entry so far is an unknot, so on its own this would pass a reader
+// that always answered unknot; the knotted controls are in tests/knots.test.js.
+test('every layout is the knot it says it is', async () => {
+  const reader = knotReader();
+  try {
+    const polys = await reader.read(entries.map(([, layout], id) => ({
+      id, seed: id, ...knotInput(chainTrack(routeOf(layout.shape))),
+    })));
+    entries.forEach(([name, layout], i) => {
+      assert.equal(knotOf(polys[i].over, polys[i].under), layout.knot, name);
+    });
+  } finally {
+    await reader.close();
   }
 });

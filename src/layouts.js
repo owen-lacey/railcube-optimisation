@@ -173,6 +173,7 @@ const MODEL_SET = {
  *   set     the inventory it was solved against, as data — not a name to look up
  *   box     no material cell further than this from the origin on any axis
  *   proved  whether the solver proved it optimal, or merely got that far in time
+ *   knot    what the rail is, by scripts/knot-curves.js; every one so far is an unknot
  */
 export const LAYOUTS = {
   // The model's own set, spent in full: 18 cubes, 34 points, nothing left in the box.
@@ -180,7 +181,7 @@ export const LAYOUTS = {
   // symmetry breaking. This is the layout `solveTrack`'s `hint` starts a search from.
   set: {
     shape: 'LIRIROSOLORLLSORII',
-    set: MODEL_SET, box: 6, proved: true,
+    set: MODEL_SET, box: 6, proved: true, knot: 'unknot',
     note: "the model's set — 18 cubes, nothing dropped",
   },
   // The same question put to a different solver: native OR-Tools 9.14, driven by a
@@ -194,7 +195,7 @@ export const LAYOUTS = {
   // being a witness, and a witness in prose stops the moment something drifts.
   setOnNativeOrTools: {
     shape: 'LRRIIOOSRLLOOLSRII',
-    set: MODEL_SET, box: 6, proved: true,
+    set: MODEL_SET, box: 6, proved: true, knot: 'unknot',
     note: 'the same set and the same score, found independently on native OR-Tools',
   },
   // Every cube the starter set ships, in one closed loop, nothing left over —
@@ -202,7 +203,7 @@ export const LAYOUTS = {
   // 200 s, filling 7×7×8 cells.
   32: {
     shape: 'RSISISRLOSOSRSLSOSOSSSISISSLSLSR',
-    set: STARTER_SET, box: 6, proved: true,
+    set: STARTER_SET, box: 6, proved: true, knot: 'unknot',
     note: 'the whole starter set — 32 cubes, nothing dropped',
   },
   // Owen's own set — all 36 cubes in one loop with nothing left over. Proved
@@ -218,7 +219,7 @@ export const LAYOUTS = {
   // spends no extra cube, so nothing-dropped never has to reach for it.
   owen: {
     shape: 'SSISSSLSSXISSIILOSSLSIOOROIISRSIRSLR',
-    set: OWENS_36, box: 6, proved: true,
+    set: OWENS_36, box: 6, proved: true, knot: 'unknot',
     note: "Owen's own set — all 36 cubes, nothing dropped",
   },
   // The same set told to fit a smaller box. Twelve cubes will not fit.
@@ -231,20 +232,20 @@ export const LAYOUTS = {
   // beat them, so they stand.
   tight: {
     shape: 'SSRRSSIIOORROOSSIISS',
-    set: STARTER_SET, box: 4, proved: false,
+    set: STARTER_SET, box: 4, proved: false, knot: 'unknot',
     note: 'a 4-cell box: two vertical arcs, crested at both ends',
   },
   // Three is the smallest box that holds any loop at all.
   cramped: {
     shape: 'SSRRIIRRLLIISSSLLS',
-    set: STARTER_SET, box: 3, proved: false,
+    set: STARTER_SET, box: 3, proved: false, knot: 'unknot',
     note: 'a 3-cell box: two vertical rings threaded through each other',
   },
   // Twelve steps over eleven cubes: the train drives over the middle cube twice,
   // once on each of its two rails.
   eight: {
     shape: 'XSLLLSXSRRRS',
-    set: DELUXE_SET, box: 5, proved: true,
+    set: DELUXE_SET, box: 5, proved: true, knot: 'unknot',
     note: 'a figure of eight through a single cross',
   },
   // Owen's set again, but told it must cross itself — `minCrossings: 1` rather
@@ -263,7 +264,7 @@ export const LAYOUTS = {
   // The one piece left in the box is a straight.
   crossed: {
     shape: 'LIXSRRRSXROLLOILSSSISISIOOIISSSISSSS',
-    set: OWENS_36, box: 6, proved: true,
+    set: OWENS_36, box: 6, proved: true, knot: 'unknot',
     note: 'Owen\'s set forced to cross itself — 35 cubes, one straight left over',
   },
 };

@@ -8,12 +8,13 @@ import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
 import { chainTrack } from '../src/track.js';
-import { curvesOf, knotOf, knotReader, knotType } from '../scripts/knot-curves.js';
+import { curvesOf, knotInput, knotOf, knotReader, knotType, lobesOf, SAMPLES } from '../scripts/knot-curves.js';
 
 const reader = knotReader();
-after(() => reader.close());
+const topolyOnly = knotReader({ certify: false });
+after(() => Promise.all([reader.close(), topolyOnly.close()]));
 
-const polysOf = async curves => (await reader.read([{ id: 1, seed: 1, curves }]))[0];
+const polysOf = async (input, from = reader, seed = 1) => (await from.read([{ id: 1, seed, ...input }]))[0];
 
 const around = (n, f) => Array.from({ length: n }, (_, i) => f(2 * Math.PI * i / n));
 const trefoil = around(300, t => [Math.sin(t) + 2 * Math.sin(2 * t), Math.cos(t) - 2 * Math.cos(2 * t), -Math.sin(3 * t)]);
@@ -28,11 +29,17 @@ const circle = around(300, t => [Math.cos(t), Math.sin(t), 0]);
 const gridded = curve => curve.map(p => p.map(v => Math.round(v * 8) * 5))
   .filter((p, i, all) => i === 0 || p.some((v, k) => v !== all[i - 1][k]));
 
+// A control has no cross, so it is all one lobe, and only the certificate's
+// crossing count can clear it: the circle, never the knots.
+const control = curve => ({ curves: { curve }, lobes: Array(curve.length).fill('-A') });
+
 test('the controls read as the knots they are, smooth and on a grid', async () => {
-  const polys = await polysOf({
+  const controls = {
     trefoil, figureEight, circle, gridTrefoil: gridded(trefoil), gridFigureEight: gridded(figureEight),
-  });
-  assert.deepEqual(Object.fromEntries(Object.entries(polys).map(([name, p]) => [name, knotType(p)])), {
+  };
+  const read = {};
+  for (const [name, curve] of Object.entries(controls)) read[name] = knotType((await polysOf(control(curve))).curve);
+  assert.deepEqual(read, {
     trefoil: 'trefoil', figureEight: 'figure-eight', circle: 'unknot',
     gridTrefoil: 'trefoil', gridFigureEight: 'figure-eight',
   });
@@ -47,10 +54,37 @@ const tracks = [
 ];
 for (const [shape, expected] of tracks) {
   test(`${shape} reads ${expected.over} over, ${expected.under} under`, async () => {
-    const polys = await polysOf(curvesOf(chainTrack(routeOf(shape))));
+    const polys = await polysOf(knotInput(chainTrack(routeOf(shape))));
     assert.deepEqual({ over: knotType(polys.over), under: knotType(polys.under) }, expected);
   });
 }
+
+// Row 14772602 of sweeps.db was stored as a trefoil over: topoly read it so on the
+// rotation the merge seeded, and as an unknot on 41 other rotations of 42. The
+// certificate proves it an unknot, so it never reaches topoly.
+test('a reading topoly misread as knotted is proved an unknot', async () => {
+  const input = knotInput(chainTrack(routeOf('IOSSSXISIRSLISISOISLSIOSLLSXSRSSOIRR')));
+  const misread = await polysOf(input, topolyOnly, 14772602);
+  assert.equal(knotType(misread.over), 'trefoil');
+  const proved = await polysOf(input, reader, 14772602);
+  assert.deepEqual({ over: knotType(proved.over), under: knotType(proved.under) }, { over: 'unknot', under: 'unknot' });
+});
+
+test('the cross splits a crossed track into two lobes, halfway along each pass', () => {
+  const lobes = lobesOf(chainTrack(routeOf(LAYOUTS.crossed.shape)));
+  const count = re => lobes.filter(label => re.test(label)).length;
+  assert.equal(lobes.length, curvesOf(chainTrack(routeOf(LAYOUTS.crossed.shape))).over.length);
+  assert.equal(count(/^x/), SAMPLES);
+  assert.equal(count(/^y/), SAMPLES);
+  assert.equal(count(/^xA/), SAMPLES / 2);
+  assert.equal(count(/^yB/), SAMPLES / 2);
+  assert.equal(count(/!$/), 4);
+  assert.ok(count(/^-A/) > 0 && count(/^-B/) > 0);
+});
+
+test('an uncrossed track is all one lobe', () => {
+  assert.ok(lobesOf(chainTrack(routeOf(LAYOUTS.set.shape))).every(label => label === '-A'));
+});
 
 test('a track is knotted if either reading is', () => {
   assert.equal(knotOf('1', '1'), 'unknot');
@@ -68,11 +102,12 @@ test('an uncrossed track reads the same over and under', () => {
 
 // topoly never returns on this track's first rotation over the cross: it is the
 // curve one of twelve overnight scans sat on for ten hours. knots.py must give up
-// on that rotation and read another. Seeded as the scan seeds it, by row id.
+// on that rotation and read another. Seeded as the scan seeds it, by row id. topoly
+// only: the certificate might clear the curve before topoly ever saw it.
 test('a rotation topoly hangs on is abandoned for another', async () => {
-  const hung = knotReader({ timeout: 2 });
-  const curves = curvesOf(chainTrack(routeOf('XIRSIOOIRISSRSRLSSXIOSSLILSSSLOIISSS')));
-  const [polys] = await hung.read([{ id: 8507057, seed: 8507057, curves }]);
+  const hung = knotReader({ timeout: 2, certify: false });
+  const input = knotInput(chainTrack(routeOf('XIRSIOOIRISSRSRLSSXIOSSLILSSSLOIISSS')));
+  const [polys] = await hung.read([{ id: 8507057, seed: 8507057, ...input }]);
   await hung.close();
   assert.equal(knotOf(polys.over, polys.under), 'unknot');
 });

@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { chainTrack } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
-import { curvesOf, knotOf, knotReader } from '../scripts/knot-curves.js';
+import { knotInput, knotOf, knotReader } from '../scripts/knot-curves.js';
 import { SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
 import { DIRECTIONS, extremes, weigher } from '../site/src/lib/weighting.js';
 
@@ -49,7 +49,7 @@ slow('every example\'s read knot reads as filed', async () => {
   const reader = knotReader();
   const read = examples.filter(({ knot }) => knot !== null);
   const polys = await reader.read(read.map(({ shape }, i) => ({
-    id: i, seed: i, curves: curvesOf(chainTrack(routeOf(shape))) })));
+    id: i, seed: i, ...knotInput(chainTrack(routeOf(shape))) })));
   await reader.close();
   read.forEach(({ shape, knot }, i) => assert.equal(knotOf(polys[i].over, polys[i].under), knot, shape));
 });

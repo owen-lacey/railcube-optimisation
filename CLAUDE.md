@@ -286,7 +286,7 @@ is `SIGNS` in `src/metrics.js`, and it is not cosmetic:
   goes underground. Owen's call, over measuring height from the lowest point: it is a
   smaller domain rather than an extra min variable. The sweep tooling (`check-route.js`
   `onTheGround`, `merge-sweeps.js`, `meet.py`) still checks material only, and ~2% of
-  `sweeps.db` (224,136 rows) breaks the rule — also his call. `score-sweeps.js` counts
+  `sweeps.db` (309,918 rows) breaks the rule — also his call. `score-sweeps.js` counts
   those rows' `underground` steps and `rank-scores.js` leaves them out.
 - **They need `fill`.** Left free in length, the best volume is a four-piece ring. The
   wrap would also read the switched-off tail as track. The JS throws
@@ -452,7 +452,8 @@ rung is a `WHERE`), and provenance (`source_log`, `merged_at`). WAL mode, so it 
 from `sqlite3` while a watch writes. `site/src/lib/data/sweep-28.json` is frozen: nothing writes it
 any more. `site/src/lib/data/sweep-crossed.json` is `scripts/sample-sweep.js --question 1
 --count 1000 --seed 1`: a uniform draw of rows, each re-derived and its stored columns
-compared before it is written. Uniform means skewed the way the database is — the first
+compared, and its knot read again on a fresh rotation, before it is written; each row
+carries its `knot`, and a row whose knot is unread fails the file. Uniform means skewed the way the database is — the first
 sample held one layout at rung 8 and none at 6 — and since a watch keeps adding rows, the
 same seed only reproduces the file against the same database.
 
@@ -460,10 +461,11 @@ same seed only reproduces the file against the same database.
 **question** it answers (`questionOf` in `scripts/sweep-data.js`: inventory, steps, box, minY,
 startPose — `minLoopLength`/`tightCrossings`/`exclude` are search knobs, so every rung merges
 under one question), is re-verified through `chainTrack`, and is inserted only if the database
-does not already hold it *as a physical track*. The one question in `sweeps.db` predates
-the pose relabelling and says `startPose: "UF"`; sweeps now write `"DF"` for the same
-physical start, so their records will not match it. Owen chose to leave the database as it
-is, so merging a new sweep means `--new-question`. `--watch .` re-runs the pass whenever a
+does not already hold it *as a physical track* — under that question only, so two questions
+asking one thing would hold the same tracks twice. That happened once: the crossed sweep sat
+under an old `UF` question and a `DF` one for the same physical start, the pose relabelling's
+two names for it. On 8 October 2026 they were merged into one `DF` question, id 1, dropping
+the 21,652 tracks held by both (backup: `sweeps.db.backup-2026-10-08`). `--watch .` re-runs the pass whenever a
 `sweep-crossed-*.jsonl` changes (run it in tmux beside the ladder); `--new-question` admits a
 question the database lacks. Every duplicate is also appended, once per shape, to the gitignored
 `sweep-duplicates.jsonl` — the tmux pane's scrollback will not last an overnight sweep.
@@ -476,7 +478,20 @@ stops the pass and keeps nothing from it; the claim stays on disk and is merged 
 before its live log is claimed again. A record for a question the database lacks is set aside in
 `sweep-unmatched.jsonl` beside its log, which `--new-question` admits (and drains). Logs are read
 a 16 MB chunk at a time, because a meet log outgrows the longest string V8 will make (~512 MB) —
-that is what crashed the watch at 591 MB. Two things draining costs:
+that is what crashed the watch at 591 MB.
+
+**A pass reads every new row's knot before it commits**, beside the columns `derive` fills:
+inserted with its knot unread, read across a `knotPool` (`--readers`, default 8) every 25 new
+rows a reader and once more at the end, seeded by the row id as `hydrate-sweeps.js --knots`
+seeded every older row. So a committed row always has its knot. `derive` stays synchronous and
+free of Python, because `--check`, hydrate, sample-sweep and tally all call it — Owen's call.
+The awaited read is why the pass is a hand-opened `BEGIN IMMEDIATE` … `COMMIT` (better-sqlite3's
+`transaction` cannot span an await), why a watch runs its passes one at a time, and why every
+merge, its tests included, spawns `uv`. One reader manages ~260 layouts/s (measured 262/s at
+1, 1,531/s at 8, through the unknot certificate below), and meet.py finds ~86/s across four
+workers, so one reader keeps up. The merge's own work — chain, readings, track key, curves —
+is ~1 ms a row on its one thread, so that, not the knots, is now what limits a pass, at about
+900 rows/s. Two things draining costs:
 
 - **A shapeless record is gone once merged.** Misses carry no layout, so nothing keeps them —
   and `explore.py --resume` replays its seed stream from exactly those records. Merging an
@@ -517,10 +532,12 @@ layout in SQL rather than of a scores file in a temp dir: `faces`, `repeats`, `p
 `close_calls`, `underground` (steps the train rides below the floor) and the two knot
 readings `knot_over`/`knot_under`. The first five are `derive` columns in
 `scripts/sweep-data.js`, so a merge writes them and `merge-sweeps.js --check` re-derives
-them. They were added to the live database by hand with `ALTER TABLE` (backup:
+them. The knots are read by the merge too, but outside `derive`, and `--check` does not
+re-read them. They were added to the live database by hand with `ALTER TABLE` (backup:
 `sweeps.db.backup-2026-10-05`), so its column order differs from `SCHEMA`'s; nothing reads
-columns by position. `hydrate-sweeps.js --readings` / `--knots` fills the NULLs, by id
-range, resuming by itself.
+columns by position. `hydrate-sweeps.js --readings` / `--knots` fills the NULLs of rows
+merged before a merge wrote them, by id range, resuming by itself. The knot columns stay
+nullable (Owen's call), so a gap is possible but shows as `unsure` in the weighted tally.
 
 Two readings, both Owen's definitions, neither in `METRICS` (every `METRICS` name needs a
 solver term):
@@ -538,7 +555,32 @@ The curve is the rail, `trackPath` at 8 samples a piece. The real cross is flat,
 second pass is bumped 2 units along its `up` × sin(πs), once over and once under; a track
 is **knotted if either reading is** (Owen's call) and its type is unknot / trefoil /
 figure-eight / `other:<poly>` by Alexander polynomial (`knotOf`). Both columns are kept raw
-because re-reading costs ~60 ms a layout. Things learned:
+because re-reading costs ~4 ms a layout (~25 ms when topoly has to read it). Things learned:
+
+- **Most readings never reach topoly: a flat picture proves them unknots.** The cross splits
+  the rail into two lobes, from the middle of one pass to the middle of the other
+  (`lobesOf`, sent with the curves by `knotInput`). `knots.py` tries up to 32 fixed
+  projections and stops at the first with fewer than 3 crossings in all, or with the lobes
+  crossing each other only where the passes meet and each crossing itself fewer than 3
+  times: that crossing is then nugatory, so the knot is the lobes' knots summed, and each is
+  an unknot. A cleared reading is answered `1`; anything else goes to topoly. It can only
+  ever prove "unknot", never claim "knotted". Measured against the database: over every
+  knotted row (39,845) it cleared one, row 14772602, which topoly had read as a trefoil on
+  the merge's rotation and as an unknot on 41 of 42 others — the certificate is a proof, so
+  that stored trefoil is wrong (`tests/knots.test.js` pins it). Over 40,000 unknots it
+  cleared 99.4%, median 2 projections, and 2,000 random rows read through the pool agreed
+  with the database on every knot. Straight runs are merged into one segment first: pieces
+  of one straight rail lie on one line in every projection, and a rule voiding any
+  projection with two segments on one line voided all of them (19% cleared). Now a
+  projection is voided only when two such segments overlap. `knotReader({ certify: false })`
+  (`--topoly-only`) skips it, which `--recheck` does, so a recheck is topoly's alone.
+
+- **topoly forces a `gc.collect()` at the end of every call**, after the answer is made, and
+  it was half of each call's time. `knots.py` stubs it in topoly's module only (Python's own
+  collector still runs): one reader went from 21 to 41 layouts/s, 8 from 136 to 309/s. On one
+  curve over 42 rotations the answers were identical with and without it, and
+  `--recheck 10000 --seed 3` afterwards (49,820 rows) disagreed only on a stored knot that
+  one rotation in 42 reads as a trefoil.
 
 - **A random rotation is required**: a grid-aligned projection gives `0`, which topoly reads
   as a link. The rotation is seeded by the row id and attempt, so a reading is reproducible.
@@ -552,16 +594,22 @@ because re-reading costs ~60 ms a layout. Things learned:
   on to a fresh rotation. `tests/knots.test.js` pins the track that hung. A scan that looks
   healthy in its first minutes can still stall later, so check a long one by rows read in
   the database over time, not by its first log lines.
-- **Never both ways yet**: every knotted layout seen is knotted over or under, never both;
-  `knotOf` throws if two different knots ever turn up.
+- **Every row is read** (7 October 2026, ~2 days of wall clock, 4–12 readers): 28,516 of
+  11,340,587 knotted (0.25%) — 28,382 trefoils and 134 figure-eights, nothing else — and
+  **none knotted both ways**, over or under only (14,052 over, 14,464 under). Whether the
+  geometry forces that is still unknown; `knotOf` throws if two different knots ever turn
+  up. `--recheck 10000 --seed 2` re-read 38,488 rows (every knotted one) on fresh
+  rotations: 0 disagree. The front read had already given the equal-weights ends exactly:
+  they did not move when the rest came in.
 - **Front first: `--knots --front`.** With every weight positive, a layout dominated by a
   knotted one can never be the best, so only the groups (layouts tied on the other metrics)
   no read knotted dominator rules out need reading, front inwards; the worst end is the same
   flipped, with an unknotted dominator ruling out (`scripts/knot-front.js`, checked against
   brute force over every weighting 1–5 in `tests/knot-front.test.js`). It covers both ends
   of two metric sets — poses, close calls, repeats and longest side, with and without
-  faces — and is exact only for positive weights: a zero weight lets dominated layouts tie the best, and only the full
-  `--knots` pass covers that. A wave is counted in unread layouts, not groups: counted in
+  faces — and is exact only for positive weights: a zero weight lets dominated layouts tie
+  the best, and only the full `--knots` pass covers that. It is how to get a new metric set
+  right quickly; with every row read it has nothing left to do. A wave is counted in unread layouts, not groups: counted in
   groups, a toy population read 92% of itself. Direction matters to the cost, not just the
   answer: with fewer close calls as better the front is the 0-close-call groups, thousands
   of layouts each, and it had read 13k a few groups in when it was stopped. More is better
@@ -569,24 +617,29 @@ because re-reading costs ~60 ms a layout. Things learned:
 - `--check` does not re-read knots (hours). `hydrate-sweeps.js --recheck N --seed S` re-reads N
   uniform rows and every knotted one on fresh rotations and exits nonzero on disagreement.
 - `tests/knots.test.js` has positive controls (trefoil, figure-eight, grid-snapped copies,
-  circle) and spawns `uv`, as does `tests/hydrate-sweeps.test.js`.
+  circle) and spawns `uv`, as do `tests/hydrate-sweeps.test.js`, `tests/merge-sweeps.test.js`
+  and `tests/layouts.test.js`. Every `LAYOUTS` entry carries its `knot`, and every one so far
+  is an unknot, so the layouts test leans on those controls.
 
 ### The weighted best and worst: `scripts/tally-weights.js` → `WeightedTracks`
 
 Five sliders, 0 to `maxWeight` (5): knotted, poses, close calls (more is better, all three),
 repeats and longest side (fewer/shorter). `tally-weights.js` reads `sweeps.db`'s columns
 and writes `site/src/lib/data/sweep-crossed-weights.json`: one row per distinct five values
-over the legal rows (10,648), `knotted: null` for layouts whose knot is unread, and
-`weighting.js` ranks the rows, so the ends are exact over all 11.1M. Examples are kept only
-for rows that are an end under some slider setting (3,677 rows, 13k examples, 245 KB
-gzipped), and every one is re-derived, its knot re-read on a fresh rotation.
+over the legal rows (13,253), `knotted: null` for layouts whose knot is unread (none now),
+and `weighting.js` ranks the rows, so the ends are exact over all 15.4M. It tallies question 1. Examples are kept
+only where an end needs them: for every slider setting, enough of its tied rows, in a seeded
+order, to show `--examples` (5) layouts. Not examples for every tied row: knotted alone ties
+every row at one end or the other, which made a 700 KB-gzipped file; capped, it is 67 KB.
+So a shuffle shows layouts tied at that end, not a uniform draw over all of them. Every
+example is re-derived, its knot re-read on a fresh rotation.
 
 Unread knots are reported, not guessed: an end says how many unread layouts could reach it.
 That is none when every weight is positive (the front read, `tests/weighting.test.js` over
 all 3,125 such settings) and none when knotted weighs 0, since then a knot cannot move a
 score — those unread layouts simply tie, and are shown with "knot not read". Only knotted
-positive with another weight at 0 can leave an end unsure, and the full `--knots` pass is
-what closes that.
+positive with another weight at 0 can leave an end unsure, and the full `--knots` pass
+closed that: with every row read, no end is ever unsure.
 
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 

@@ -120,37 +120,33 @@ export function questionOf(config) {
 const CHUNK = 1 << 24;
 
 /**
- * Every solved record in a log, handed to `visit` one at a time. Read a chunk at
- * a time rather than as one string, because a meet log outgrows the longest
- * string V8 will make (~512 MB), and the records are never all held at once. A
- * log reaching here has been claimed from its sweep and has settled, so it ends
- * in a newline: anything after the last one is a record cut short, which is an
- * error. A round that timed out before finding anything carries no shape and
- * is not an answer.
+ * Every solved record in a log, one at a time. Read a chunk at a time rather
+ * than as one string, because a meet log outgrows the longest string V8 will
+ * make (~512 MB), and the records are never all held at once. A generator, so a
+ * reader can await between records. A log reaching here has been claimed from
+ * its sweep and has settled, so it ends in a newline: anything after the last
+ * one is a record cut short, which is an error. A round that timed out before
+ * finding anything carries no shape and is not an answer.
  */
-export function eachStaged(path, visit) {
+export function* staged(path) {
   const fd = openSync(path, 'r');
   const chunk = Buffer.alloc(CHUNK);
   let carry = Buffer.alloc(0);
   try {
     for (let n; (n = readSync(fd, chunk, 0, CHUNK, null)) > 0;) {
-      carry = visitLines(Buffer.concat([carry, chunk.subarray(0, n)]), visit);
+      const bytes = Buffer.concat([carry, chunk.subarray(0, n)]);
+      const end = bytes.lastIndexOf(0x0a) + 1;
+      for (const line of bytes.toString('utf8', 0, end).split('\n')) {
+        if (!line.trim()) continue;
+        const record = JSON.parse(line);
+        if (record.shape) yield record;
+      }
+      carry = bytes.subarray(end);
     }
   } finally {
     closeSync(fd);
   }
   if (carry.toString('utf8').trim()) throw new Error(`${path} ends part-way through a record`);
-}
-
-/** Visit every whole line in `bytes`, and return what follows the last. */
-function visitLines(bytes, visit) {
-  const end = bytes.lastIndexOf(0x0a) + 1;
-  for (const line of bytes.toString('utf8', 0, end).split('\n')) {
-    if (!line.trim()) continue;
-    const record = JSON.parse(line);
-    if (record.shape) visit(record);
-  }
-  return bytes.subarray(end);
 }
 
 /**
@@ -207,7 +203,10 @@ export function assertSpends(placed, question, shape) {
   }
 }
 
-/** Chain a logged shape, check it is what the log says it is, and return its columns. */
+/**
+ * Chain a logged shape, check it is what the log says it is, and return its
+ * columns as `row`, with the chained `placed` its knot is read from.
+ */
 export function verify(record, question) {
   const { placed, cubes, columns } = derive(record.shape);
   assertSpends(placed, question, record.shape);
@@ -234,8 +233,11 @@ export function verify(record, question) {
   // counting layouts may well want to say. Recording the flag lets it choose;
   // dropping the rows would not. SQLite has no boolean, hence the number.
   return {
-    shape: record.shape,
-    ...columns,
-    mirrored: record.mirrored === undefined ? null : Number(record.mirrored),
+    placed,
+    row: {
+      shape: record.shape,
+      ...columns,
+      mirrored: record.mirrored === undefined ? null : Number(record.mirrored),
+    },
   };
 }

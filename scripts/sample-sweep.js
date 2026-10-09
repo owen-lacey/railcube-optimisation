@@ -13,14 +13,20 @@
 //
 // Nothing here believes the database either. Every sampled shape is re-derived
 // through `derive` and its stored columns compared, the same audit
-// `merge-sweeps.js --check` runs, and one disagreement fails the whole file.
+// `merge-sweeps.js --check` runs, and its knot is read again on a fresh rotation,
+// as `hydrate-sweeps.js --recheck` reads one, across `--readers` children
+// (default 8). One disagreement, or a knot not yet read, fails the whole file.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { assertSpends, DB_PATH, derive, openDb, random } from './sweep-data.js';
+import { knotInput, knotOf, knotPool, knotType } from './knot-curves.js';
 
 const COLUMNS = ['span_across', 'span_up', 'span_along', 'revisits', 'loop_small', 'loop_large'];
+
+// A seed far from any row id, so a re-read's rotations are not the merge's.
+const RECHECK_SEED = 2 ** 32;
 
 /**
  * `count` distinct rows of the question, uniformly. Row ids are drawn over the
@@ -42,7 +48,7 @@ function draw(db, questionId, count, seed) {
 }
 
 /** Re-derive a row from its shape and check the stored columns agree. */
-function audit(row, question) {
+function audit(row, question, polys) {
   const { placed, cubes, columns } = derive(row.shape);
   assertSpends(placed, question, row.shape);
   if (cubes !== row.cubes) throw new Error(`${row.shape} is ${cubes} cubes, not ${row.cubes}`);
@@ -51,16 +57,31 @@ function audit(row, question) {
       throw new Error(`${row.shape} has ${column} ${columns[column]}, stored as ${row[column]}`);
     }
   }
+  const stored = [row.knot_over, row.knot_under].map(knotType);
+  const again = [polys.over, polys.under].map(knotType);
+  if (stored.some((k, i) => k !== again[i])) {
+    throw new Error(`${row.shape} has knots ${stored.join(' / ')}, read again as ${again.join(' / ')}`);
+  }
   return {
     shape: row.shape,
     span: [columns.span_across, columns.span_up, columns.span_along],
     revisits: columns.revisits,
     loops: [columns.loop_small, columns.loop_large],
     mirrored: row.mirrored === 1,
+    knot: knotOf(row.knot_over, row.knot_under),
   };
 }
 
-function sampleSweep({ db, questionId, count, seed, name }) {
+/** Each row's knot readings, read again on a fresh rotation. */
+async function readAgain(rows, knots) {
+  const unread = rows.find(row => row.knot_over === null);
+  if (unread) throw new Error(`${unread.shape} has no knot read; run hydrate-sweeps.js --knots`);
+  return knots.read(rows.map(row => ({
+    id: row.id, seed: RECHECK_SEED + row.id, ...knotInput(derive(row.shape).placed),
+  })));
+}
+
+async function sampleSweep({ db, questionId, count, seed, name, knots }) {
   const held = db.prepare('SELECT * FROM questions WHERE id = ?').get(questionId);
   if (!held) throw new Error(`no question ${questionId} in the database`);
   const { population } = db.prepare(
@@ -68,8 +89,9 @@ function sampleSweep({ db, questionId, count, seed, name }) {
   if (count > population) throw new Error(`only ${population} layouts to sample from`);
 
   const question = JSON.parse(held.question);
-  const shapes = draw(db, questionId, count, seed)
-    .map(row => audit({ ...row, cubes: held.cubes }, question))
+  const rows = draw(db, questionId, count, seed);
+  const polys = await readAgain(rows, knots);
+  const shapes = rows.map((row, i) => audit({ ...row, cubes: held.cubes }, question, polys[i]))
     .sort((a, b) => a.shape.localeCompare(b.shape));
 
   return {
@@ -96,7 +118,7 @@ function write(output, data) {
   writeFileSync(output, `${body}\n`);
 }
 
-function main(argv) {
+async function main(argv) {
   const option = flag => {
     const i = argv.indexOf(`--${flag}`);
     return i === -1 ? undefined : argv[i + 1];
@@ -106,16 +128,17 @@ function main(argv) {
   const output = option('out');
   if (![questionId, count, seed].every(Number.isInteger) || !name || !output) {
     console.error('usage: node scripts/sample-sweep.js --question <id> --count <n> --seed <n> '
-      + '--name <name> --out <file.json> [--db <path>]');
+      + '--name <name> --out <file.json> [--db <path>] [--readers N]');
     process.exit(2);
   }
 
   const db = openDb(option('db') ?? DB_PATH);
-  const data = sampleSweep({ db, questionId, count, seed, name });
+  const knots = knotPool({ readers: Number(option('readers') ?? 8) });
+  const data = await sampleSweep({ db, questionId, count, seed, name, knots }).finally(() => knots.close());
   db.close();
   write(output, data);
   console.log(`sampled ${data.distinct} of ${data.population.toLocaleString('en-GB')} layouts `
-    + `(${data.mirrors} mirrors), seed ${seed} — all re-derived. wrote ${output}`);
+    + `(${data.mirrors} mirrors), seed ${seed} — all re-derived, knots read again. wrote ${output}`);
 }
 
-main(process.argv.slice(2));
+await main(process.argv.slice(2));

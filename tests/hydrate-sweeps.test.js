@@ -3,7 +3,7 @@
 // pass, and the knots are read and re-read.
 //
 // The knot cases spawn `uv`, which the rest of the suite does not need.
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdtempSync } from 'node:fs';
@@ -15,6 +15,7 @@ import { chainTrack } from '../src/track.js';
 import { spanOf } from '../src/metrics.js';
 import { openDb } from '../scripts/sweep-data.js';
 import { audit, mergePass } from '../scripts/merge-sweeps.js';
+import { knotPool } from '../scripts/knot-curves.js';
 
 const SCRIPT = new URL('../scripts/hydrate-sweeps.js', import.meta.url).pathname;
 const TREFOIL = 'SRISOIRSIRXILSIIOSLISSOSSLSLSSOSXRSI';
@@ -24,8 +25,12 @@ const config = {
 };
 const READINGS = ['faces', 'repeats', 'poses', 'close_calls', 'underground'];
 
-/** A database holding these shapes, with every reading blanked as an old row's would be. */
-function oldDb(shapes) {
+// The merge reads knots on the way in, which oldDb then blanks.
+const knots = knotPool({ readers: 1 });
+after(() => knots.close());
+
+/** A database holding these shapes, with every reading and knot blanked as an old row's would be. */
+async function oldDb(shapes) {
   const dir = mkdtempSync(join(tmpdir(), 'hydrate-sweeps-'));
   const path = join(dir, 'sweeps.db');
   const db = openDb(path);
@@ -36,16 +41,16 @@ function oldDb(shapes) {
       span: spanOf(chainTrack(routeOf(shape))).join('x'),
     })}\n`);
   }
-  mergePass({ db, logs: [log], admit: true, say: () => {}, settle: 0 });
-  db.exec(`UPDATE layouts SET ${READINGS.map(c => `${c} = NULL`).join(', ')}`);
+  await mergePass({ db, logs: [log], knots, admit: true, say: () => {}, settle: 0 });
+  db.exec(`UPDATE layouts SET ${[...READINGS, 'knot_over', 'knot_under'].map(c => `${c} = NULL`).join(', ')}`);
   return { db, path };
 }
 
 const run = (path, ...flags) => spawnSync('node', [SCRIPT, '--db', path, ...flags], { encoding: 'utf8' });
 const columns = (db, names) => db.prepare(`SELECT ${names.join(', ')} FROM layouts ORDER BY id`).raw().all();
 
-test('--readings fills what an old row lacks, and the audit then passes', () => {
-  const { db, path } = oldDb([LAYOUTS.crossed.shape, TREFOIL]);
+test('--readings fills what an old row lacks, and the audit then passes', async () => {
+  const { db, path } = await oldDb([LAYOUTS.crossed.shape, TREFOIL]);
   assert.notEqual(audit(db, () => {}), 0);
   const { status, stderr } = run(path, '--readings');
   assert.equal(status, 0, stderr);
@@ -54,8 +59,8 @@ test('--readings fills what an old row lacks, and the audit then passes', () => 
   assert.equal(audit(db, s => said.push(s)), 0, said.join('\n'));
 });
 
-test('--readings stops on a row whose geometry has drifted, and writes nothing from its batch', () => {
-  const { db, path } = oldDb([LAYOUTS.crossed.shape, TREFOIL]);
+test('--readings stops on a row whose geometry has drifted, and writes nothing from its batch', async () => {
+  const { db, path } = await oldDb([LAYOUTS.crossed.shape, TREFOIL]);
   db.exec('UPDATE layouts SET volume = volume + 1 WHERE id = 2');
   const { status, stderr } = run(path, '--readings');
   assert.notEqual(status, 0);
@@ -63,8 +68,8 @@ test('--readings stops on a row whose geometry has drifted, and writes nothing f
   assert.deepEqual(columns(db, ['poses']), [[null], [null]]);
 });
 
-test('--knots reads both passes of the cross, and --recheck agrees with it', () => {
-  const { db, path } = oldDb([LAYOUTS.crossed.shape, TREFOIL]);
+test('--knots reads both passes of the cross, and --recheck agrees with it', async () => {
+  const { db, path } = await oldDb([LAYOUTS.crossed.shape, TREFOIL]);
   execFileSync('node', [SCRIPT, '--db', path, '--knots']);
   assert.deepEqual(columns(db, ['knot_over', 'knot_under']), [['1', '1'], ['1 -1 1', '1']]);
   const { status, stdout, stderr } = run(path, '--recheck', '2', '--seed', '1');
@@ -72,8 +77,8 @@ test('--knots reads both passes of the cross, and --recheck agrees with it', () 
   assert.match(stdout, /2 rows read again \(1 knotted\), 0 disagree/, stdout);
 });
 
-test('--recheck says when a stored knot reads differently', () => {
-  const { db, path } = oldDb([LAYOUTS.crossed.shape, TREFOIL]);
+test('--recheck says when a stored knot reads differently', async () => {
+  const { db, path } = await oldDb([LAYOUTS.crossed.shape, TREFOIL]);
   execFileSync('node', [SCRIPT, '--db', path, '--knots']);
   db.exec(`UPDATE layouts SET knot_over = '1' WHERE shape = '${TREFOIL}'`);
   db.exec(`UPDATE layouts SET knot_under = '1 -1 1' WHERE shape = '${LAYOUTS.crossed.shape}'`);
@@ -82,8 +87,8 @@ test('--recheck says when a stored knot reads differently', () => {
   assert.match(stdout, /stored unknot \/ trefoil, read again as unknot \/ unknot/);
 });
 
-test('--knots --front reads what an end can turn on, here both rows', () => {
-  const { db, path } = oldDb([LAYOUTS.crossed.shape, TREFOIL]);
+test('--knots --front reads what an end can turn on, here both rows', async () => {
+  const { db, path } = await oldDb([LAYOUTS.crossed.shape, TREFOIL]);
   execFileSync('node', [SCRIPT, '--db', path, '--readings']);
   const { status, stdout, stderr } = run(path, '--knots', '--front', '--readers', '2');
   assert.equal(status, 0, stderr);

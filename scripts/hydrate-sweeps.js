@@ -7,8 +7,8 @@
 //
 // `--readings` is everything `derive` in sweep-data.js reads that a row may not
 // have yet — faces, repeats, poses, close calls, underground — and takes minutes.
-// `--knots` is the two knot readings (scripts/knot-curves.js), ~60 ms a layout
-// on one core, so a full pass is a day across the machine: split it by id range,
+// `--knots` is the two knot readings (scripts/knot-curves.js), ~4 ms a layout
+// on one core, so a full pass is hours on one: split it by id range,
 // one process per range, in tmux. Either resumes by itself: it only ever reads
 // rows whose columns are still NULL, a batch at a time, and writes each batch in
 // one transaction, so a kill loses one batch and nothing else.
@@ -28,7 +28,7 @@
 import { parseArgs } from 'node:util';
 
 import { assertSpends, DB_PATH, derive, openDb, random } from './sweep-data.js';
-import { curvesOf, knotOf, knotReader, knotType } from './knot-curves.js';
+import { knotInput, knotOf, knotPool, knotReader, knotType } from './knot-curves.js';
 import { readFront } from './knot-front.js';
 
 const GEOMETRY = ['span_across', 'span_up', 'span_along', 'volume', 'revisits', 'loop_small', 'loop_large'];
@@ -108,7 +108,7 @@ const pick = (object, keys) => Object.fromEntries(keys.map(k => [k, object[k]]))
 
 /** Each row's two readings, from fresh curves, with rotations seeded at `seed(row)`. */
 async function readKnots(reader, rows, seed) {
-  const records = rows.map(row => ({ id: row.id, seed: seed(row), curves: curvesOf(rederive(row).placed) }));
+  const records = rows.map(row => ({ id: row.id, seed: seed(row), ...knotInput(rederive(row).placed) }));
   return reader.read(records);
 }
 
@@ -160,18 +160,16 @@ async function hydrateFront() {
     knots.set(row.id, knotOf(polys[i].over, polys[i].under) !== 'unknot');
     update.run(polys[i].over, polys[i].under, row.id);
   }));
-  const readers = Array.from({ length: Number(args.readers) }, () => knotReader());
+  const pool = knotPool({ readers: Number(args.readers) });
   let done = 0;
   const read = async ids => {
     const rows = ids.map(id => byId.get(id));
-    const shares = readers.map((_, k) => rows.filter((_, i) => i % readers.length === k));
-    const polys = await Promise.all(shares.map((share, k) => readKnots(readers[k], share, row => row.id)));
-    shares.forEach((share, k) => write(share, polys[k]));
+    write(rows, await readKnots(pool, rows, row => row.id));
     done += rows.length;
     if (rows.length) process.stdout.write(`${done} read this run, ${[...knots.values()].filter(Boolean).length} knotted known; `);
   };
-  await readFront({ groups, sets: FRONT_SETS, knots, read, wave: 2 * readers.length, say: console.log });
-  await Promise.all(readers.map(r => r.close()));
+  await readFront({ groups, sets: FRONT_SETS, knots, read, wave: 2 * pool.readers, say: console.log });
+  await pool.close();
   console.log(`front read: ${done} rows this run`);
 }
 
@@ -194,7 +192,8 @@ function recheckRows(count, seed) {
 
 async function recheck(count, seed) {
   const rows = recheckRows(count, seed);
-  const reader = knotReader();
+  // topoly alone, so a recheck is a reading the certificate had no part in.
+  const reader = knotReader({ certify: false });
   let faults = 0, knotted = 0;
   for (let i = 0; i < rows.length; i += 100) {
     const batch = rows.slice(i, i + 100);
