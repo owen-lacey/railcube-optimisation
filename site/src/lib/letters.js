@@ -10,8 +10,8 @@ export const HEIGHT = 8;
 
 /** Each letter's width, in cubes. */
 export const WIDTHS = {
-  A: 4, B: 4, C: 4, E: 4, G: 4, H: 4, I: 1, L: 4,
-  M: 7, N: 4, O: 4, P: 4, R: 4, S: 4, T: 5, U: 4,
+  A: 4, B: 4, C: 4, D: 4, E: 4, F: 4, G: 4, H: 4, I: 1, J: 4, K: 4, L: 4,
+  M: 7, N: 4, O: 4, P: 4, R: 4, S: 4, T: 5, U: 4, W: 7, X: 4, Y: 4, Z: 4,
 };
 
 /** Gaps between letters, between words and between rows, in cubes. */
