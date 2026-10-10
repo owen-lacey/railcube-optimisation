@@ -19,9 +19,10 @@
     aspect = undefined,
   } = $props();
 
-  // Which piece the train is on, in route order, and whether the slider has it.
+  // Which piece the train is on, in route order, and whether the slider has it. The
+  // slider starts with it, so the train waits at the start until played.
   let at = $state(0);
-  let held = $state(false);
+  let held = $state(true);
   // The cell the train is in, the model's `[right, up, forwards]` from the start
   // cube (docs/coordinates.md), and the pose of the piece it last entered, `'DF'`
   // say; each null while there is no train.

@@ -1,6 +1,7 @@
 <script>
 	// The 24 poses: one see-through cell with the train in it, snapping from one
-	// pose to the next floor by floor, in the order the model lists them, until paused.
+	// pose to the next floor by floor, in the order the model lists them, once played.
+	// It starts paused on the first: nothing in the post moves until it is asked to.
 	import TrackViewer from "./TrackViewer.svelte";
 	import { POSES } from "../../../../src/track.js";
 	import { describePose } from "$lib/catalogue.js";
@@ -12,7 +13,7 @@
 
 	const scene = poseCycle();
 	let index = $state(0);
-	let playing = $state(true);
+	let playing = $state(false);
 	const pose = $derived(POSES[index]);
 
 	$effect(() => {
