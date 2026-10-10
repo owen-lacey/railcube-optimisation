@@ -809,8 +809,8 @@ the section and renders only its footer.
   rule in `site/src/routes/+layout.svelte` drops the layout's top padding for the splash instead.
 - Steps trigger at the middle of the band, measured in pixels off the stage
   (`scroller.offset(...)`, scrollama 3.2's name for `offsetTrigger`), because a phone's address
-  bar changes the viewport but not the stage. The last step releases the box, so the page reads
-  normally after it.
+  bar changes the viewport but not the stage. The box stays pinned until the last step has
+  slid under it, so what follows the section (the post's next heading) pushes it away.
 - Synchronous `scrollTo` jumps do not fire scrollama. A CDP check has to scroll a little at a
   time.
 

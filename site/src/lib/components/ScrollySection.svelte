@@ -2,8 +2,8 @@
 	// A stretch of the post told over one viewer. The viewer stays put in a box filling
 	// the top of the screen; the text runs through a band of fixed height reserved
 	// below it, so the two never overlap, and each paragraph changes what is in the
-	// box as it arrives. The last step arrives as the box lets go: it scrolls away
-	// with the box, and the page reads as normal again.
+	// box as it arrives. The box lets go once the last step has gone under it, so
+	// whatever follows the section arrives in the band and pushes the box away.
 	//
 	// A step is `{ body, figure, props }`: `body` a snippet of prose, `figure` a figure
 	// component (see `$lib/figure.js`) and `props` its own — the same component, with
@@ -64,7 +64,7 @@
 	// each step's prose is measured, so a narrow screen, where it wraps onto more
 	// lines, takes the room from the box rather than running off the bottom.
 	let prose = $state([]);
-	const tallest = $derived(Math.max(0, ...prose.slice(0, -1).filter(Boolean)));
+	const tallest = $derived(Math.max(0, ...prose.filter(Boolean)));
 
 	// A step is the one being read once its top is halfway down the band. The line is
 	// in pixels, measured off the stage, rather than a fraction of the viewport: a
@@ -133,14 +133,6 @@
 	});
 </script>
 
-{#snippet stepAt(i)}
-	<div class="step" class:last={i === steps.length - 1} bind:this={triggers[i]}>
-		<div class="prose" bind:clientHeight={prose[i]}>
-			{@render steps[i].body()}
-		</div>
-	</div>
-{/snippet}
-
 <section
 	class="scrolly"
 	class:held
@@ -149,9 +141,8 @@
 	style:--words="{WORDS}s"
 	style:--prose-height="{tallest}px"
 >
-	<!-- The box is pinned over every step but the last. It lets go as the last one
-       arrives in the band, so that one scrolls away with the box, and the page
-       carries on as normal, rather than sliding under it. -->
+	<!-- The box is pinned over every step, and lets go once the last has slid under
+       it, so the page after the section pushes it up and away. -->
 	<div class="pinned">
 		<div class="stage" bind:this={stage}>
 			<div
@@ -178,11 +169,14 @@
 				</LayoutViewer>
 			</div>
 		</div>
-		{#each steps.slice(0, -1) as _, i}
-			{@render stepAt(i)}
+		{#each steps as step, i}
+			<div class="step" bind:this={triggers[i]}>
+				<div class="prose" bind:clientHeight={prose[i]}>
+					{@render step.body()}
+				</div>
+			</div>
 		{/each}
 	</div>
-	{@render stepAt(steps.length - 1)}
 </section>
 
 <style>
@@ -275,8 +269,7 @@
 	}
 
 	/* A paragraph being read sits clear of the fade, and fades only once it moves
-     on up towards the box. That clearance is also where the fade lies once the box
-     lets go, over the last step's top. */
+     on up towards the box. */
 	.step {
 		min-height: var(--band-height);
 		box-sizing: border-box;
@@ -290,11 +283,5 @@
 
 	.step :global(p) {
 		margin: 0 0 0.75rem;
-	}
-
-	/* The last step is read as the page carries on, so it is only as tall as it is. */
-	.step.last {
-		min-height: 0;
-		padding-bottom: 0;
 	}
 </style>
