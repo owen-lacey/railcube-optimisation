@@ -329,7 +329,6 @@
           },
         });
         stage.setPaused(paused);
-        handle = controls?.(host, stage) ?? null;
         ready = true;
         // A tumble is framed once, here, and never again. A grow is framed by
         // `showGrown`, from the first paint.
@@ -394,6 +393,21 @@
     void train;
     if (!ready || !stage) return;
     show(next);
+  });
+
+  // Handling comes and goes: a figure is handled only while it is full screen. Let
+  // go of, the view eases home, so the page gets back the shot it was showing.
+  $effect(() => {
+    const attach = controls;
+    if (!ready || !stage || !attach) return;
+    const current = stage;
+    handle = attach(host, current);
+    return () => {
+      handle?.destroy();
+      handle = null;
+      // Not on a stage already torn down by the mount's own cleanup.
+      if (stage === current) current.reset({ instant: reduced });
+    };
   });
 
   // Paused or played. Starting either way is right: paused, it draws one still

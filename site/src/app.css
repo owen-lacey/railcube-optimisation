@@ -27,3 +27,9 @@ body {
   margin: 0;
   background: var(--page);
 }
+
+/* A figure opened full screen is the only thing that scrolls or takes a gesture:
+   the page holds still behind it, so a scrolly section cannot change step. */
+html:has(dialog:modal) {
+  overflow: hidden;
+}
