@@ -62,10 +62,7 @@
 			figure: TrackFigure,
 			props: { shape: "ILSSXOSSSSSIISLRSISOORSOIRRSXIILSLSI" }
 		},
-		{ body: tiresome, figure: KnownTracks, props: { train: null } },
-		// Still the same figure: the box stays pinned through this paragraph and lets go
-		// at the heading after it.
-		{ body: hopefully, figure: KnownTracks, props: { train: null }, keep: true }
+		{ body: tiresome, figure: KnownTracks, props: { train: null } }
 	];
 </script>
 
@@ -92,15 +89,10 @@
 {#snippet tiresome()}
 	<p>
 		In fact, I've got a bunch of these ready to use anytime my three year old
-		decrees that the existing structure is tiresome.
-	</p>
-{/snippet}
-
-{#snippet hopefully()}
-	<p>
-		Hopefully the sheer number of tracks convinces you I couldn't have possibly
-		figured all of these out by myself. I'm going to show you how I made something
-		to generate these, and how we can optimise for different things.
+		decrees that the existing structure is tiresome. Hopefully the sheer number of
+		tracks convinces you I couldn't have possibly figured all of these out by
+		myself. I'm going to show you how I made something to generate these, and how
+		we can optimise for different things.
 	</p>
 {/snippet}
 

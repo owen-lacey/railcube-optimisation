@@ -30,9 +30,6 @@
 	let { steps = [] } = $props();
 
 	let active = $state(0);
-	// Keys the figure, so each step's starts afresh — except a step marked `keep`,
-	// which carries on the previous step's figure as it is.
-	let generation = $state(0);
 	let stage = $state(null);
 	let triggers = $state([]);
 	let width = $state(0);
@@ -123,10 +120,7 @@
 		scroller = scrollama();
 		scroller
 			.setup({ step: triggers, offset: line() })
-			.onStepEnter(({ index }) => {
-				if (!steps[index].keep) generation++;
-				active = index;
-			});
+			.onStepEnter(({ index }) => (active = index));
 		// Scrollama reads the window's height only when it builds its observers, and
 		// setting the offset rebuilds them. (Its README calls this `offsetTrigger`;
 		// 3.2 names it `offset`.)
@@ -167,7 +161,7 @@
 					{#snippet caption(drawn)}
 						<FigureHost {show} {drawn}>
 							<!-- Keyed, so each step's figure starts afresh. -->
-							{#key generation}
+							{#key active}
 								<Figure {...steps[active].props} />
 							{/key}
 						</FigureHost>
