@@ -1,6 +1,5 @@
-// The crossed sweep, a random track at a time. Type a number from 1 to 1,000 to
-// hold that one; play sets it cycling again, and pause holds the train too. Nothing changes while it is off
-// screen, since every swap redraws a whole 35-cube layout.
+// The crossed sweep, one track at a time; the shuffle button picks another at
+// random.
 
 import KnownTracks from './KnownTracks.svelte';
 
@@ -8,16 +7,13 @@ export default {
   title: 'Known tracks',
   component: KnownTracks,
   argTypes: {
-    every: { control: { type: 'range', min: 500, max: 10000, step: 100 } },
     aspect: { control: 'text' },
   },
 };
 
-export const Default = {
-  args: { every: 2000 },
-};
+export const Default = {};
 
 /** No train: the tracks alone, as the post shows them. */
 export const NoTrain = {
-  args: { every: 2000, train: null },
+  args: { train: null },
 };
