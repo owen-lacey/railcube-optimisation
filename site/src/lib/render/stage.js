@@ -252,6 +252,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
       id,
       type,
       color,
+      look: 'solid',
       basis,
       position,
       place(next, at) {
@@ -263,11 +264,14 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
       // Repaint where it stands: a swap to that colour's shared geometry, drawn as
       // a `solid` piece or as a `clash` — swollen and see-through, over whatever it
       // ran into.
+      // A cube already drawn that way is left untouched.
       restyle({ color: next, look = 'solid' }) {
+        if (next === made.color && look === made.look) return;
         const clash = look === 'clash';
         mesh.reshape(geometryFor(type, next, clash ? ALARM_SWELL : 1));
         mesh.repaint(clash ? paint.clash : paint.solid);
         made.color = next;
+        made.look = look;
         invalidate();
       },
       // See-through by `opacity`, 1 being solid. The first fade gives the cube a

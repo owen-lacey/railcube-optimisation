@@ -14,7 +14,7 @@ import { CUBE } from './dimensions.js';
 import { cubePosition, poseRotation } from './vec.js';
 import { comAt } from '../shapes.js';
 import { identify } from '../../../../src/layouts.js';
-import { arcTo, restsAt } from './build.js';
+import { arcTo, claim, restsAt } from './build.js';
 
 export const MOVE = 0.7;   // seconds every flight and every fade takes, at speed 1
 // How far clear of the picture's edge an arrival sets off, in world units: a cube
@@ -45,8 +45,9 @@ export function movePhase(stage, pieces, { leaving = [], frame, speed = 1 } = {}
     const position = cubePosition(piece);
     return { id: ids[i], type: piece.type, color: piece.color, basis, position };
   }).filter(slot => !restsAt(stage.cubes.get(slot.id), slot)).map(slot => {
-    const standing = stage.cubes.get(slot.id);
-    const cube = standing ?? stage.cube(slot.id, { ...slot, position: stage.offscreen(slot.position, frame, CLEAR) });
+    const cube = stage.held(slot.id)
+      ? claim(stage, slot)
+      : stage.cube(slot.id, { ...slot, position: stage.offscreen(slot.position, frame, CLEAR) });
     return {
       cube,
       slot,

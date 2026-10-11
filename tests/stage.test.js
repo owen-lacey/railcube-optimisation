@@ -1006,6 +1006,40 @@ for (const [name, phaseOf] of Object.entries(ALARMED)) {
   });
 }
 
+// A cube carried over to a new layout is still drawn as it was in the old one until
+// something repaints it. `SSLLLSS` is stuck on its `4S`; in `SSISLILISS` that same
+// cube is an ordinary straight, and the one stuck is `5S`.
+const CARRIED = {
+  'a finished drawing': (stage, pieces, alarm) => trackPhase(stage, pieces, { drive: false, alarm }),
+  'a build': (stage, pieces, alarm) => buildPhase(stage, pieces, { drive: false, alarm }),
+  'a move': (stage, pieces) => movePhase(stage, pieces, { frame: fixedFrame() }),
+};
+
+for (const [name, phaseOf] of Object.entries(CARRIED)) {
+  test(`a rejected piece carried into ${name} where it is no longer rejected is drawn as its own piece`, () => {
+    const clock = fakeClock();
+    const { stage } = staged();
+    const before = openScene('SSLLLSS');
+    stage.run([trackPhase(stage, before.pieces, { drive: false, alarm: { id: before.offender.id, pulse: false } })]);
+    stage.start();
+    clock.run(1);
+    const carried = stage.cubes.get('4S');
+    assert.equal(before.offender.id, '4S');
+    assert.ok(clashing(carried.mesh.mesh, stage.cubes.get('1S').mesh.mesh), 'it was never drawn as rejected');
+
+    const after = openScene('SSISLILISS');
+    stage.run([phaseOf(stage, after.pieces, { id: after.offender.id, pulse: false })]);
+    stage.start();
+    clock.run(3);
+
+    assert.equal(stage.cubes.get('4S'), carried, 'it is not the same cube');
+    const mesh = carried.mesh.mesh;
+    assert.equal(mesh.material.transparent, false, 'it is still see-through');
+    assert.equal(widthOf(mesh), widthOf(stage.cubes.get('1S').mesh.mesh), 'it is still swollen');
+    assert.equal(carried.color, after.pieces[8].color, 'it is still painted as the rejected piece');
+  });
+}
+
 test('held still, a rejected piece is see-through dark red, and the drawing finishes', () => {
   const clock = fakeClock();
   const { stage } = staged();

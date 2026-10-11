@@ -142,13 +142,25 @@ const timingFor = (pace, speed, delay) => ({
 });
 
 /**
+ * The cube for a slot: minted if it is not on the stage, and if it is, painted as
+ * the slot's piece. A cube carried over from another layout is still drawn as it
+ * was there — as that layout's rejected piece, say, red and see-through — which is
+ * nothing to do with the piece it has become.
+ */
+export function claim(stage, slot) {
+  const cube = stage.cube(slot.id, slot);
+  cube.restyle({ color: slot.color });
+  return cube;
+}
+
+/**
  * Put a cube down finished: at its final pose, in its final place. Mints it if it
  * is not on the stage; moves it there if it is anywhere else, and leaves it be if
  * it is there already.
  */
 function finish(stage, slot) {
   const existing = stage.cubes.get(slot.id);
-  const cube = stage.cube(slot.id, slot);
+  const cube = claim(stage, slot);
   if (existing && !restsAt(existing, slot)) cube.place(slot.basis, slot.position);
   return cube;
 }
@@ -383,7 +395,7 @@ export function growPhase(stage, pieces, {
   let queued = 0;
   for (const slot of arriving) {
     if (slot.pickUp) {
-      const { basis, position } = stage.cubes.get(slot.id);
+      const { basis, position } = claim(stage, slot);
       slot.from = { basis, position };
       slot.at = 0;
     } else {
@@ -488,7 +500,7 @@ export function buildPhase(stage, pieces, {
     // twice in a frame. When the collapse is still running, this is the hand
     // closing round a cube: its body leaves the pile and the rest keeps falling.
     if (slot.pickUp) onPickUp?.(slot.id);
-    const cube = stage.cube(slot.id, slot);
+    const cube = claim(stage, slot);
     if (slot.pickUp) {
       slot.from = { basis: cube.basis, com: comAt(slot.type, cube.basis, cube.position) };
       slot.to = comAt(slot.type, slot.basis, add(slot.position, slot.standoff));
