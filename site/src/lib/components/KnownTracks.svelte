@@ -1,6 +1,6 @@
 <script>
-  // A sweep, one layout at a time, numbered from 1 in the sweep file's order: a
-  // random one on mount, and the shuffle button picks another. A figure — see `$lib/figure.js`.
+  // A sweep, one layout at a time, numbered by its row id in sweeps.db: a random
+  // one on mount, and the shuffle button picks another. A figure — see `$lib/figure.js`.
   import { onMount } from 'svelte';
   import Shuffle from '@lucide/svelte/icons/shuffle';
   import Frame from './Frame.svelte';
@@ -10,6 +10,9 @@
   let { sweep = SWEEP_CROSSED, aspect = '16 / 10', train = {} } = $props();
 
   const shapes = $derived(sweep.shapes);
+
+  // Every id padded to the largest one's digits, so the number never changes width.
+  const width = $derived(String(Math.max(...shapes.map(s => s.id))).length);
 
   const pick = () => Math.floor(Math.random() * shapes.length);
 
@@ -27,7 +30,7 @@
 
 <Frame view={{ shape: shapes[index].shape, train }} {aspect}>
   {#snippet footer()}
-    <span class="number">Track #{index + 1}</span>
+    <span class="number">Track #{String(shapes[index].id).padStart(width, '0')}</span>
     <button type="button" class="shuffle" onclick={shuffle} aria-label="Another track" title="Another track">
       <Shuffle aria-hidden="true" />
     </button>

@@ -158,6 +158,12 @@ test('every crossed layout records the two loops its crossing makes', () => {
   }
 });
 
+test('every crossed layout carries its own row id in sweeps.db', () => {
+  const ids = SWEEP_CROSSED.shapes.map(s => s.id);
+  assert.ok(ids.every(id => Number.isInteger(id) && id > 0));
+  assert.equal(new Set(ids).size, ids.length, 'two layouts share a row id');
+});
+
 test('the crossed file is a sample of a bigger population', () => {
   assert.ok(SWEEP_CROSSED.population > SWEEP_CROSSED.distinct);
 });

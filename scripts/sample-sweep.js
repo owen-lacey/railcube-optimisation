@@ -63,6 +63,7 @@ function audit(row, question, polys) {
     throw new Error(`${row.shape} has knots ${stored.join(' / ')}, read again as ${again.join(' / ')}`);
   }
   return {
+    id: row.id,
     shape: row.shape,
     span: [columns.span_across, columns.span_up, columns.span_along],
     revisits: columns.revisits,

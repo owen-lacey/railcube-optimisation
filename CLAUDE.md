@@ -41,7 +41,7 @@ hollow), and nothing is said about that.
 (`.storybook/`, `npm run storybook`). Two routes: the front page is a solve viewer — the
 28-cube sweep and a 1,000-layout sample of the crossed one (`site/src/lib/sweeps.js`),
 shuffle for a random layout — and the draft blog post lives at `/post`, deliberately
-unlinked from it. The crossed sweep itself outgrew a file the page imports whole and lives
+unlinked from it, one file per chapter. The crossed sweep itself outgrew a file the page imports whole and lives
 in `sweeps.db` (below); the site carries a uniform sample of it. On narrow screens the
 front page gets a taller 4/3 viewer but the same sequencing as desktop. Deployed to GitHub Pages
 by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath URL;
@@ -453,7 +453,7 @@ from `sqlite3` while a watch writes. `site/src/lib/data/sweep-28.json` is frozen
 any more. `site/src/lib/data/sweep-crossed.json` is `scripts/sample-sweep.js --question 1
 --count 1000 --seed 1`: a uniform draw of rows, each re-derived and its stored columns
 compared, and its knot read again on a fresh rotation, before it is written; each row
-carries its `knot`, and a row whose knot is unread fails the file. Uniform means skewed the way the database is — the first
+carries its database `id` (`KnownTracks` shows it, zero-padded) and its `knot`, and a row whose knot is unread fails the file. Uniform means skewed the way the database is — the first
 sample held one layout at rung 8 and none at 6 — and since a watch keeps adding rows, the
 same seed only reproduces the file against the same database.
 
@@ -782,7 +782,7 @@ reason, which is exactly what the first render did until it was caught in a brow
 
 ### Scrollytelling: `ScrollySection`
 
-The post opens on a `ScrollySection` (scrollama): one viewer in a box stuck to the top of the
+The post opens on a `ScrollySection` (scrollama), and Track building is another: one viewer in a box stuck to the top of the
 screen, and the prose running through a fixed band below it, each paragraph changing what the
 box shows as it arrives. A step is `{ body, figure, props }` — a snippet of prose, and a figure
 component with its own props.
@@ -813,6 +813,34 @@ the section and renders only its footer.
   slid under it, so what follows the section (the post's next heading) pushes it away.
 - Synchronous `scrollTo` jumps do not fire scrollama. A CDP check has to scroll a little at a
   time.
+- **Step prose is styled by the section, from tokens.** `--prose-size` and `--prose-leading`
+  sit on the layout's `main`; `Chapter` and the step rule both read them. A snippet takes its
+  scope from the file it is written in, so no one file's `<style>` can reach every chapter's
+  prose.
+
+### The post is chapters, and gates: `site/src/routes/post/`
+
+`+page.svelte` is only the sequence: the splash, `Opening` (the first section; it hands the
+page its `ScrollySection` through a bindable `scrolly`, for the zoom), `TitleZoom`, then one
+file per chapter (`Coordinates`, `TrackBuilding`, `Optimising`, `AuthorNotes`), each a
+`Chapter` — a `<section>` with an id, carrying the post's prose typography. The prose in them
+is Owen's notes.md, word for word.
+
+**A gate is a point the reader cannot scroll past until they choose to go on** — Owen's call.
+`Gate` (`$lib/components/`) is the post's ">": pressed, or sent the right arrow while it is
+mostly in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, fades
+(`FADE`, 0.4 s) and then `onopen` — at once under reduced motion. The splash ends on one and
+so does Coordinates. The page counts gates `passed`.
+
+- **Nothing past a closed gate is rendered** — Owen's call, over hiding it. Nothing hidden
+  is mis-measured (scrollama, a viewer's aspect), fewer viewers are mounted on load, and the
+  page simply ends at the gate plus `main`'s bottom padding. The price is that the
+  prerendered HTML stops there too.
+- **The opening is the exception**: it is mounted under the splash, clipped by the layout,
+  because the title zooms into its viewer and the zoom needs it laid out.
+- **Through a chapter gate, the page smooth-scrolls to the next chapter's heading** (instant
+  under reduced motion). The heading is above its section, so the section measuring itself
+  once mounted shifts only what is below the target.
 
 ### The title: `Splash`
 
@@ -832,7 +860,7 @@ stacking under 600px. The whole title fades in once, not under reduced motion.
   the letters are `aria-hidden` with empty `alt`, so a screen reader hears one heading.
 - **A ">" button sends it away, and so does the right arrow, by zooming into the O.** The
   O is the post's first track, `SIOSLLSOISLL`, snapped from above unturned (`O_TRACK` in
-  `letters.js`, its outline under test). Every other letter and the button fade (0.4 s),
+  `letters.js`, its outline under test). Every other letter and the button (a `Gate`) fade (0.4 s),
   and `onnext` is handed the O's box on screen. `/post` mounts `TitleZoom` there — a
   full-screen transparent canvas drawing the same track square on, pixel-identical to the
   picture — and only once it has drawn does the splash go, from under it. Then the
@@ -846,8 +874,8 @@ stacking under 600px. The whole title fades in once, not under reduced motion.
   appears there, the border and blueprint dots fade in (0.3 s — `--blueprint-dot` is an
   `@property` colour so it can transition), then the text (0.4 s). The section's
   `landing()` throws unless its first step is the O's shape. Owen's calls: train at
-  hand-off, full-screen canvas, ~2.5 s overall. The key is `claimKeys` from `keys.js`,
-  so it works only while the splash is mostly on screen. **The page cannot be scrolled past
+  hand-off, full-screen canvas, ~2.5 s overall. The key is the gate's `claimKeys`, so it
+  works only while the button is mostly on screen. **The page cannot be scrolled past
   the splash** — the button and the right arrow are the only ways on, Owen's call. While the
   splash is up the layout clips `main` to one screen (`overflow: visible clip`, downwards
   only, so the splash still reaches the screen's edges). It is clipped rather than
@@ -857,8 +885,9 @@ stacking under 600px. The whole title fades in once, not under reduced motion.
   page is at the top at once. `TitleZoom` sits after the section in the page so that,
   once the splash is gone, the scrolly is `main`'s first child, which is why the layout's
   no-top-padding rule matches either.
-- **The fade's end is read off the letters, not the button.** The button's `fade-in`
-  animation holds its opacity, so it never fires `transitionend`.
+- **The fade's end is read off the gate's own transition.** The title's 0.8 s fade-in is on
+  the wrapper round the gate, not the gate: an animation filled `both` holds its element's
+  opacity, so a button carrying it never fires `transitionend`.
 
 ### Typing a track: `Sketch`
 
