@@ -6,6 +6,7 @@
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
   import { movePhase } from '../render/move.js';
   import { gridLines } from '../render/grid.js';
+  import { edgeLengths } from '../render/lengths.js';
   import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
   import { identify } from '../../../../src/layouts.js';
   import { toWorld } from '../render/vec.js';
@@ -65,6 +66,9 @@
     // Outline the origin cell and stand the axis arrows (x right, y forwards, z up)
     // at this box's corner, `{ lo, hi }`; null draws neither. See `render/axes.js`.
     origin = null,
+    // A box of cells, `{ lo, hi }`, whose three side lengths are written beside its
+    // edges; null writes none. See `render/lengths.js`.
+    lengths = null,
     // Trains that stand still, `{ type, cell, pose, tint }` each, tinted by the stylesheet
     // below. See `setGhosts` in stage.js.
     ghosts = [],
@@ -324,7 +328,7 @@
           onTrainPose: pose => train?.onPose?.(pose),
           onCamera: () => {
             touched = stage?.touched() ?? false;
-            if (origin || notes.length) scheduleLabels();
+            if (origin || lengths || notes.length) scheduleLabels();
             if (blueprint) placeSheet();
           },
         });
@@ -458,6 +462,7 @@
   // inside the viewer instead, which needs its size: so it is measured once drawn,
   // and the first placement of a note is followed by a second.
   let axisLabels = $state([]);
+  let lengthLabels = $state([]);
   let noteSpots = $state([]);
   let labelFrame = 0;
   const noteEls = {};
@@ -487,12 +492,14 @@
     labelFrame = 0;
     if (!stage || !host) {
       axisLabels = [];
+      lengthLabels = [];
       noteSpots = [];
       return;
     }
     const box = host.getBoundingClientRect();
     const local = ({ x, y }) => ({ x: x - box.left, y: y - box.top });
     axisLabels = origin ? stage.originTips().map(({ name, ...spot }) => ({ name, ...local(spot) })) : [];
+    lengthLabels = lengths ? edgeLengths(lengths, stage.project).map(({ axis, text, ...spot }) => ({ axis, text, ...local(spot) })) : [];
     noteSpots = calloutsFor(local, box);
     if (noteSpots.some(spot => !spot.measured)) scheduleLabels();
   }
@@ -507,6 +514,15 @@
     if (!ready || !stage || key === originKey) return;
     stage.setOrigin(origin);
     originKey = key;
+    scheduleLabels();
+  });
+
+  // The side lengths, keyed on the box's corners for the same reason as the lattice.
+  let lengthsKey = null;
+  $effect(() => {
+    const key = lengths ? `${lengths.lo}|${lengths.hi}` : null;
+    if (!ready || !stage || key === lengthsKey) return;
+    lengthsKey = key;
     scheduleLabels();
   });
 
@@ -572,6 +588,9 @@
   <canvas bind:this={canvas}></canvas>
   {#each axisLabels as { name, x, y } (name)}
     <span class="axis-label" style:left="{x}px" style:top="{y}px" aria-hidden="true">{name}</span>
+  {/each}
+  {#each lengthLabels as { axis, text, x, y } (axis)}
+    <span class="axis-label" style:left="{x}px" style:top="{y}px" aria-hidden="true">{text}</span>
   {/each}
   {#if noteSpots.length}
     <svg class="leaders" aria-hidden="true">

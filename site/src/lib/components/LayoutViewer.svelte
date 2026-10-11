@@ -18,7 +18,8 @@
     shape = '',
     aspect = '16 / 10',
     // Letters → scene. `layoutScene` frames the cubes; `cellScene` draws them in
-    // their lattice with the origin's axes. Both in scenes.js.
+    // their lattice; `axesScene` adds the origin's axes, `lengthsScene` the
+    // lattice's side lengths. All in scenes.js.
     scene = layoutScene,
     // What a shape change looks like — see `transition` in TrackViewer. A redraw
     // is framed tight on each layout; a tumble on a fixed box, so it never moves.
@@ -163,6 +164,7 @@
             camera={result.scene.camera}
             grid={result.scene.grid ?? null}
             origin={result.scene.origin ?? null}
+            lengths={result.scene.lengths ?? null}
             train={result.scene.closed ? train : null}
             {transition}
             alarm={result.scene.offender?.id ?? null}

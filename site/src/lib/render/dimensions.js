@@ -55,6 +55,10 @@ export const AXIS_LABEL = 0.4;    // how far past the tip the letter's label sit
 export const AXIS_GAP = 1;        // how far outside the lattice box's corner the arrows start, in cells
 export const ORIGIN_W = 2;        // the origin cell's outline, bolder than an arrow's shaft so the outline reads as bolder than the lattice
 
+// How far a lattice side's length label sits out from the middle of its edge, in
+// CSS pixels, away from the box's middle on screen (render/lengths.js).
+export const LENGTH_GAP = 14;
+
 // The lattice cell the train is in is filled, this far inside the cell's faces:
 // half a lattice line, so the fill stops where the lines' inner faces start and
 // the two see-through paints never overlap into a darker band. That also keeps the

@@ -10,6 +10,8 @@
 	import ScrollySection from "$lib/components/ScrollySection.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
+	import { lengthsScene } from "$lib/scenes.js";
+	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
 
 	const steps = [
 		{
@@ -26,11 +28,11 @@
 </script>
 
 {#snippet subjectivity()}
-	<p>Enter subjectivity. Consider this set of layouts:</p>
+	<p>Enter subjectivity. Consider this set of layouts.</p>
 {/snippet}
 
 {#snippet nowThese()}
-	<p>Now these:</p>
+	<p>Now these.</p>
 {/snippet}
 
 <Chapter id="optimising">
@@ -50,6 +52,10 @@
 		have a close call by riding next to another piece of track and narrowly
 		missing it.
 	</p>
+	<TrackFigure
+		shape={SWEEP_CROSSED_RANKED.best[0].shape}
+		scene={lengthsScene}
+	/>
 	<!-- TODO: anim the pose count. -->
 	<p>
 		It would also be underwhelming if the train stayed largely face up. One of

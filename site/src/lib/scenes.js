@@ -145,6 +145,18 @@ export function axesScene(letters) {
 }
 
 /**
+ * `cellScene` with the lattice's three side lengths written beside its edges.
+ * Framed on the box grown a cell every way, so the labels have room inside the
+ * viewer whichever edges they land on.
+ */
+export function lengthsScene(letters) {
+  const scene = cellScene(letters);
+  const { lo, hi } = scene.grid;
+  const room = { lo: lo.map(v => v - 1), hi: hi.map(v => v + 1) };
+  return { ...scene, lengths: scene.grid, camera: frameFit(cornersOf(room)) };
+}
+
+/**
  * The six faces of the box a layout can be looked at square on: where the camera
  * stands, its tilt and turn (see `polyView`), and which of the cell axes — 0
  * across, 1 up, 2 forwards — runs across the screen and which up it, before any

@@ -3,7 +3,8 @@
   // A figure — see `$lib/figure.js`.
   import Frame from './Frame.svelte';
 
-  let { shape } = $props();
+  // `scene` is letters → scene, from scenes.js; unset, `layoutScene`.
+  let { shape, scene = undefined } = $props();
 </script>
 
-<Frame view={{ shape }} />
+<Frame view={{ shape, scene }} />
