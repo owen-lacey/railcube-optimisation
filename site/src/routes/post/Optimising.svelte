@@ -6,6 +6,7 @@
 	// The prose is a straight transcription of notes.md — the wording is Owen's
 	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
+	import PoseTracker from "$lib/components/PoseTracker.svelte";
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
 	import ScrollySection from "$lib/components/ScrollySection.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
@@ -56,13 +57,13 @@
 		shape={SWEEP_CROSSED_RANKED.best[0].shape}
 		scene={lengthsScene}
 	/>
-	<!-- TODO: anim the pose count. -->
 	<p>
 		It would also be underwhelming if the train stayed largely face up. One of
 		the selling points of the Rail Cube is that it can ride on walls and go
 		upside down, we must please the creators and cover as many of the 24 poses
 		as we can.
 	</p>
+	<PoseTracker shape={SWEEP_CROSSED_RANKED.best[0].shape} />
 	<!-- TODO: anim the repeated section. -->
 	<p>
 		Excessive repeats should also be avoided. They're a symptom of poor

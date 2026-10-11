@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
 import { chainTrack } from '../src/track.js';
-import { closeCallsOf, metricsOf, posesOf } from '../src/metrics.js';
+import { closeCallsOf, metricsOf, posesIn, posesOf } from '../src/metrics.js';
 
 const of = shape => metricsOf(chainTrack(routeOf(shape)));
 const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
@@ -55,6 +55,11 @@ const readings = shape => {
 // Nothing but the ring itself, so no other piece to come close to.
 test('LLLL takes four poses and has no close calls', () => {
   assert.deepEqual(readings('LLLL'), { poses: 4, closeCalls: 0 });
+});
+
+// Which four: the floor stays down and the heading goes all the way round.
+test('LLLL takes every heading on the floor', () => {
+  assert.deepEqual(posesIn(chainTrack(routeOf('LLLL'))), new Set(['DF', 'DL', 'DB', 'DR']));
 });
 
 // The figure eight's second pass rides over the cross's own cube, and the pieces

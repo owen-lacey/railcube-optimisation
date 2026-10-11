@@ -42,8 +42,11 @@ const ceilingOf = placed => placed.filter(p => PROJ[p.pose[0]][UP] > 0).length;
  */
 const heightOf = placed => placed.reduce((total, p) => total + p.cell[UP], 0);
 
+/** The poses the train takes over these steps, each once. */
+export const posesIn = placed => new Set(placed.map(p => p.pose));
+
 /** How many of the 24 poses the train takes over the loop. */
-export const posesOf = placed => new Set(placed.map(p => p.pose)).size;
+export const posesOf = placed => posesIn(placed).size;
 
 const FACE_STEPS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 const keyOf = cell => cell.join(',');
