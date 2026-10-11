@@ -20,27 +20,27 @@
 	<p>
 		Now that we can now express a Rail Cube in terms of generic positions and
 		poses, we need to add some rules. Firstly, we need a complete track, so this
-		would be invalid:
+		would be invalid.
 	</p>
 {/snippet}
 
 {#snippet fatalities()}
-	<p>A track like this would also cause some fatalities:</p>
+	<p>A track like this would also cause some fatalities.</p>
 {/snippet}
 
 {#snippet andThis()}
-	<p>And this:</p>
+	<p>And this.</p>
 {/snippet}
 
 <Chapter id="track-building">
 	<ScrollySection {steps} />
 
 	<p>
-		Albeit intuitive, we need to express these rules in our coordinate system:
+		Albeit intuitive, we need to express these rules in our coordinate system so
+		that our generator creates valid tracks:
 	</p>
 	<ul>
 		<li>
-			<!-- TODO: show tracks again, annotated by this. -->
 			<b>Completeness:</b>The final track piece should end at (x,y-1,z), facing
 			DF.
 		</li>
@@ -57,8 +57,8 @@
 		The latter is the hardest to generalise because it depends on the face of
 		the pose: if a track piece is on the D face then we must protect (x,y,z+1),
 		if it's on the U face then avoid (x,y,z-1), and so on. I said at the start
-		that leaving pieces in the box is also a deal-breaker, but that's just my
-		undiagnosed OCD / privileged upbringing.
+		that leaving pieces in the box is also a deal-breaker, but that's just
+		because my parents raised me right.
 	</p>
 
 	<p>

@@ -846,8 +846,8 @@ is Owen's notes.md, word for word.
 **A gate is a point the reader cannot scroll past until they choose to go on** — Owen's call.
 `Gate` (`$lib/components/`) is the post's ">": pressed, or sent the right arrow while it is
 mostly in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, fades
-(`FADE`, 0.4 s) and then `onopen` — at once under reduced motion. The splash ends on one and
-so does Coordinates. The page counts gates `passed`.
+(`FADE`, 0.4 s) and then `onopen` — at once under reduced motion. The splash ends on one, and
+so do Coordinates and Track building. The page counts gates `passed`.
 
 - **Nothing past a closed gate is rendered** — Owen's call, over hiding it. Nothing hidden
   is mis-measured (scrollama, a viewer's aspect), fewer viewers are mounted on load, and the

@@ -45,7 +45,6 @@
 		rationale person and prefer the former like me. Good? Good.
 	</p>
 
-	<!-- TODO: anim the box sizes with cube. -->
 	<p>
 		Now, why do I love this one? I like that it's so compact; it's surely more
 		difficult to fit these complete tracks in a smaller box. Jamming it in a
@@ -61,9 +60,9 @@
 		It would also be underwhelming if the train stayed largely face up. One of
 		the selling points of the Rail Cube is that it can ride on walls and go
 		upside down, we must please the creators and cover as many of the 24 poses
-		as we can.
+		as we can. The below track covers 20.
 	</p>
-	<PoseTracker shape={SWEEP_CROSSED_RANKED.best[0].shape} />
+	<PoseTracker shape="IRSISSRIIROXSSLSSOORISLISSILSSSOLXSI" />
 	<!-- TODO: anim the repeated section. -->
 	<p>
 		Excessive repeats should also be avoided. They're a symptom of poor
