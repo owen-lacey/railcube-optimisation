@@ -1,31 +1,44 @@
 <script>
-	// What makes a layout good, and how a model is told so.
+	// What makes a layout good, and how a model is told so. A good set and a bad
+	// set, told over one viewer, and then the question of which is preferred, which
+	// pushes the viewer away.
 	//
 	// The prose is a straight transcription of notes.md — the wording is Owen's
 	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
+	import RankedTracks from "$lib/components/RankedTracks.svelte";
+	import ScrollySection from "$lib/components/ScrollySection.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
+
+	const steps = [
+		{
+			body: subjectivity,
+			figure: RankedTracks,
+			props: { end: "best" }
+		},
+		{
+			body: nowThese,
+			figure: RankedTracks,
+			props: { end: "worst" }
+		}
+	];
 </script>
 
-<Chapter id="optimising">
-	<h2>Optimising</h2>
-
-	<p></p>
-
+{#snippet subjectivity()}
 	<p>Enter subjectivity. Consider this set of layouts:</p>
+{/snippet}
 
-	<!-- TODO cycle through good ones -->
-	<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
-
+{#snippet nowThese()}
 	<p>Now these:</p>
+{/snippet}
 
-	<!-- TODO cycle through bad ones -->
-	<TrackFigure shape="IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI" />
+<Chapter id="optimising">
+	<ScrollySection {steps} />
 
 	<p>
-		What do you prefer, the first set or the second? The first set, right? If you
-		prefer the latter, I can't help you. From here on I'll assume you're a
+		What do you prefer, the first set or the second? The first set, right? If
+		you prefer the latter, I can't help you. From here on I'll assume you're a
 		rationale person and prefer the former like me. Good? Good.
 	</p>
 
@@ -39,9 +52,10 @@
 	</p>
 	<!-- TODO: anim the pose count. -->
 	<p>
-		It would also be underwhelming if the train stayed largely face up. One of the
-		selling points of the Rail Cube is that it can ride on walls and go upside
-		down, we must please the creators and cover as many of the 24 poses as we can.
+		It would also be underwhelming if the train stayed largely face up. One of
+		the selling points of the Rail Cube is that it can ride on walls and go
+		upside down, we must please the creators and cover as many of the 24 poses
+		as we can.
 	</p>
 	<!-- TODO: anim the repeated section. -->
 	<p>
@@ -50,11 +64,12 @@
 		Two-in-a-row is OK for me because hairpin turns are cool.
 	</p>
 	<p>
-		Saving my favourite for last: knots. How freaking cool is it when you're on a
-		roller coaster and it goes inside one of its inversions, like <a
+		Saving my favourite for last: knots. How freaking cool is it when you're on
+		a roller coaster and it goes inside one of its inversions, like <a
 			href="https://www.altontowers.com/explore/theme-park/rides-attractions/the-smiler/"
 			target="_blank">The Smiler</a
-		> at Alton Towers. A layout that ties itself in knots gets bonus points in my book.
+		> at Alton Towers. A layout that ties itself in knots gets bonus points in my
+		book.
 	</p>
 	<!-- TODO: Fix on this one. -->
 	<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
@@ -85,23 +100,23 @@
 	<TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
 
 	<p>
-		Our ability to express these opinions in a way the model can understand allows
-		us to maximise what's important to us. The model can then give us its "best"
-		track, rather than a working one.
+		Our ability to express these opinions in a way the model can understand
+		allows us to maximise what's important to us. The model can then give us its
+		"best" track, rather than a working one.
 	</p>
 
 	<ul>
 		<li>
-			<b>Compactness:</b> The length of the largest side of the box the track can fit
-			into. Smaller is better.
+			<b>Compactness:</b> The length of the largest side of the box the track can
+			fit into. Smaller is better.
 		</li>
 		<li>
-			<b>Close calls:</b> The number of times the train is adjacent to a different track
-			piece. More is better.
+			<b>Close calls:</b> The number of times the train is adjacent to a different
+			track piece. More is better.
 		</li>
 		<li>
-			<b>Pose count:</b> The number of distinct poses the train assumes along the track.
-			More is better.
+			<b>Pose count:</b> The number of distinct poses the train assumes along the
+			track. More is better.
 		</li>
 		<li>
 			<b>Repeats:</b> The number of times the train repeats a track piece more than
@@ -123,16 +138,16 @@
 
 	<p>
 		By making the weighting of each metric dynamic, you can change the formula
-		yourself and see how that affects what layouts score the best. It might be you
-		prefer a different recipe to me.
+		yourself and see how that affects what layouts score the best. It might be
+		you prefer a different recipe to me.
 	</p>
 
 	<!-- TODO: Weighted tracks -->
 	<TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
 
 	<p>
-		Can you do better? Try build one yourself and see if you can beat my score of
-		X.
+		Can you do better? Try build one yourself and see if you can beat my score
+		of X.
 	</p>
 	<!-- TODO: keeps track of poses. -->
 	<TrackBuilder />

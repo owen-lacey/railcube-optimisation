@@ -1,0 +1,73 @@
+{
+  "name": "sweep-crossed-ranked",
+  "generatedBy": "scripts/rank-tracks.js",
+  "question": {
+    "inventory": {
+      "straight": 14,
+      "cross": 1,
+      "leftCurve": 4,
+      "rightCurve": 4,
+      "insideCurve": 8,
+      "outsideCurve": 4
+    },
+    "steps": 36,
+    "box": 8,
+    "minY": 0,
+    "startPose": "DF"
+  },
+  "legal": 22847539,
+  "seed": 1,
+  "weights": {
+    "knotted": 1,
+    "poses": 1,
+    "closeCalls": 1,
+    "repeats": 1,
+    "longestSide": 1
+  },
+  "ranges": {
+    "knotted": [
+      0,
+      1
+    ],
+    "poses": [
+      6,
+      20
+    ],
+    "closeCalls": [
+      0,
+      27
+    ],
+    "repeats": [
+      0,
+      9
+    ],
+    "longestSide": [
+      7,
+      17
+    ]
+  },
+  "best": [
+    {"id":14640180,"shape":"IRSSIIXLSLSOLLSSOSSIIRISSIXSORROSSSI","knot":"trefoil","score":2.3603174603174604},
+    {"id":13100764,"shape":"XSISSILISSISXSSISSLILSOOSRSOSROLRIIR","knot":"trefoil","score":2.2412698412698413},
+    {"id":7586802,"shape":"ISSRSSIIOISXISSRSRRISLSLSSOSLOLXSIOI","knot":"trefoil","score":2.206878306878307},
+    {"id":2023712,"shape":"SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI","knot":"trefoil","score":2.206878306878307},
+    {"id":14918040,"shape":"XSISRSISSIOISISRSIXISSLOSSLSSOOLLIRR","knot":"trefoil","score":2.1783068783068784},
+    {"id":7586796,"shape":"ISSRSSIISOIXISSRSRRISLSLSSOSLOLXSIOI","knot":"trefoil","score":2.1698412698412697},
+    {"id":2023714,"shape":"SISLISISXOLSLSLSSOSOIRRSISROSIIRXSSI","knot":"trefoil","score":2.1698412698412697},
+    {"id":20527870,"shape":"SSIRSISSISSXIIRLSSLSLIOIRSOSSOROLXSI","knot":"trefoil","score":2.146560846560847},
+    {"id":11722958,"shape":"ISSISOLLSSIXSROROSSISRSRLISISSIXSLOI","knot":"trefoil","score":2.143915343915344},
+    {"id":12620118,"shape":"SRSISRSISSXLOSSOOLOLIILSSRSIRSIIXSSI","knot":"trefoil","score":2.135978835978836}
+  ],
+  "worst": [
+    {"id":2076618,"shape":"IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI","knot":"unknot","score":-1.6349206349206349},
+    {"id":15113810,"shape":"SIOXRIILLIIOILIOLXSRSSSSSSSSRROISSSS","knot":"unknot","score":-1.5714285714285714},
+    {"id":3092240,"shape":"IISSSSSIIRLXIOISOORIOLILLSSSSSSSRXSR","knot":"unknot","score":-1.5375661375661376},
+    {"id":1848934,"shape":"LIIXSSSSSSSROIRSIORLRXSLOIIOIISSSSSL","knot":"unknot","score":-1.5317460317460319},
+    {"id":17580990,"shape":"XSSSSSSRIOIRRILOIRXSLIOSOIILLISSSSSS","knot":"unknot","score":-1.5317460317460319},
+    {"id":5176154,"shape":"XSSSSSSRIOROIRLRXSLSIOIILLIOIISSSSSS","knot":"unknot","score":-1.5317460317460319},
+    {"id":17802572,"shape":"IRXOSSSSSILILSRISSOOXIRLLIORIISSSSSS","knot":"unknot","score":-1.5264550264550265},
+    {"id":21695080,"shape":"XLRIILRIOLOOSSOILRXSSSSSSIISSSSSRIIS","knot":"unknot","score":-1.5264550264550265},
+    {"id":21219522,"shape":"SSSXLIOIRRIOIIOROIRXSILSSSSSSLILSSSS","knot":"unknot","score":-1.5142857142857142},
+    {"id":15386600,"shape":"SSSIOOIILLISSSSSSSSLSXRIORIRROIILXSS","knot":"unknot","score":-1.5}
+  ]
+}

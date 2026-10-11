@@ -641,6 +641,18 @@ score — those unread layouts simply tie, and are shown with "knot not read". O
 positive with another weight at 0 can leave an end unsure, and the full `--knots` pass
 closed that: with every row read, no end is ever unsure.
 
+**The ten best and ten worst: `scripts/rank-tracks.js` → `RankedTracks`.** Optimising opens
+on two sets, before any metric is named: the crossed sweep's top and bottom 10 under equal
+weights, which is WeightedTracks at its default sliders. The tally cannot give them — it
+keeps examples only at an end — so `rank-tracks.js` reads every legal, unmirrored row of
+question 1, scores it with `weigher` over the *weights file's* ranges (a row outside them
+fails the run: re-tally first), breaks ties by a seeded draw, re-derives and re-reads the
+knot of all 20, and writes `site/src/lib/data/sweep-crossed-ranked.json`
+(`SWEEP_CROSSED_RANKED`). `RankedTracks` steps through one end with arrows, showing only
+the position — Owen's calls, all of them: equal weights, arrows, no metrics in the footer.
+`tests/ranked-tracks.test.js` re-chains and re-scores the file and checks its ends are
+`extremes`' ends.
+
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 
 `IntVar.notEquals` builds a constraint that is silently a no-op — two variables pinned to the same value still solve. `src/solver/index.js` uses a `differ` helper (a reified pair of strict inequalities) instead. `tests/library.test.js` asserts the bug still exists, so fixing the port will fail that test and point at the workaround to delete. `addAllDifferent` and `onlyEnforceIf` are fine, as are `addHint` and `onSolution`.

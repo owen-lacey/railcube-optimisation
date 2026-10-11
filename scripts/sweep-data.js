@@ -23,6 +23,7 @@ import Database from 'better-sqlite3';
 import { chainTrack, countPieces, POOLS } from '../src/track.js';
 import { loopsOf, routeOf, shapeOf, trackKey } from '../src/layouts.js';
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
+import { knotOf } from './knot-curves.js';
 
 export const DB_PATH = fileURLToPath(new URL('../sweeps.db', import.meta.url));
 
@@ -202,6 +203,20 @@ export function assertSpends(placed, question, shape) {
     }
   }
 }
+
+/**
+ * A row's five values as the weighted tracks read them — knotted, poses, close
+ * calls, repeats and longest side — off its columns. `knotted` is null while the
+ * knot is unread. tally-weights.js keys its table on them and rank-tracks.js
+ * scores by them, so the two cannot disagree about what a layout's values are.
+ */
+export const weightingValuesOf = r => ({
+  knotted: r.knot_over === null ? null : Number(knotOf(r.knot_over, r.knot_under) !== 'unknot'),
+  poses: r.poses,
+  closeCalls: r.close_calls,
+  repeats: r.repeats,
+  longestSide: Math.max(r.span_across, r.span_up, r.span_along),
+});
 
 /**
  * Chain a logged shape, check it is what the log says it is, and return its

@@ -28,7 +28,7 @@ import { parseArgs } from 'node:util';
 import Database from 'better-sqlite3';
 
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
-import { assertSpends, DB_PATH, derive, random } from './sweep-data.js';
+import { assertSpends, DB_PATH, derive, random, weightingValuesOf } from './sweep-data.js';
 import { knotInput, knotOf, knotReader } from './knot-curves.js';
 import { DIRECTIONS, extremes } from '../site/src/lib/weighting.js';
 
@@ -55,17 +55,6 @@ if (!Number.isInteger(seed) || !args.out || !Number.isInteger(examples) || !Numb
   process.exit(2);
 }
 
-const knottedOf = r => (r.knot_over === null ? null : Number(knotOf(r.knot_over, r.knot_under) !== 'unknot'));
-
-/** A row's five values, as the table keys them. */
-const valuesOf = r => ({
-  knotted: knottedOf(r),
-  poses: r.poses,
-  closeCalls: r.close_calls,
-  repeats: r.repeats,
-  longestSide: Math.max(r.span_across, r.span_up, r.span_along),
-});
-
 /**
  * One pass over the question's rows: a count and a reservoir of examples per
  * row of the table. Opened read-only: it is the only copy of these layouts.
@@ -89,7 +78,7 @@ function counter(next) {
     population += 1;
     if (r.poses === null) throw new Error(`row ${r.id} has no readings: run hydrate-sweeps.js --readings`);
     if (r.underground) { underground += 1; return; }
-    const values = valuesOf(r);
+    const values = weightingValuesOf(r);
     const key = NAMES.map(n => values[n]).join(',');
     if (!rows.has(key)) rows.set(key, { ...values, count: 0, offered: 0, examples: [] });
     const row = rows.get(key);

@@ -33,6 +33,7 @@
 import sweep28 from './data/sweep-28.json' with { type: 'json' };
 import sweepCrossed from './data/sweep-crossed.json' with { type: 'json' };
 import sweepCrossedWeights from './data/sweep-crossed-weights.json' with { type: 'json' };
+import sweepCrossedRanked from './data/sweep-crossed-ranked.json' with { type: 'json' };
 
 /** The 28-cube sweep: the question, the run, and every distinct layout it found. */
 export const SWEEP_28 = sweep28;
@@ -47,6 +48,14 @@ export const SWEEP_CROSSED = sweepCrossed;
  * worst. `scripts/tally-weights.js` writes it; `weighting.js` ranks it.
  */
 export const SWEEP_CROSSED_WEIGHTS = sweepCrossedWeights;
+
+/**
+ * The crossed sweep's best and worst layouts under equal weights — the order
+ * `weighting.js` scores them in at WeightedTracks' default sliders — ranked over
+ * all of sweeps.db, ties broken by a seeded draw, mirrors left out.
+ * `scripts/rank-tracks.js` writes it.
+ */
+export const SWEEP_CROSSED_RANKED = sweepCrossedRanked;
 
 /** Every sweep the site carries, for anything that wants to iterate rather than name one. */
 export const SWEEPS = [SWEEP_28, SWEEP_CROSSED];
