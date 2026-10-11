@@ -283,5 +283,7 @@
 
 	.step :global(p) {
 		margin: 0 0 0.75rem;
+		font-size: var(--prose-size);
+		line-height: var(--prose-leading);
 	}
 </style>

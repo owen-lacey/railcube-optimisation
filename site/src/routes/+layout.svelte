@@ -16,6 +16,9 @@
     --muted: #6b7382;
     --rule: #aab2bf;
     --wash: #f8fafc;
+    /* The post's running text, wherever it is laid out. */
+    --prose-size: 1.0625rem;
+    --prose-leading: 1.65;
 
     max-width: 38rem;
     margin: 0 auto;
