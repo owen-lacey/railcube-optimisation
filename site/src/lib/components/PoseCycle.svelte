@@ -1,28 +1,24 @@
 <script>
-	// The 24 poses: one see-through cell with the train in it, snapping from one
-	// pose to the next floor by floor, in the order the model lists them, once played.
-	// It starts paused on the first: nothing in the post moves until it is asked to.
+	// The 24 poses: one see-through cell with the train in it, stepped from one
+	// pose to the next by hand, in the order the model lists them, wrapping both ways.
+	// It starts on the first: nothing in the post moves until it is asked to.
+	import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+	import ChevronRight from "@lucide/svelte/icons/chevron-right";
 	import TrackViewer from "./TrackViewer.svelte";
 	import { POSES } from "../../../../src/track.js";
 	import { describePose } from "$lib/catalogue.js";
 	import { poseCycle, poseGhost } from "$lib/scenes.js";
-	import PlayPause from "./PlayPause.svelte";
 	import LayoutCard from "./LayoutCard.svelte";
 
-	let { interval = 1, aspect = "3 / 2" } = $props();
+	let { aspect = "3 / 2" } = $props();
 
 	const scene = poseCycle();
 	let index = $state(0);
-	let playing = $state(false);
 	const pose = $derived(POSES[index]);
 
-	$effect(() => {
-		if (!playing) return;
-		const timer = setInterval(() => {
-			index = (index + 1) % POSES.length;
-		}, interval * 1000);
-		return () => clearInterval(timer);
-	});
+	const turn = (by) => {
+		index = (index + by + POSES.length) % POSES.length;
+	};
 </script>
 
 <LayoutCard footer={controls}>
@@ -37,18 +33,44 @@
 </LayoutCard>
 
 {#snippet controls()}
-	<PlayPause bind:playing label="the poses" />
+	<div class="poses" role="group" aria-label="Pose">
+		<button class="turn" aria-label="Previous pose" onclick={() => turn(-1)}><ChevronLeft /></button>
+		<p class="caption">{describePose(pose)}</p>
+		<button class="turn" aria-label="Next pose" onclick={() => turn(1)}><ChevronRight /></button>
+	</div>
 	<span class="readout">Pose {index + 1}/{POSES.length}</span>
-	<span class="readout facing">{describePose(pose)}</span>
 {/snippet}
 
 <style>
-	.readout {
-		font-family: ui-monospace, monospace;
-		font-weight: 600;
+	.poses {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
 	}
 
-	.facing {
+	.poses .caption {
+		min-width: 16ch;
+		margin: 0;
+		text-align: center;
+	}
+
+	.turn {
+		display: grid;
+		place-items: center;
+		width: 36px;
+		height: 36px;
+		padding: 0;
+		border: 2px solid var(--card-border);
+		border-radius: 0.5rem;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+	}
+
+	.readout {
 		margin-left: auto;
+		font-family: ui-monospace, monospace;
+		font-weight: 600;
 	}
 </style>
