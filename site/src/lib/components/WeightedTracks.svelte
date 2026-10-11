@@ -1,16 +1,16 @@
 <script>
   // The best and the worst of the crossed sweep, by how much knots, poses, close
   // calls, repeats and longest side matter to you: a slider per metric, and the
-  // layouts that come out top and bottom of every legal one in sweeps.db under
-  // those weights. Ties are common — a weighting reads a layout only through its
-  // five numbers — so each end says how many layouts share its score, and
-  // shuffles through examples of them. Not every knot has been read; an end says
-  // how many unread layouts could still reach it, which only a zero weight allows.
+  // ten that come out top and the ten bottom of every legal layout in sweeps.db
+  // under those weights, stepped through by hand. A weighting reads a layout only
+  // through its five numbers, so each of the ten is a different five, shown by
+  // one layout that has them.
   import { Slider } from 'bits-ui';
-  import Shuffle from '@lucide/svelte/icons/shuffle';
+  import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import LayoutViewer from './LayoutViewer.svelte';
   import { SWEEP_CROSSED_WEIGHTS } from '$lib/sweeps.js';
-  import { extremes } from '$lib/weighting.js';
+  import { ends } from '$lib/weighting.js';
 
   // `train` is LayoutViewer's: its callbacks, or null for no train. A slider
   // replaces `weights` rather than writing into it: an object handed in as a prop
@@ -22,8 +22,8 @@
     train = {},
   } = $props();
 
-  // The tally marks examples for every weighting up to its own maximum, so the
-  // sliders go no further.
+  // The tally holds every weighting's ends up to its own maximum, so the sliders
+  // go no further.
   const max = table.maxWeight;
 
   const METRICS = [
@@ -34,21 +34,20 @@
     { name: 'longestSide', label: 'Longest side', hint: 'shorter is better' },
   ];
 
-  const ends = $derived(extremes(table, weights));
+  const ranked = $derived(ends(table, weights));
 
-  // Example 0, not a random one: the page is prerendered, and the server and the
-  // browser must agree on what the HTML says.
+  // Where each end is in its ten. A slider sends both back to the first.
   let picks = $state({ best: 0, worst: 0 });
 
-  const shown = end => ends[end].examples[picks[end] % ends[end].examples.length];
+  const weigh = (name, value) => {
+    weights = { ...weights, [name]: value };
+    picks = { best: 0, worst: 0 };
+  };
 
-  function shuffle(end) {
-    const { length } = ends[end].examples;
-    const pick = () => Math.floor(Math.random() * length);
-    // One re-roll if the draw lands on what is already showing.
-    const next = pick();
-    picks[end] = next === picks[end] % length ? pick() : next;
-  }
+  const turn = (end, by) => {
+    const { length } = ranked[end];
+    picks[end] = (picks[end] + by + length) % length;
+  };
 
   const plural = (n, one) => `${n.toLocaleString('en-GB')} ${one}${n === 1 ? '' : 's'}`;
 </script>
@@ -60,7 +59,7 @@
       <Slider.Root
         type="single"
         value={weights[name]}
-        onValueChange={value => (weights = { ...weights, [name]: value })}
+        onValueChange={value => weigh(name, value)}
         min={0}
         {max}
         step={1}
@@ -75,30 +74,21 @@
   </div>
 
   {#each [['best', 'Best'], ['worst', 'Worst']] as [end, title] (end)}
-    {@const { shape, knot, row } = shown(end)}
-    <LayoutViewer {shape} {aspect} {train}>
+    {@const { row } = ranked[end][picks[end]]}
+    <LayoutViewer shape={row.shape} {aspect} {train}>
       {#snippet caption()}
         <p class="reading">
           <strong>{title}</strong>
-          {knot === null ? 'knot not read' : knot === 'unknot' ? 'no knot' : knot}, {plural(row.poses, 'pose')},
+          {row.knot === 'unknot' ? 'no knot' : row.knot}, {plural(row.poses, 'pose')},
           {plural(row.closeCalls, 'close call')}, {plural(row.repeats, 'repeat')},
           longest side {row.longestSide}
         </p>
-        <p class="shape">{shape}</p>
-        <p class="ties">
-          {ends[end].count.toLocaleString('en-GB')} of {table.legal.toLocaleString('en-GB')} tie{#if ends[end].unsure},
-            and {ends[end].unsure.toLocaleString('en-GB')} more whose knots are not read could{/if}
-        </p>
-        <button
-          type="button"
-          class="shuffle"
-          onclick={() => shuffle(end)}
-          disabled={ends[end].examples.length < 2}
-          aria-label="Another {end} layout"
-          title="Another {end} layout"
-        >
-          <Shuffle aria-hidden="true" />
-        </button>
+        <p class="shape">{row.shape}</p>
+        <div class="ranked" role="group" aria-label="{title} layouts">
+          <button type="button" class="turn" aria-label="Previous {end} layout" onclick={() => turn(end, -1)}><ChevronLeft /></button>
+          <span class="position">{picks[end] + 1} / {ranked[end].length}</span>
+          <button type="button" class="turn" aria-label="Next {end} layout" onclick={() => turn(end, 1)}><ChevronRight /></button>
+        </div>
       {/snippet}
     </LayoutViewer>
   {/each}
@@ -163,8 +153,7 @@
   }
 
   .reading,
-  .shape,
-  .ties {
+  .shape {
     margin: 0;
   }
 
@@ -174,27 +163,32 @@
     overflow-wrap: anywhere;
   }
 
-  .ties {
-    color: var(--muted);
+  /* As RankedTracks'. */
+  .ranked {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Wide enough for "10 / 10", so the arrows never move. */
+  .position {
+    min-width: 7ch;
+    text-align: center;
+    font-family: ui-monospace, monospace;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 
-  .shuffle {
+  .turn {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
-    margin-left: auto;
+    width: 36px;
+    height: 36px;
     padding: 0;
-    border: 2px solid currentColor;
+    border: 2px solid var(--card-border);
     border-radius: 0.5rem;
     background: transparent;
     color: inherit;
     cursor: pointer;
-  }
-
-  .shuffle:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
 </style>

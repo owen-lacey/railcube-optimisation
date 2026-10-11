@@ -16,7 +16,7 @@ import { chainTrack, countPieces, POOLS } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
 import { SWEEP_CROSSED_RANKED as ranked, SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
-import { DIRECTIONS, extremes, weigher } from '../site/src/lib/weighting.js';
+import { DIRECTIONS, ends, weigher } from '../site/src/lib/weighting.js';
 
 const NAMES = Object.keys(DIRECTIONS);
 const { score, scale } = weigher(ranked.ranges);
@@ -56,9 +56,9 @@ test('the best are in order, the worst are in order, and every best beats every 
 });
 
 test('the ends are the weighted tracks\' ends at their default sliders', () => {
-  const ends = extremes(table, ranked.weights);
-  assert.equal(ranked.best[0].score, ends.best.score);
-  assert.equal(ranked.worst[0].score, ends.worst.score);
+  const { best, worst } = ends(table, ranked.weights);
+  assert.equal(ranked.best[0].score, best[0].score);
+  assert.equal(ranked.worst[0].score, worst[0].score);
 });
 
 test('no layout twice', () => {

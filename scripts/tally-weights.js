@@ -1,25 +1,21 @@
-// Tally the crossed sweep by the metrics the weighted tracks weigh, for the
-// site's best and worst.
+// The crossed sweep's best and worst under every slider setting, for the site's
+// weighted tracks.
 //
-//   node scripts/tally-weights.js --seed 1 \
-//     --out site/src/lib/data/sweep-crossed-weights.json [--examples 5] [--max-weight 5] [--db <path>]
+//   node scripts/tally-weights.js \
+//     --out site/src/lib/data/sweep-crossed-weights.json [--count 10] [--max-weight 5] [--db <path>]
 //
 // Every legal row of question 1 is read off sweeps.db's columns — knotted, poses,
-// close calls, repeats, and longest side from the spans — and counted by those
-// five values. A weighted sum reads a layout only through them, so a table of the
-// few thousand rows answers every weighting exactly over the whole sweep. A
-// layout whose knot is unread (scripts/hydrate-sweeps.js) is counted in a row of
-// its own with `knotted: null`, and `weighting.js` says when one could reach an end.
+// close calls, repeats, and longest side from the spans — and grouped by those
+// five values. A weighted sum reads a layout only through them, so ranking the
+// groups ranks every layout. Each group carries one sample: its alphabetically
+// first shape not stored as a mirror (a mirror reads the same, so its partner
+// stands for both).
 //
-// Examples are kept only where an end needs them: enough rows tied best or worst
-// under each weighting with every weight a whole number from 0 to `--max-weight`,
-// as the sliders offer, not all of them zero, to show `--examples` layouts there
-// (`ends`). Drawn uniformly per row, with `--seed`,
-// from rows not stored as a mirror (a mirror reads the same, so its partner
-// stands for both). A row of unread knots can be an end only when knotted weighs
-// nothing, and its examples say `knot: null`. Every example is re-derived and
-// recounted before the file is written — a read knot on a fresh rotation — and
-// one disagreement fails the whole file.
+// For every weighting with each weight a whole number from 0 to `--max-weight`,
+// as the sliders offer, the `--count` best and worst groups are found by `ends`
+// in weighting.js, ties broken by sample shape; the file keeps their union, and
+// nothing else. Every sample is re-derived and recounted before the file is
+// written — its knot read on a fresh rotation — and one disagreement fails it.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -28,9 +24,9 @@ import { parseArgs } from 'node:util';
 import Database from 'better-sqlite3';
 
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
-import { assertSpends, DB_PATH, derive, random, weightingValuesOf } from './sweep-data.js';
+import { assertSpends, DB_PATH, derive, weightingValuesOf } from './sweep-data.js';
 import { knotInput, knotOf, knotReader } from './knot-curves.js';
-import { DIRECTIONS, extremes } from '../site/src/lib/weighting.js';
+import { DIRECTIONS, ends } from '../site/src/lib/weighting.js';
 
 const QUESTION = 1;
 const NAMES = Object.keys(DIRECTIONS);
@@ -39,123 +35,90 @@ const AUDIT_SEED = 2 ** 33;
 
 const { values: args } = parseArgs({
   options: {
-    seed: { type: 'string' },
     out: { type: 'string' },
-    examples: { type: 'string', default: '5' },
+    count: { type: 'string', default: '10' },
     'max-weight': { type: 'string', default: '5' },
     db: { type: 'string', default: DB_PATH },
   },
 });
-const seed = Number(args.seed);
-const examples = Number(args.examples);
+const count = Number(args.count);
 const maxWeight = Number(args['max-weight']);
-if (!Number.isInteger(seed) || !args.out || !Number.isInteger(examples) || !Number.isInteger(maxWeight)) {
-  console.error('usage: node scripts/tally-weights.js --seed <n> --out <file.json> '
-    + '[--examples <n>] [--max-weight <n>] [--db <path>]');
+if (!args.out || !Number.isInteger(count) || count < 1 || !Number.isInteger(maxWeight)) {
+  console.error('usage: node scripts/tally-weights.js --out <file.json> '
+    + '[--count <n>] [--max-weight <n>] [--db <path>]');
   process.exit(2);
 }
 
 /**
- * One pass over the question's rows: a count and a reservoir of examples per
- * row of the table. Opened read-only: it is the only copy of these layouts.
+ * One pass over the question's rows: every group of five values with its first
+ * unmirrored shape. Opened read-only: it is the only copy of these layouts.
  */
 function tally(path) {
   const db = new Database(path, { readonly: true, fileMustExist: true });
   const question = JSON.parse(db.prepare('SELECT question FROM questions WHERE id = ?').get(QUESTION).question);
-  const count = counter(random(seed));
+  const groups = new Map();
+  let population = 0, underground = 0;
   const query = db.prepare(`SELECT id, shape, mirrored, poses, close_calls, repeats, underground,
     span_across, span_up, span_along, knot_over, knot_under FROM layouts WHERE +question_id = ?`);
-  for (const r of query.iterate(QUESTION)) count.add(r);
-  db.close();
-  return { question, ...count.result() };
-}
-
-/** Rows of the table, counted one layout at a time. */
-function counter(next) {
-  const rows = new Map();
-  let population = 0, underground = 0;
-  const add = r => {
+  for (const r of query.iterate(QUESTION)) {
     population += 1;
     if (r.poses === null) throw new Error(`row ${r.id} has no readings: run hydrate-sweeps.js --readings`);
-    if (r.underground) { underground += 1; return; }
+    if (r.underground) { underground += 1; continue; }
     const values = weightingValuesOf(r);
+    if (values.knotted === null) throw new Error(`row ${r.id} has its knot unread: run hydrate-sweeps.js --knots`);
     const key = NAMES.map(n => values[n]).join(',');
-    if (!rows.has(key)) rows.set(key, { ...values, count: 0, offered: 0, examples: [] });
-    const row = rows.get(key);
-    row.count += 1;
-    if (r.mirrored === 1) return;
-    // Reservoir sampling: the k-th example offered replaces a random one with
-    // probability examples / k, so every eligible row is equally likely to be kept.
-    row.offered += 1;
-    const example = { id: r.id, shape: r.shape, knot: r.knot_over === null ? null : knotOf(r.knot_over, r.knot_under) };
-    if (row.examples.length < examples) row.examples.push(example);
-    else {
-      const slot = Math.floor(next() * row.offered);
-      if (slot < examples) row.examples[slot] = example;
-    }
-  };
-  return { add, result: () => ({ population, underground, rows: [...rows.values()] }) };
+    if (!groups.has(key)) groups.set(key, { ...values, id: null, shape: null, knot: null });
+    const group = groups.get(key);
+    if (r.mirrored === 1 || (group.shape !== null && group.shape <= r.shape)) continue;
+    Object.assign(group, { id: r.id, shape: r.shape, knot: knotOf(r.knot_over, r.knot_under) });
+  }
+  db.close();
+  const rows = [...groups.values()];
+  const bare = rows.find(r => r.shape === null);
+  if (bare) throw new Error(`${NAMES.map(n => `${n} ${bare[n]}`)} has only mirrored layouts`);
+  return { question, population, legal: population - underground, rows };
 }
 
 const rangeOf = (rows, name) => {
-  const vs = rows.map(r => r[name]).filter(v => v !== null);
+  const vs = rows.map(r => r[name]);
   return [Math.min(...vs), Math.max(...vs)];
 };
 
-/**
- * Rows enough to show `examples` layouts at either end of every weighting the
- * sliders can set. An end's tie count is every row tied there, but its examples
- * need only be some of them: knotted alone ties every knotted layout at the best
- * and every other one at the worst, so keeping examples for all of an end's rows
- * keeps them for the whole table. Rows are added in a seeded order, an end at a
- * time, until it has enough.
- */
-function ends(table) {
+/** The rows at either end of every weighting the sliders can set, all-zero included. */
+function kept(table) {
   const marked = new Set();
-  const next = random(seed);
-  const shown = rows => rows.filter(r => marked.has(r)).reduce((n, r) => n + r.examples.length, 0);
-  const weights = NAMES.map(() => 0);
-  const total = (maxWeight + 1) ** NAMES.length;
-  for (let w = 1; w < total; w++) {
-    NAMES.forEach((_, i) => { weights[i] = Math.floor(w / (maxWeight + 1) ** i) % (maxWeight + 1); });
-    const { best, worst } = extremes(table, Object.fromEntries(NAMES.map((n, i) => [n, weights[i]])));
-    for (const { rows } of [best, worst]) {
-      const offered = rows.filter(r => !marked.has(r) && r.examples.length)
-        .map(r => [next(), r]).sort((a, b) => a[0] - b[0]).map(([, r]) => r);
-      while (shown(rows) < examples && offered.length) marked.add(offered.shift());
-    }
+  for (let w = 0; w < (maxWeight + 1) ** NAMES.length; w++) {
+    const weights = Object.fromEntries(NAMES.map((n, i) => [n, Math.floor(w / (maxWeight + 1) ** i) % (maxWeight + 1)]));
+    const { best, worst } = ends(table, weights);
+    for (const { row } of [...best, ...worst]) marked.add(row);
   }
-  return marked;
+  return [...marked];
 }
 
-/** Re-derive every example and recount it to its row; read knots on a fresh rotation. */
+/** Re-derive every sample and recount it to its row; read its knot on a fresh rotation. */
 async function audit(rows, question) {
+  const placed = rows.map(row => recount(row, question));
   const reader = knotReader();
-  const all = rows.flatMap(row => row.examples.map(example => ({ row, example })));
-  const listed = all.filter(({ example }) => example.knot !== null);
-  for (const { row, example } of all.filter(({ example }) => example.knot === null)) recount(row, example, question);
-  const placed = listed.map(({ row, example }) => recount(row, example, question));
-  const polys = await reader.read(listed.map(({ example }, i) => ({
-    id: example.id, seed: AUDIT_SEED + example.id, ...knotInput(placed[i]) })));
+  const polys = await reader.read(rows.map((row, i) => ({
+    id: row.id, seed: AUDIT_SEED + row.id, ...knotInput(placed[i]) })));
   await reader.close();
-  listed.forEach(({ row, example }, i) => {
+  rows.forEach((row, i) => {
     const knot = knotOf(polys[i].over, polys[i].under);
-    if (knot !== example.knot || Number(knot !== 'unknot') !== row.knotted) {
-      throw new Error(`${example.shape} reads ${knot}, tallied ${example.knot}`);
+    if (knot !== row.knot || Number(knot !== 'unknot') !== row.knotted) {
+      throw new Error(`${row.shape} reads ${knot}, tallied ${row.knot}`);
     }
   });
-  return all.length;
 }
 
-/** An example re-derived and its readings recounted to its row; its placed pieces. */
-function recount(row, example, question) {
-  const { placed } = derive(example.shape);
-  assertSpends(placed, question, example.shape);
+/** A sample re-derived and its readings recounted to its row; its placed pieces. */
+function recount(row, question) {
+  const { placed } = derive(row.shape);
+  assertSpends(placed, question, row.shape);
   const values = { poses: posesOf(placed), closeCalls: closeCallsOf(placed),
     repeats: metricsOf(placed).repeats, longestSide: Math.max(...spanOf(placed)) };
   const off = Object.keys(values).filter(n => values[n] !== row[n]);
-  if (off.length) throw new Error(`${example.shape} recounts ${off.map(n => `${n} ${values[n]}`)}, tallied ${off.map(n => row[n])}`);
-  if (placed.some(x => x.cell[1] < 0)) throw new Error(`${example.shape} goes below the floor`);
+  if (off.length) throw new Error(`${row.shape} recounts ${off.map(n => `${n} ${values[n]}`)}, tallied ${off.map(n => row[n])}`);
+  if (placed.some(x => x.cell[1] < 0)) throw new Error(`${row.shape} goes below the floor`);
   return placed;
 }
 
@@ -169,28 +132,23 @@ function write(output, data) {
   writeFileSync(output, `${body}\n`);
 }
 
-const { question, population, underground, rows } = tally(args.db);
-const order = (a, b) => NAMES.reduce((c, n) => c || (a[n] ?? -1) - (b[n] ?? -1), 0);
-rows.sort(order);
+const { question, population, legal, rows } = tally(args.db);
 const ranges = Object.fromEntries(NAMES.map(name => [name, rangeOf(rows, name)]));
-const marked = ends({ rows, ranges });
-for (const row of rows) if (!marked.has(row)) row.examples = [];
-const audited = await audit(rows, question);
+const order = (a, b) => NAMES.reduce((c, n) => c || a[n] - b[n], 0);
+const shown = kept({ rows, ranges, count }).sort(order);
+await audit(shown, question);
 
-const legal = population - underground;
 write(args.out, {
   name: 'sweep-crossed-weights',
   generatedBy: 'scripts/tally-weights.js',
   question,
   population,
   legal,
-  seed,
   maxWeight,
+  count,
   ranges,
-  rows: rows.map(({ offered, examples: shown, ...row }) => ({
-    ...row, examples: shown.map(({ shape, knot }) => ({ shape, knot })) })),
+  rows: shown,
 });
-const unread = rows.filter(r => r.knotted === null).reduce((n, r) => n + r.count, 0);
-console.log(`${rows.length} rows over ${legal.toLocaleString('en-GB')} legal layouts `
-  + `(${underground.toLocaleString('en-GB')} below the floor left out, ${unread.toLocaleString('en-GB')} `
-  + `knots unread), ${marked.size} keep examples, ${audited} examples re-derived. wrote ${args.out}`);
+console.log(`${rows.length} groups over ${legal.toLocaleString('en-GB')} legal layouts `
+  + `(${(population - legal).toLocaleString('en-GB')} below the floor left out); `
+  + `${shown.length} at an end, re-derived. wrote ${args.out}`);

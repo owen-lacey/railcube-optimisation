@@ -42,10 +42,10 @@ export const SWEEP_28 = sweep28;
 export const SWEEP_CROSSED = sweepCrossed;
 
 /**
- * Every legal layout of the crossed sweep — all of sweeps.db, not a sample —
- * tallied by knotted, poses, close calls, repeats and longest side, each row
- * with its count, and example shapes where the row can be a weighted best or
- * worst. `scripts/tally-weights.js` writes it; `weighting.js` ranks it.
+ * The crossed sweep's ten best and ten worst under every slider setting — over
+ * all of sweeps.db, not a sample — as combinations of knotted, poses, close
+ * calls, repeats and longest side, each with one sample shape: the union of
+ * every setting's ends. `scripts/tally-weights.js` writes it; `weighting.js` ranks it.
  */
 export const SWEEP_CROSSED_WEIGHTS = sweepCrossedWeights;
 

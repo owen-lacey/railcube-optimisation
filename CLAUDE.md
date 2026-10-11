@@ -537,7 +537,8 @@ re-read them. They were added to the live database by hand with `ALTER TABLE` (b
 `sweeps.db.backup-2026-10-05`), so its column order differs from `SCHEMA`'s; nothing reads
 columns by position. `hydrate-sweeps.js --readings` / `--knots` fills the NULLs of rows
 merged before a merge wrote them, by id range, resuming by itself. The knot columns stay
-nullable (Owen's call), so a gap is possible but shows as `unsure` in the weighted tally.
+nullable (Owen's call), so a gap is possible, and `tally-weights.js` and `rank-tracks.js`
+both refuse to run over one.
 
 Two readings, both Owen's definitions, neither in `METRICS` (every `METRICS` name needs a
 solver term):
@@ -624,34 +625,38 @@ because re-reading costs ~4 ms a layout (~25 ms when topoly has to read it). Thi
 ### The weighted best and worst: `scripts/tally-weights.js` → `WeightedTracks`
 
 Five sliders, 0 to `maxWeight` (5): knotted, poses, close calls (more is better, all three),
-repeats and longest side (fewer/shorter). `tally-weights.js` reads `sweeps.db`'s columns
-and writes `site/src/lib/data/sweep-crossed-weights.json`: one row per distinct five values
-over the legal rows (13,253), `knotted: null` for layouts whose knot is unread (none now),
-and `weighting.js` ranks the rows, so the ends are exact over all 15.4M. It tallies question 1. Examples are kept
-only where an end needs them: for every slider setting, enough of its tied rows, in a seeded
-order, to show `--examples` (5) layouts. Not examples for every tied row: knotted alone ties
-every row at one end or the other, which made a 700 KB-gzipped file; capped, it is 67 KB.
-So a shuffle shows layouts tied at that end, not a uniform draw over all of them. Every
-example is re-derived, its knot re-read on a fresh rotation.
+repeats and longest side (fewer/shorter). Each end shows **ten**, stepped through with
+arrows, and nothing else — no tie count, no shuffle (Owen's calls). A weighting reads a
+layout only through its five values, so the ten are ten distinct *combinations* of them,
+each shown by one sample: its alphabetically first legal, unmirrored shape.
 
-Unread knots are reported, not guessed: an end says how many unread layouts could reach it.
-That is none when every weight is positive (the front read, `tests/weighting.test.js` over
-all 3,125 such settings) and none when knotted weighs 0, since then a knot cannot move a
-score — those unread layouts simply tie, and are shown with "knot not read". Only knotted
-positive with another weight at 0 can leave an end unsure, and the full `--knots` pass
-closed that: with every row read, no end is ever unsure.
+`tally-weights.js` reads question 1's columns in one streaming pass (14,358 combinations
+over 22.8M legal layouts), then for all 7,776 slider settings, all-zero included, takes the
+`--count` (10) best and worst by `ends` in `weighting.js` — **ties broken alphabetically by
+sample shape**, which is what makes the cut small: with a slider at 0, ties are huge
+(knotted alone ties every knotted combination at the best). It writes only their union to
+`site/src/lib/data/sweep-crossed-weights.json`: 461 rows, 70 KB raw, 12 KB gzipped, against
+1.4 MB / 77 KB for a file of every combination. That is exact, not an approximation: under
+any setting, a row kept for another setting ranks below all of this setting's ten in the
+full order, so ranking the kept rows gives the same ten. The tally and the site rank with
+the one `ends`, so they cannot disagree. An unread knot, or a combination with only
+mirrored rows, fails the tally; every sample is re-derived and its knot re-read on a fresh
+rotation before the file is written. The streaming pass took a few minutes on a quiet
+machine; the 7,776 rankings are seconds. `tests/weighting.test.js` checks `ends` against a
+plain sort of the file over every setting.
 
 **The ten best and ten worst: `scripts/rank-tracks.js` → `RankedTracks`.** Optimising opens
 on two sets, before any metric is named: the crossed sweep's top and bottom 10 under equal
-weights, which is WeightedTracks at its default sliders. The tally cannot give them — it
-keeps examples only at an end — so `rank-tracks.js` reads every legal, unmirrored row of
+weights. WeightedTracks at its default sliders is not the same list — its ten are ten
+combinations, ties alphabetical, where these are ten layouts, ties drawn, so several can
+share a combination — and both are kept (Owen's call). `rank-tracks.js` reads every legal, unmirrored row of
 question 1, scores it with `weigher` over the *weights file's* ranges (a row outside them
 fails the run: re-tally first), breaks ties by a seeded draw, re-derives and re-reads the
 knot of all 20, and writes `site/src/lib/data/sweep-crossed-ranked.json`
 (`SWEEP_CROSSED_RANKED`). `RankedTracks` steps through one end with arrows, showing only
 the position — Owen's calls, all of them: equal weights, arrows, no metrics in the footer.
-`tests/ranked-tracks.test.js` re-chains and re-scores the file and checks its ends are
-`extremes`' ends.
+`tests/ranked-tracks.test.js` re-chains and re-scores the file and checks its first best
+and first worst score what `ends` gives at equal weights.
 
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 
