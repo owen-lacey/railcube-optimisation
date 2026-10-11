@@ -9,13 +9,25 @@
 	import Opening from "./Opening.svelte";
 	import Coordinates from "./Coordinates.svelte";
 	import TrackBuilding from "./TrackBuilding.svelte";
+	import TrackGenerator from "./TrackGenerator.svelte";
 	import Optimising from "./Optimising.svelte";
 	import AuthorNotes from "./AuthorNotes.svelte";
 	import { tick } from "svelte";
 
-	// How many gates the reader has gone through: 0 on the splash, 1 reading up to
-	// the end of Coordinates, 2 the rest.
+	// The chapters between one gate and the next. The gate before a stretch scrolls
+	// to its id, the first chapter's heading.
+	const stretches = [
+		{ id: "coordinates", chapters: [Coordinates] },
+		{ id: "track-building", chapters: [TrackBuilding] },
+		{ id: "track-generator", chapters: [TrackGenerator] },
+		{ id: "optimising", chapters: [Optimising, AuthorNotes] },
+	];
+
+	// How many gates the reader has gone through: 0 on the splash, then one more
+	// per gate. Coordinates is there under the splash too, so at least one stretch
+	// is shown.
 	let passed = $state(0);
+	const shown = $derived(Math.max(passed, 1));
 	let scrolly = $state();
 	// The O's box on screen while the title zooms, and the zoom.
 	let zoomFrom = $state(null);
@@ -69,16 +81,19 @@
 	<TitleZoom bind:this={zoom} from={zoomFrom} onready={zoomIn} />
 {/if}
 
-<Coordinates />
+{#each stretches.slice(0, shown) as stretch (stretch.id)}
+	{#each stretch.chapters as Section}
+		<Section />
+	{/each}
+{/each}
 
-{#if passed < 2}
-	<div class="gate">
-		<Gate label="Keep reading" onopen={() => reach("track-building")} />
-	</div>
-{:else}
-	<TrackBuilding />
-	<Optimising />
-	<AuthorNotes />
+<!-- Keyed, because a gate fades and opens once: the next needs a fresh one. -->
+{#if shown < stretches.length}
+	{#key shown}
+		<div class="gate">
+			<Gate label="Keep reading" onopen={() => reach(stretches[shown].id)} />
+		</div>
+	{/key}
 {/if}
 
 <style>
