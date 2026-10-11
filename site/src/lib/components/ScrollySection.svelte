@@ -187,6 +187,11 @@
 			12rem,
 			calc(var(--prose-height) + var(--fade-height) + var(--step-bottom))
 		);
+
+		/* The fade goes with the box when it lets go, so whatever follows the section
+		   starts clear of it rather than under it. A margin, so a heading's own larger
+		   one takes its place. */
+		margin-bottom: var(--fade-height);
 	}
 
 	.pinned {
