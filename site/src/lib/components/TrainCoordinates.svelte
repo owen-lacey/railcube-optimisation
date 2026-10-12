@@ -40,7 +40,7 @@
 <Frame view={{ shape, scene, train }} {aspect}>
   {#snippet footer(drawn)}
     <p class="caption">
-      Train entering cell {cell ? `(${readerFrame(cell).join(', ')})` : '—'}{#if readout === 'position-pose'}, pose {pose ?? '—'}{/if}
+      Train entering cell {cell ? `(${readerFrame(cell).join(', ')})` : '—'}{#if readout === 'position-pose'}, orientation {pose ?? '—'}{/if}
     </p>
     {#if drawn}
       <TrainScrubber pieces={drawn.pieces} bind:at bind:held />

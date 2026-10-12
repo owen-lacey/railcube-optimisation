@@ -28,7 +28,7 @@
 
   const METRICS = [
     { name: 'knotted', label: 'Knotted', hint: 'knotted is better' },
-    { name: 'poses', label: 'Poses', hint: 'more is better' },
+    { name: 'poses', label: 'Orientations', hint: 'more is better' },
     { name: 'closeCalls', label: 'Close calls', hint: 'more is better' },
     { name: 'repeats', label: 'Repeats', hint: 'fewer is better' },
     { name: 'longestSide', label: 'Longest side', hint: 'shorter is better' },
@@ -79,7 +79,7 @@
       {#snippet caption()}
         <p class="reading">
           <strong>{title}</strong>
-          {row.knot === 'unknot' ? 'no knot' : row.knot}, {plural(row.poses, 'pose')},
+          {row.knot === 'unknot' ? 'no knot' : row.knot}, {plural(row.poses, 'orientation')},
           {plural(row.closeCalls, 'close call')}, {plural(row.repeats, 'repeat')},
           longest side {row.longestSide}
         </p>

@@ -59,7 +59,7 @@
 	<p>
 		It would also be underwhelming if the train stayed largely face up. One of
 		the selling points of the Rail Cube is that it can ride on walls and go
-		upside down, we must please the creators and cover as many of the 24 poses
+		upside down, we must please the creators and cover as many of the 24 orientations
 		as we can. The below track covers 20.
 	</p>
 	<PoseTracker shape="IRSISSRIIROXSSLSSOORISLISSILSSSOLXSI" />
@@ -78,11 +78,11 @@
 		book.
 	</p>
 	<!-- TODO: Fix on this one. -->
-	<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
+	<TrackFigure shape="ILIOIXIRSISSRISSSOSRRSOXSLLISSLSSOSI" />
 
 	<p>
 		All of the good layouts perform well on these five metics I mentioned:
-		compactness, close calls, pose count, repeats and knots.
+		compactness, close calls, orientation count, repeats and knots.
 	</p>
 	<!-- TODO: Annotate track with metric count. -->
 	<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
@@ -121,7 +121,7 @@
 			track piece. More is better.
 		</li>
 		<li>
-			<b>Pose count:</b> The number of distinct poses the train assumes along the
+			<b>Orientation count:</b> The number of distinct orientations the train assumes along the
 			track. More is better.
 		</li>
 		<li>
@@ -155,7 +155,7 @@
 		Can you do better? Try build one yourself and see if you can beat my score
 		of X.
 	</p>
-	<!-- TODO: keeps track of poses. -->
+	<!-- TODO: keeps track of orientations. -->
 	<TrackBuilder />
 
 	<p></p>

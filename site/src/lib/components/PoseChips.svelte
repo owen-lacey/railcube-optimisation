@@ -10,7 +10,7 @@
 </script>
 
 <Tooltip.Provider delayDuration={200}>
-	<ul class="chips" aria-label="The 24 poses, ticked once the train has taken them">
+	<ul class="chips" aria-label="The 24 orientations, ticked once the train has taken them">
 		{#each POSES as pose (pose)}
 			<PoseChip {pose} taken={reached.has(pose)} />
 		{/each}

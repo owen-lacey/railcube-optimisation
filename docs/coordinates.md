@@ -17,9 +17,24 @@ right on screen, so a track sets off from the bottom left (`CAMERA` in
 Single-letter abbreviations: **U, D, L, R, F, B**. Each direction has an opposite:
 U↔D, L↔R, F↔B.
 
-## Position
+## Terminology
 
-Where a cube sits in the layout: three whole numbers counting cubes along each axis.
+Three words, used the same way in the code's prose, the docs and the post:
+
+| Word | Means | Written |
+|---|---|---|
+| **cell** | where the train is: the cube-sized space it is in | (right, up, forwards), e.g. (0, 1, 0) |
+| **orientation** | how the train stands in its cell: floor + heading | two letters, e.g. `DF` |
+| **pose** | cell + orientation together | a cell and an orientation, e.g. (0, 1, 0) facing `DF` |
+
+There are 24 orientations. A route's head is a pose, and the closed-loop rule is "end in
+the pose you started in". Code identifiers (`pose`, `poseLetters`, `PoseChip`…) predate
+this and still use "pose" for what the prose now calls an orientation.
+
+## Cell
+
+Where a cube sits in the layout, and so where the train is: a **cell**, three whole numbers
+counting cubes along each axis.
 
 | Axis | Negative | Positive |
 |---|---|---|
@@ -38,7 +53,7 @@ on top of it, (0, 1, 0).
 
 ## The reader's axes
 
-The post writes positions as (x, y, z) with **x left, y forwards, z up**. Viewed
+The post writes cells as (x, y, z) with **x left, y forwards, z up**. Viewed
 from the default camera (forwards up and away to the right), x then grows away from
 the reader too, which is why it was chosen. The cost: with z up this is a
 *left-handed* frame, so it is not the maths/CAD convention. The model's own frame
@@ -55,16 +70,16 @@ letters. The **up face** points up (the "top" in pieces.md), the **down face** p
 down (the "bottom"), and the **front face** points forwards — meaning it's the *far*
 side of the cell from the viewer, the way a car's front points the way it's travelling.
 
-## Pose: floor + heading
+## Orientation: floor + heading
 
-The train is always in a cell, facing some way *within* it. Position alone doesn't say
+The train is always in a cell, facing some way *within* it. The cell alone doesn't say
 which way — a train in a given cell can be riding along its floor or clinging to one of
 its walls, and those have different legal next pieces. So the state of the track's open
-end is a position plus a **pose**.
+end is a cell plus an **orientation**, which together are its **pose**.
 
 Both are read **once the train has finished travelling a piece**, never part-way along
-one. The position is the **cell the train is in** at that moment: the cell over the cube
-the next piece will click into. The pose, written as two letters, says how the train
+one. The cell is the one the train is in at that moment: the cell over the cube
+the next piece will click into. The orientation, written as two letters, says how the train
 stands in that cell:
 
 1. **Floor** — which face of its cell the train is standing on. The next piece's cube
@@ -73,14 +88,14 @@ stands in that cell:
 
 Examples:
 
-| Pose | Meaning |
+| Orientation | Meaning |
 |---|---|
 | `DF` | standing on the down face, heading forwards — the ordinary case, riding on top of a cube |
 | `BD` | standing on the back face, heading down — driving down the far side of a wall |
 | `UR` | standing on the up face, heading right — hanging upside down, moving right |
 | `LU` | standing on the left face, heading up — climbing a wall to its left |
 
-Reading positions and poses only between pieces is what keeps this simple. Part-way
+Reading cells and orientations only between pieces is what keeps this simple. Part-way
 along a piece the train can pass through cells a pose would not describe — the inside
 curve's train runs through the hollow of its own arc — but nothing is ever stated about
 those moments.
@@ -101,34 +116,35 @@ Every floor admits exactly the four headings perpendicular to it:
 | F, B | U, D, L, R |
 | L, R | U, D, F, B |
 
-That's 24 valid poses out of 36 letter pairs. Sanity check: 24 is exactly the number of
-ways a cube can be rotated, so the encoding is complete (every physical pose has a code)
-and non-redundant (no two codes mean the same pose).
+That's 24 valid orientations out of 36 letter pairs. Sanity check: 24 is exactly the
+number of ways a cube can be rotated, so the encoding is complete (every physical
+orientation has a code) and non-redundant (no two codes mean the same orientation).
 
 ## Absolute and relative
 
 The model uses both views of the same movement:
 
 - **Relative** — what one piece does: a displacement (how the train's cell changes) and
-  a new pose. A piece's effect depends on the pose it's entered with: the same outside
+  a new orientation. A piece's effect depends on the orientation it's entered with: the same outside
   curve carries a `DF` train over an edge into `BD`, but an `LU` train around a
   different edge entirely.
 - **Absolute** — where the track currently is: the train's starting cell plus the
-  running total of every displacement so far, and the current pose.
+  running total of every displacement so far, and the current orientation — together, the
+  current pose.
 
 The closed-loop constraint falls out of this directly. The start cube is at (0, 0, 0)
 and the train starts on top of it, at (0, 1, 0) facing `DF`; the start cube is the
 first piece clicked in under it. The track is a closed loop when, after the last piece,
-the train is back at (0, 1, 0) facing `DF` — every displacement summing to zero.
-Getting back to the start cell with the wrong floor or heading doesn't close the loop —
+the train is back at (0, 1, 0) facing `DF` — the same pose, every displacement summing
+to zero. Getting back to the start cell with the wrong floor or heading doesn't close the loop —
 the last piece has to click into the first one exactly.
 
 ## What each piece does
 
 The catalogue of relative moves. Each piece is shown in one concrete orientation —
 entered by a train facing `DF` (standing on the down face of its cell, heading
-forwards), so the piece's cube is the one below the train. Entered in any other pose,
-the piece is simply rotated, and its displacement and exit pose rotate with it.
+forwards), so the piece's cube is the one below the train. Entered in any other orientation,
+the piece is simply rotated, and its displacement and exit orientation rotate with it.
 
 Displacements are measured from the cell the train is in when it gets onto the piece
 to the cell it is in once it has finished travelling it. "Cells occupied" is the
@@ -136,7 +152,7 @@ piece's bounding box — what must be empty to place it — measured from the sa
 starting cell. The cells the *train* needs are a second, separate list, tabled under
 [what the train needs](#what-the-train-needs) below.
 
-| Piece | Train moves | (x, y, z) | Exit pose | Cells occupied |
+| Piece | Train moves | (x, y, z) | Exit orientation | Cells occupied |
 |---|---|---|---|---|
 | Straight | 1 forwards | (0, 0, 1) | `DF` | the cube below the train |
 | Cross | 1 forwards | (0, 0, 1) | `DF` | the cube below the train |
@@ -156,8 +172,8 @@ Two sanity checks:
   product photos.
 - **Rotation covers "up and over".** An outside curve entered at `FU` (climbing the
   near side of a wall) is the same table row rotated: the train moves 2 forwards and
-  1 up, and the exit pose is `DF` — it crests the wall onto its top. No extra rows are
-  needed; every entry pose is a rotation of the row above.
+  1 up, and the exit orientation is `DF` — it crests the wall onto its top. No extra rows are
+  needed; every entry orientation is a rotation of the row above.
 
 The vertical pair is asymmetric on purpose. The inside curve turns the train through
 the *inside* of a corner, so it needs a wide arc for the train to fit — hence the 2×2
@@ -165,6 +181,50 @@ footprint. The outside curve wraps the train around the *outside* of a single cu
 edge, so it can be as tight as the cube itself — no forwards progress for the cubes at
 all; the next cube clicks in directly underneath, and the train comes round the edge
 to face down its far side.
+
+### The exit orientation as a formula
+
+Write the orientation as two direction vectors, floor **f** and heading **h** (`DF` is
+((0, −1, 0), (0, 0, 1)) in the model's frame). Then every exit orientation in the table is a
+formula in the two, with ′ for the opposite direction and × for the cross product:
+
+| Piece | Exit orientation | In words |
+|---|---|---|
+| Straight, cross | (f, h) | nothing turns |
+| Left curve | (f, f × h) | the heading turns to the train's left |
+| Right curve | (f, h × f) | the same, order swapped, so the other side |
+| Inside curve | (h, f′) | the wall ahead becomes the floor; head away from the old floor |
+| Outside curve | (h′, f) | the floor goes behind; head where the floor was |
+
+Checked against `step` on all 24 orientations, in the model's frame and in the reader's
+axes alike, computing × by components. (The reader's frame is left-handed, so there
+the components follow a left-hand rule, not the right-hand one; don't mix the two.)
+
+On the six axis directions × needs no arithmetic: round in order gives the next axis
+(x × y = z, y × z = x, z × x = y), backwards gives its opposite, an axis with itself
+or its opposite gives zero, and a ′ on either side flips the answer. Two things fall
+out of it: L and R differ only in the order (a × b = −(b × a)), and a heading along
+the floor would give zero, no "left" at all — the cross-product view of the
+[validity rule](#validity-rule).
+
+This is not a second encoding. `poseLetters` in `src/track.js` builds the frame
+(f, h, h × f) — the train's right is `cross3(overhead, heading)` with overhead = f′ —
+and turns each row's displacement and cells through it as well as its exit orientation. The
+solver never sees either: `src/solver/transitions.js` runs `step` ahead of time into a
+fixed 144-row table (24 orientations × 6 pieces), one boolean per row. Inside the model f
+and h would be unknowns, × multiplies one by another, and cpsat-js has neither
+multiplication of variables nor a lookup constraint; the table is the formula worked
+out in advance.
+
+**The turns form a group.** Every curve is a quarter-turn of the cube: L and I turn
+it, R and O are their inverses (LR and IO change nothing), L⁴ = I⁴ = nothing. L and I
+alone reach all 24 orientations from `DF`, so they generate the cube's rotation group (order
+24, ≅ S₄), which does not commute (L then I ≠ I then L). The orientations are not the group
+but are in one-to-one step with it: each is reached from `DF` by exactly one rotation.
+Four left curves cycle the four headings on one floor, splitting the 24 orientations into six
+cycles of four. A piece's turn is read from the train, not the room, which is why the
+same left curve goes to opposite sides upright and upside down. And each quarter-turn
+is an odd permutation in S₄, which is the even-curve-count parity in `CLAUDE.md`.
 
 ## What the train needs
 

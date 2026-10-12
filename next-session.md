@@ -4,7 +4,7 @@
 
 Shrink `site/src/lib/data/sweep-crossed-weights.json` (1.43 MB raw / 77 KB gzipped) to only
 the combinations the site can ever show: the **top 10 and bottom 10 for every slider
-setting**, sliders 0–5 on all five metrics (knotted, poses, close calls, repeats, longest
+setting**, sliders 0–5 on all five metrics (knotted, orientations, close calls, repeats, longest
 side), all 7,775 non-zero settings, **zeros included** — Owen does not want a minimum of 1.
 
 How it works, as Owen asked for it and as was measured last session:
@@ -77,7 +77,7 @@ sessions' uncommitted changes — commit only your own, by path, and only when O
   still scanning after 17 min — stream rows with `.iterate()` and reduce in JS instead.
   Even streaming took 27 min under heavy machine load (~3 min per 2M rows); the tally
   took a few minutes on a quiet machine.
-- **Ranges unchanged by the new layouts**: knotted 0–1, poses 6–20, close calls 0–27,
+- **Ranges unchanged by the new layouts**: knotted 0–1, orientations 6–20, close calls 0–27,
   repeats 0–9, longest side 7–17. Equal-weights best is still 2.360,
   `IRSSIIXLSLSOLLSSOSSIIRISSIXSORROSSSI`.
 - **Database state**: last session's sweep added 7,595,410 layouts (23,305,965 total, 6.4

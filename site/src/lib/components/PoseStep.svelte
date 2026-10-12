@@ -9,7 +9,7 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import TrackViewer from './TrackViewer.svelte';
   import LayoutCard from './LayoutCard.svelte';
-  import { PIECES, describeDelta, describePose } from '$lib/catalogue.js';
+  import { PIECES, describePose, poseLabel, readerFrame } from '$lib/catalogue.js';
   import { pieceMove } from '$lib/scenes.js';
   import { POSES } from '../../../../src/track.js';
 
@@ -28,8 +28,8 @@
   const scene = $derived(pieceMove(active, { pose, cell: START }));
   const camera = $derived({ ...scene.camera, zoom: scene.camera.zoom * ROOM });
   const notes = $derived([
-    { key: 'before', cell: START, lines: ['(x, y, z)', pose] },
-    { key: 'after', cell: scene.after.cell, lines: [describeDelta(START, scene.after.cell), scene.after.pose] },
+    { key: 'before', cell: START, lines: [`Position: (${readerFrame(START).join(', ')})`, `Pose: (${poseLabel(pose)})`] },
+    { key: 'after', cell: scene.after.cell, lines: [`Position: (${readerFrame(scene.after.cell).join(', ')})`, `Pose: (${poseLabel(scene.after.pose)})`] },
   ]);
 
   const turn = by => {
@@ -54,10 +54,10 @@
 </Tabs.Root>
 
 {#snippet keys()}
-  <div class="poses" role="group" aria-label="Start pose">
-    <button class="turn" aria-label="Previous pose" onclick={() => turn(-1)}><ChevronLeft /></button>
+  <div class="poses" role="group" aria-label="Start orientation">
+    <button class="turn" aria-label="Previous orientation" onclick={() => turn(-1)}><ChevronLeft /></button>
     <p class="caption">{describePose(pose)}</p>
-    <button class="turn" aria-label="Next pose" onclick={() => turn(1)}><ChevronRight /></button>
+    <button class="turn" aria-label="Next orientation" onclick={() => turn(1)}><ChevronRight /></button>
   </div>
   <Tabs.List class="keys" aria-label="Track pieces">
     {#each PIECES as { type, name, letter, hex } (type)}

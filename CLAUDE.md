@@ -9,22 +9,22 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 ## Ground rules
 
 - **This is a learning exercise for Owen.** Do not prescribe the modelling or build ahead of his direction. Answer what's asked, flag genuine contradictions or knock-on effects, and let him drive the design decisions.
-- **Accessible vocabulary only.** Directions are up/down, left/right, forwards/backwards — never x/y/z coordinates. The frame is **fixed from the viewer's perspective** (not train-relative), matching the isometric layout used for visualisations.
+- **Directions are ±x, ±y, ±z** (Owen relaxed the old "never x/y/z" rule): the post's axes are **x left, y forwards, z up** (`docs/coordinates.md`; the model's own frame stays (right, up, forwards)). Plain words (up, left, forwards…) are fine in prose where they read better. The frame is **fixed from the viewer's perspective** (not train-relative), matching the isometric layout used for visualisations.
+- **Three terms, Owen's call.** A **cell** is where the train is, (right, up, forwards). An **orientation** is how it stands in that cell — floor + heading, 24 of them (`DF`). A **pose** is a cell and an orientation together. Use them in all prose. Code identifiers (`pose`, `poseLetters`, `POSES`, `PoseChip`…) predate this and still say "pose" for an orientation; renaming them is a separate job, so a code name saying "pose" means the orientation. Full definitions in `docs/coordinates.md`.
 
 ## Known hard constraints
 
-- The track must end where it begins — same cell *and* same pose (closed loop).
+- The track must end where it begins — same cell *and* same orientation, i.e. the same pose (closed loop).
 - No collisions: at most one piece per cell, and no cell is ever both material and train. Train cells may coincide with each other, since there is only one train. See `docs/coordinates.md`.
 
-**A pose is read from inside the train's cell: floor + heading.** The head — the state a
+**An orientation is read from inside the train's cell: floor + heading.** The head — the state a
 route has reached — is the cell the train is in once it has finished travelling a piece,
-plus which face of that cell it stands on and which way it is going. Owen's call, over the
-old rail-face-of-the-next-cube reading, because the train is always in a cell. So the
-canonical pose is `DF`, the start cube is the origin and the train starts above it at
+plus which face of that cell it stands on and which way it is going — together a pose. Owen's call, over the
+old rail-face-of-the-next-cube reading, because the train is always in a cell. So the canonical orientation is `DF`, the start cube is the origin and the train starts above it at
 (0, 1, 0), and a piece is drawn and keyed at `cubeOf(cell, pose)`, the cube under the train.
 It is an exact relabelling of the old `UF` scheme (floor = the old face's opposite, cell =
 the old head plus one along that face), verified piece by piece over every layout and all
-144 steps, so no geometry, collision or answer changed. Positions and poses are only ever
+144 steps, so no geometry, collision or answer changed. Cells and orientations are only ever
 stated between pieces; mid-piece the train can be inside material (the inside curve's
 hollow), and nothing is said about that.
 
@@ -32,7 +32,7 @@ hollow), and nothing is said about that.
 
 | File | |
 |---|---|
-| `src/track.js` | poses, the piece catalogue, `SCORES`, both hard constraints. The single source of truth — solver, tests and site all import it |
+| `src/track.js` | orientations, the piece catalogue, `SCORES`, both hard constraints. The single source of truth — solver, tests and site all import it |
 | `src/routes.js` | known-good routes |
 | `src/enumerate.js` | brute-force DFS. The oracle the solver is checked against |
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |
@@ -48,7 +48,7 @@ by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath U
 `kit.paths.base` reads it and stays empty locally. The four
 showcase pages that used to live here (overview, pieces, layouts, a live `/solve`) are gone;
 what survived is the renderer, two thin components over it, and fourteen stories —
-one per piece, one per piece's 24-pose gallery, and a `Layout` story whose `shape` control
+one per piece, one per piece's 24-orientation gallery, and a `Layout` story whose `shape` control
 takes any shape string, which is what the old `/view?shape=` page did.
 
 **One `package.json`, at the repo root**, covering the model, the app and Storybook. The app
@@ -95,7 +95,7 @@ knowing before tuning the table and expecting the answers to move.
 inventory can be fully spent, because they answer some of those questions for free:
 
 - **The curve count is even.** Every curve — left, right, inside, outside alike — is a
-  quarter-turn of the cube, and quarter-turns split the 24 poses into two families of 12
+  quarter-turn of the cube, and quarter-turns split the 24 orientations into two families of 12
   that every curve swaps and every straight preserves (verified computationally against
   `step`). Closing on the start pose means an even number of swaps. This is the 3D
   generalisation of the flat-track rule that left-turns minus right-turns is a multiple
@@ -196,7 +196,7 @@ piece of follow-up work, and would need to earn back that speed.
 It avoids the fate of the deleted Python model by construction, not by discipline:
 
 - **Geometry is never hand-ported.** It runs `node scripts/export-geometry.js` on every
-  invocation and reads the tables — poses, transition rows, cell footprints, `SCORES` —
+  invocation and reads the tables — orientations, transition rows, cell footprints, `SCORES` —
   off `src/track.js`. There is no generated file to go stale.
 - **Every answer goes back through the JS.** The solved route is checked with
   `node scripts/check-route.js <shape> --any`; a solve that fails verification exits
@@ -305,7 +305,7 @@ is `SIGNS` in `src/metrics.js`, and it is not cosmetic:
 - **faces saturates.** It is out of 6, and 6 is common: 47% of the 28-cube sweep and 29%
   of the crossed one already sit there. So a faces objective proves its optimum almost at
   once and picks out a large slice of the population rather than one layout. Owen chose
-  it knowing that, over `poses`, whose only bound was "every pose".
+  it knowing that, over `poses`, whose only bound was "every orientation".
 - **repeats counts runs of three, not pairs**: the steps that start three of a kind in
   a row, wrapping, so a run of n costs n − 2 and `SS` is free. Owen's call, for more
   interesting layouts — the pair version's optimum forbade any two alike side by side.
@@ -480,7 +480,7 @@ startPose — `minLoopLength`/`tightCrossings`/`exclude` are search knobs, so ev
 under one question), is re-verified through `chainTrack`, and is inserted only if the database
 does not already hold it *as a physical track* — under that question only, so two questions
 asking one thing would hold the same tracks twice. That happened once: the crossed sweep sat
-under an old `UF` question and a `DF` one for the same physical start, the pose relabelling's
+under an old `UF` question and a `DF` one for the same physical start, the orientation relabelling's
 two names for it. On 8 October 2026 they were merged into one `DF` question, id 1, dropping
 the 21,652 tracks held by both (backup: `sweeps.db.backup-2026-10-08`). `--watch .` re-runs the pass whenever a
 `sweep-crossed-*.jsonl` changes (run it in tmux beside the ladder); `--new-question` admits a
@@ -560,7 +560,7 @@ both refuse to run over one.
 Two readings, both Owen's definitions, neither in `METRICS` (every `METRICS` name needs a
 solver term):
 
-- **`poses`** is how many of the 24 poses the train takes. Over every row 6–20, mean
+- **`poses`** is how many of the 24 orientations the train takes. Over every row 6–20, mean
   12.5; none reaches 24, which is why it is a count and not "all 24".
 - **`close_calls`** counts distinct cells the train is in — booked train cells and the
   cells between pieces — that share a face with another piece's material. Not the piece
@@ -624,7 +624,7 @@ because re-reading costs ~4 ms a layout (~25 ms when topoly has to read it). Thi
   no read knotted dominator rules out need reading, front inwards; the worst end is the same
   flipped, with an unknotted dominator ruling out (`scripts/knot-front.js`, checked against
   brute force over every weighting 1–5 in `tests/knot-front.test.js`). It covers both ends
-  of two metric sets — poses, close calls, repeats and longest side, with and without
+  of two metric sets — orientations, close calls, repeats and longest side, with and without
   faces — and is exact only for positive weights: a zero weight lets dominated layouts tie
   the best, and only the full `--knots` pass covers that. It is how to get a new metric set
   right quickly; with every row read it has nothing left to do. A wave is counted in unread layouts, not groups: counted in
@@ -641,7 +641,7 @@ because re-reading costs ~4 ms a layout (~25 ms when topoly has to read it). Thi
 
 ### The weighted best and worst: `scripts/tally-weights.js` → `WeightedTracks`
 
-Five sliders, 0 to `maxWeight` (5): knotted, poses, close calls (more is better, all three),
+Five sliders, 0 to `maxWeight` (5): knotted, orientations, close calls (more is better, all three),
 repeats and longest side (fewer/shorter). Each end shows **ten**, stepped through with
 arrows, and nothing else — no tie count, no shuffle (Owen's calls). A weighting reads a
 layout only through its five values, so the ten are ten distinct *combinations* of them,
@@ -705,7 +705,7 @@ and `threejs-fidelity-spike` hold the measurements.
   with it, so a piece is lit correctly in every orientation — mid-fall and mid-flight
   included, which PolyCSS could not do.
 - **The driven train's lighting is carried** — Owen's call, to keep the picture. Its colours
-  are pre-shaded at its authored pose by `carriedShade` (the same formula, in JS) and it is
+  are pre-shaded at its authored orientation by `carriedShade` (the same formula, in JS) and it is
   drawn with an unlit `MeshBasicMaterial`, so it never re-lights on a bank or a wall. An
   untinted ghost train is lit live, since it stands still.
 - **Overlays** (lattice prisms, train-cell fill, filled cells, tinted ghosts, origin axes)
@@ -724,8 +724,7 @@ and `threejs-fidelity-spike` hold the measurements.
   and ignores the orbit. A floor of dots fixed to the world was built first and replaced
   on Owen's call: side-on it is a line, so the view most in need of a boundary had none.
 - **One difference from PolyCSS is a correction**: a ghost inside a filled cell has the
-  fill's near face drawn over it where the face really is nearer (the pose cycle's
-  upside-down poses), which PolyCSS's depth sorting got wrong.
+  fill's near face drawn over it where the face really is nearer (the pose cycle's upside-down orientations), which PolyCSS's depth sorting got wrong.
 - **Axis labels** are HTML placed by `originTips()`, which projects each label spot through
   the camera (`Vector3.project`) onto the canvas's client rect.
 - three r186 only refreshes a world matrix whose `matrixWorldNeedsUpdate` is set (the
@@ -734,7 +733,7 @@ and `threejs-fidelity-spike` hold the measurements.
   anything like `Box3.setFromObject` reads them.
 
 **The renderer lives in the site** — `site/src/lib/render/`, split into `dimensions.js`
-(measurements), `vec.js` (the project → world axis map and pose rotations), `pieces.js`
+(measurements), `vec.js` (the project → world axis map and orientation rotations), `pieces.js`
 (one geometry generator per piece type), `rail.js` (where the rail runs, plus the
 `assertRailMouths` check that runs at import) and `train.js` (the lofted body). Each emits
 polygon lists, `{ vertices, color }`, wound so the outward normal follows the right-hand
@@ -777,7 +776,7 @@ frames the *finished* loop, which is what `sceneFromRoute` already returns, so a
 there would only have renamed one.
 Seven components sit on top, in `site/src/lib/components/`: `TrackViewer.svelte` (mounts
 the canvas, owns the stage and the intersection/resize observers), `PieceViewer.svelte` (a piece
-type, alone or in all 24 poses), `LayoutViewer.svelte` (a shape string), `SketchViewer.svelte`
+type, alone or in all 24 orientations), `LayoutViewer.svelte` (a shape string), `SketchViewer.svelte`
 (a text box the track is typed into), `TrackBuilder.svelte` (buttons the track is clicked
 together with), `TumbleViewer.svelte` and `BuildViewer.svelte`. The stories are plain JS CSF
 files beside them.
@@ -1076,7 +1075,7 @@ reason:
 
 1. **An offset fixed in the world.** Every piece then drops from above, and one joining onto
    track that faces downwards descends *through* the layout to reach its own underside. Fixed
-   by reading the offset off the pose's basis, so it turns with the piece.
+   by reading the offset off the orientation's basis, so it turns with the piece.
 2. **Approaching along the rail *face*.** Defensible-looking — that direction is the one thing
    the model guarantees is clear, since `MOVES` books the whole cell on a piece's rail-face
    side as *train* and `assertNoCollisions` forbids a cell being both material and train — but
@@ -1084,8 +1083,7 @@ reason:
    click male-to-female along the direction of travel, so a piece cannot be pressed onto the
    track from outside at all. Pressing onto the face is how a Brio set goes together.
 3. **A face-normal lift plus an axial close.** Correct at the joint, but the lift was along the
-   piece's own local *up* — the canonical pose puts the rail on top — so every piece, whatever
-   its pose, set off from the same place relative to itself and read as being lowered onto
+   piece's own local *up* — the canonical orientation puts the rail on top — so every piece, whatever its orientation, set off from the same place relative to itself and read as being lowered onto
    itself. Uniformity in the piece's own frame is still uniformity.
 
 So the arrival *ends* as one straight line down the connector axis and nothing else:
@@ -1102,8 +1100,7 @@ is already on the stage.
   the close — not nearly square.
 - A **pick-up** is a cube lying on the floor where the last layout's collapse left it. That
   cannot be one straight line, because it has to get across the scene first. So it is *two
-  legs*: a free-form lift from where it lies to the standoff behind its slot, turning into its
-  final pose as it goes, and then the identical axial slide. `liftTurnEase` finishes the turn
+  legs*: a free-form lift from where it lies to the standoff behind its slot, turning into its final orientation as it goes, and then the identical axial slide. `liftTurnEase` finishes the turn
   by 80% of the lift, so the slide is a pure translation with nothing left to spend. That is
   the point of splitting it: the doctrine above survives however the piece got there.
 
@@ -1315,15 +1312,15 @@ over CDP, which is worth doing for anything in this area:
   component's input handling rather than the renderer.
 
 **How a basis goes onto a mesh is under test** — `tests/rotation.test.js` places a mesh
-at each of the 24 poses and 2,000 random orientations and sends its local axes through the
+at each of the 24 orientations and 2,000 random orientations and sends its local axes through the
 world matrix the renderer would use, rather than trusting the reasoning in `meshes.js`. It is
 the one piece of the renderer where a wrong sign yields a thoroughly plausible wrong animation.
 
 `turnToward` is in there with it, for the same reason: the pick-up's lift needs the shortest
-arc from however a cube fell to the pose it is going to, so it reads a turn's axis back *out*
+arc from however a cube fell to the orientation it is going to, so it reads a turn's axis back *out*
 of a rotation rather than being handed it. Both singular branches are the common cases here
 rather than edge cases — coincident orientations have no axis, and half-turns have none in the
-antisymmetric part — so it is checked over all 576 pose pairs as well as random orientations.
+antisymmetric part — so it is checked over all 576 orientation pairs as well as random orientations.
 At exactly 180° the direction of travel is genuinely undetermined (both ways are the same
 shortest arc), and the test asserts only that the choice is stable. One thing it turned up:
 `acos` is ill-conditioned near ±1, so *any* angle measured near 0° or 180° carries about 1e-6°

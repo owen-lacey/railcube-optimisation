@@ -23,5 +23,5 @@
   camera={scene.camera}
   {aspect}
   {controls}
-  label={label || (poses ? `Every pose of the ${type} piece` : `The ${type} piece`)}
+  label={label || (poses ? `Every orientation of the ${type} piece` : `The ${type} piece`)}
 />

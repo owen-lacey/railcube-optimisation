@@ -13,7 +13,7 @@ left over.
 
 | | |
 |---|---|
-| `src/track.js` | poses, the piece catalogue, `SCORES`, both hard constraints. The single source of truth |
+| `src/track.js` | orientations, the piece catalogue, `SCORES`, both hard constraints. The single source of truth |
 | `src/routes.js`, `src/layouts.js` | known-good routes, and the layouts the solver found |
 | `src/enumerate.js` | brute-force DFS — the oracle the solver is checked against |
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |

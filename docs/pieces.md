@@ -27,7 +27,7 @@ concrete orientation; pieces can of course be rotated into others.
 
 ## Track pieces
 
-Each piece's displacement and exit pose — the numbers the model will use — are
+Each piece's displacement and exit orientation — the numbers the model will use — are
 catalogued in [coordinates.md](coordinates.md#what-each-piece-does).
 
 ### Straight — yellow
