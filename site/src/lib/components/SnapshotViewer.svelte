@@ -117,7 +117,7 @@
   button {
     height: 44px;
     padding: 0 0.75rem;
-    border: 2px solid currentColor;
+    border: 2px solid var(--card-border);
     border-radius: 0.5rem;
     background: transparent;
     color: inherit;

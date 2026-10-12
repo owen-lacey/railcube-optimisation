@@ -642,6 +642,7 @@
     overflow: hidden;
     display: grid;
     place-items: center;
+    background-color: var(--viewer-background);
   }
 
   /* The blueprint: an isometric sheet of dots, pinned where the stage says. The
@@ -736,7 +737,7 @@
     width: 36px;
     height: 36px;
     padding: 0;
-    border: 2px solid currentColor;
+    border: 2px solid var(--card-border);
     border-radius: 0.5rem;
     background: var(--card-footer);
     color: inherit;

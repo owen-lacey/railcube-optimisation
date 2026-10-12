@@ -193,7 +193,7 @@
   .remove {
     width: 56px;
     margin-left: 0.5rem;
-    border: 2px solid currentColor;
+    border: 2px solid var(--card-border);
     background: transparent;
     color: inherit;
   }

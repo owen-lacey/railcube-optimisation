@@ -202,14 +202,16 @@
 		visibility: hidden;
 	}
 
-	/* Settling: what the zoom did not draw — the border, the dots and the text — fades
-	   in as this class comes off, the text once the rest has. */
+	/* Settling: what the zoom did not draw — the border, the viewer's background, the
+	   dots and the text — fades in as this class comes off, the text once the rest has. */
 	.box :global(.card) {
 		transition: border-color var(--settle) ease-out;
 	}
 
 	.box :global(.viewer.blueprint) {
-		transition: --blueprint-dot var(--settle) ease-out;
+		transition:
+			--blueprint-dot var(--settle) ease-out,
+			background-color var(--settle) ease-out;
 	}
 
 	.step {
@@ -222,6 +224,7 @@
 
 	.settling .box :global(.viewer.blueprint) {
 		--blueprint-dot: transparent;
+		background-color: transparent;
 	}
 
 	.settling .step {

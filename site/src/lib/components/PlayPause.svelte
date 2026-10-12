@@ -25,7 +25,7 @@
     width: 56px;
     height: 44px;
     padding: 0;
-    border: 2px solid currentColor;
+    border: 2px solid var(--card-border);
     border-radius: 0.5rem;
     background: transparent;
     color: inherit;

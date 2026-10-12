@@ -22,6 +22,10 @@ html {
   /* The page itself, for anything opaque that has to look like a hole in it. */
   --page: #0e1828;
 
+  /* Behind every viewer: lighter and greyer than the page, and still dark enough
+     that every shaded face of every piece clears 3:1 against it. */
+  --viewer-background: #1d232c;
+
   /* The outline of the card every layout sits in. */
   --card-border: #34476a;
   --card-footer: #19263d;
