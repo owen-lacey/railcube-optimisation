@@ -49,11 +49,12 @@
 </div>
 
 <style>
-	/* The play/pause and the slider are one control, so they stay on one line: the
-     slider gives up width before the pair wraps. */
+	/* The play/pause and the slider are one control, so they stay on one line, and
+     it takes a row of the footer to itself, the slider filling what the
+     play/pause leaves. */
 	.scrubber {
 		display: flex;
-		flex: 0 1 auto;
+		flex: 1 1 100%;
 		align-items: center;
 		gap: 0.75rem;
 		min-width: 0;
@@ -63,14 +64,13 @@
 		flex: none;
 	}
 
-	/* The thumb takes the play/pause's outline colour, so the two read as one control.
-     A fixed width, and narrower only where the footer is. */
+	/* The thumb takes the play/pause's outline colour, so the two read as one control. */
 	.scrub {
 		--thumb: 1.25rem;
 		--track: 0.75rem;
 		--gap: 2px;
 		--fade: 35%;
-		width: 25rem;
+		flex: 1;
 		min-width: 0;
 		height: var(--thumb);
 		margin: 0;
