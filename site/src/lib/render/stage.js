@@ -275,8 +275,19 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
         invalidate();
       },
       // See-through by `opacity`, 1 being solid. The first fade gives the cube a
-      // material of its own, so the shared paint the rest are drawn in is untouched.
+      // material of its own, so the shared paint the rest are drawn in is untouched;
+      // faded back up to 1, it is drawn in that paint again.
+      opacity: 1,
       fade(opacity) {
+        made.opacity = opacity;
+        if (opacity >= 1) {
+          if (!faded) return;
+          mesh.repaint(made.look === 'clash' ? paint.clash : paint.solid);
+          faded.dispose();
+          faded = null;
+          invalidate();
+          return;
+        }
         if (!faded) {
           faded = new MeshLambertMaterial({ vertexColors: true, transparent: true });
           mesh.repaint(faded);

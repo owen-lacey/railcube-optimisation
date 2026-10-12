@@ -29,7 +29,10 @@
 	const SETTLE = 0.3;
 	const WORDS = 0.4;
 
-	let { steps = [] } = $props();
+	// `transition` is how one step's picture becomes the next's, a TrackViewer kind:
+	// `move` carries the cubes over while the camera pans; `steps` fades the old
+	// picture out and the new one in, a group at a time, and moves only within a step.
+	let { steps = [], transition = "move" } = $props();
 
 	let active = $state(0);
 	let stage = $state(null);
@@ -162,7 +165,7 @@
 					{...view}
 					paused={view?.paused || held}
 					{aspect}
-					transition={{ kind: "move", pan: PAN }}
+					transition={{ kind: transition, pan: PAN, step: active }}
 				>
 					{#snippet caption(drawn)}
 						<FigureHost {show} {drawn}>

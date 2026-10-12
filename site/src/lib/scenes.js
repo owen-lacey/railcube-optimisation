@@ -115,11 +115,69 @@ export function openScene(letters) {
  * zoomed as far in as that aim allows from the default angle.
  */
 export function layoutScene(letters) {
-  const scene = openScene(letters);
+  return onItsCubes(openScene(letters));
+}
+
+/** A scene framed the way `layoutScene` frames one. */
+function onItsCubes(scene) {
   const cells = scene.pieces.flatMap(p => p.material ?? [cubeOf(p.cell, p.pose)]);
   const gravity = toWorld([0, 1, 2].map(a => cells.reduce((sum, c) => sum + c[a], 0) / cells.length));
   const corners = cells.flatMap(c => cornersOf({ lo: c, hi: c }));
   return { ...scene, camera: frameAbout(corners, gravity) };
+}
+
+// The clear space between the two groups of `apartScene`, on screen, in half a
+// cube's diagonal: the unit a step right or forwards moves a cube across the screen.
+const GAP = 1;
+
+/**
+ * A route as two groups, before they are added together: the letters before `at`
+ * and the letters from it, each laid from the start in DF, and the second set
+ * beside the first on screen, `GAP` clear of it. The pieces are listed in route
+ * order, so their IDs (`identify`) are the joined route's: shown after this, the
+ * joined layout carries the second group's cubes over to the end of the first.
+ *
+ * Beside on screen is from the default turn (`CAMERA`, rot-y −45°), where a step
+ * right and a step forwards each move a cube the same way across the screen and
+ * opposite ways up it. So the second group is slid by equal steps of both, which
+ * moves it straight across, keeping both starts level. A cube spans one unit of
+ * `right + forwards` either side of its own.
+ *
+ * Framed on the groups apart and joined together, the same shot as `joinedScene`,
+ * so joining moves the second group and nothing else.
+ */
+export function apartScene(at) {
+  return letters => {
+    const { apart, camera } = groupsOf(letters, at);
+    return { pieces: apart, closed: false, offender: null, camera };
+  };
+}
+
+/** The two groups of `apartScene` joined: the whole route, in the same shot. */
+export function joinedScene(at) {
+  return letters => ({ ...openScene(letters), camera: groupsOf(letters, at).camera });
+}
+
+function groupsOf(letters, at) {
+  const [first, second] = [letters.slice(0, at), letters.slice(at)].map(openScene);
+  for (const [group, scene] of [[letters.slice(0, at), first], [letters.slice(at), second]]) {
+    if (scene.offender) throw new Error(`the group ${group} is not legal: ${scene.offender.message}`);
+  }
+  const across = (pieces, pick) => pick(...pieces.flatMap(p => p.material).map(c => c[0] + c[2]));
+  const by = Math.ceil((across(first.pieces, Math.max) + 2 + GAP - across(second.pieces, Math.min)) / 2);
+  // And raised or lowered until its lowest cube is level with the first's, so the
+  // two stand on one floor even when the second dips below where it starts.
+  const lowest = pieces => Math.min(...pieces.flatMap(p => p.material).map(c => c[1]));
+  const rise = lowest(first.pieces) - lowest(second.pieces);
+  const slide = c => [c[0] + by, c[1] + rise, c[2] + by];
+  // `group` is which side each piece is on, which is the order they fade in (fade.js).
+  const apart = [...first.pieces.map(p => ({ ...p, group: 0 })), ...second.pieces.map(p => ({
+    ...p, cell: slide(p.cell), material: p.material.map(slide), train: p.train.map(slide), group: 1,
+  }))];
+  // Fitted to the cubes' outline rather than aimed at their centre of gravity, which
+  // two groups and a join pull well off the middle of what is drawn.
+  const cells = [...apart, ...openScene(letters).pieces].flatMap(p => p.material);
+  return { apart, camera: frameFit(cells.flatMap(c => cornersOf({ lo: c, hi: c }))) };
 }
 
 /**

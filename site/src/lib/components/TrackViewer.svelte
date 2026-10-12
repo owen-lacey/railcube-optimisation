@@ -5,6 +5,7 @@
   import { readTheme } from '../render/renderer.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
   import { movePhase } from '../render/move.js';
+  import { fadeInPhase, fadeOutPhase } from '../render/fade.js';
   import { gridLines } from '../render/grid.js';
   import { edgeLengths } from '../render/lengths.js';
   import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
@@ -37,6 +38,10 @@
     //           cube with no slot fades out where it stands, and one with no cube
     //           comes in from beyond the edge of the picture. Framed on `camera`, as
     //           a static track is. `{ speed, pan }`.
+    //   steps   a layout for a new `step` is a fresh picture: the one there fades out
+    //           where it stands, the camera cuts, and the new one fades in a group at
+    //           a time (`piece.group`, see `render/fade.js`). A layout for the same
+    //           step is a move. `{ step, speed, pan }`, `pan` for the move.
     //
     // `speed` is one tempo over the whole assembly (see `timingFor` in build.js).
     // `handover` is when the build starts, measured from the moment the track is let
@@ -122,6 +127,9 @@
   let shown = null;
   let shownKey = null;
   let shownTrain = null;
+  // The `step` of a steps transition last shown, which is what makes the next one
+  // an entrance or a move. Not `$state`, for the same reason as `shown`.
+  let shownStep = undefined;
   // Grow mode's frame, which only ever enlarges. Not `$state` for the same reason
   // as `shown`: `showGrown` owns it, and the framing effect below must not read it.
   let box = undefined;
@@ -186,6 +194,8 @@
       show: next => (shown && !reduced ? showMoved : showStatic)(next),
       frame: () => camera,
     },
+    // Framed by `showStepped`: a cut has to wait for the old layout to go.
+    steps: { show: showStepped, frame: null },
   };
 
   /**
@@ -277,6 +287,35 @@
       movePhase(stage, next, { leaving, frame: camera, speed: Number(speed) }),
       deferred(() => finished(next)),
     ]);
+  }
+
+  /**
+   * A new step's layout faded in once the last has faded out, with the camera cut
+   * to it in between, when the stage is empty; the same step's carried over.
+   */
+  function showStepped(next) {
+    const { step, speed, pan } = settings();
+    const entering = step !== shownStep;
+    shownStep = step;
+    const shot = camera;
+    if (reduced) {
+      stage.frameTo(shot);
+      showStatic(next);
+    } else if (entering) {
+      const leaving = [...stage.cubes.keys()].map(id => stage.detach(id));
+      stage.run([
+        fadeOutPhase(leaving, { speed: Number(speed) }),
+        deferred(() => {
+          stage.frameTo(shot);
+          return fadeInPhase(stage, next, { speed: Number(speed) });
+        }),
+        deferred(() => finished(next)),
+      ]);
+    } else {
+      if (pan) stage.panTo(shot, Number(pan));
+      else stage.frameTo(shot);
+      showMoved(next);
+    }
   }
 
   /** Empty the stage and click the whole layout together, every piece a mint. */

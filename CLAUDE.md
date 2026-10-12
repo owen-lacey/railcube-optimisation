@@ -781,7 +781,7 @@ type, alone or in all 24 orientations), `LayoutViewer.svelte` (a shape string), 
 together with), `TumbleViewer.svelte` and `BuildViewer.svelte`. The stories are plain JS CSF
 files beside them.
 
-`TrackViewer` mounts a stage one way and shows a layout five, chosen by one `transition`
+`TrackViewer` mounts a stage one way and shows a layout six, chosen by one `transition`
 object, `{ kind, ...that kind's settings }`, and looked up in its `CHANGES` table, which is
 why the wrappers stay thin rather than becoming copies of the plumbing. `redraw`: new pieces
 are a redraw off an emptied stage. `build`: they are assembled from off the frame. `tumble`:
@@ -789,10 +789,16 @@ they are a rearrangement — the old layout collapses and the new one is built o
 falls. `grow`: they are an *extension* — whatever the two layouts have in common is left
 standing, untouched, and only the rest arrives. `move`: the cubes are carried straight
 over (`movePhase` in `render/move.js`) — matched by piece ID like a tumble, every flight at
-once on the pick-up's arc (`arcTo`), no axial slide at the end; a cube with no slot fades
+once on the pick-up's arc, no axial slide at the end (Owen's call, for `TrackSum`'s join
+too). Cubes sharing one turn and shift are a stretch moved whole (`carryTo`), keeping its
+shape. A cube with no slot fades
 out where it stands, and a slot with no cube is filled from beyond the edge of the new
 frame nearest it (`stage.offscreen`). The train comes back once everything has landed. It
-is what the scrolly section uses, with `pan`. A tumble is the only kind that imports
+is what the scrolly section uses, with `pan`. `steps`: a layout for a new `step` is a new
+picture — the old fades out where it stands, the camera cuts, and the new fades in a
+`piece.group` at a time (`render/fade.js`); within a step it is a move. The track
+generator's section asks for it (`ScrollySection`'s `transition`, Owen's call), so each
+step's left group fades in, then its right. A tumble is the only kind that imports
 `tumble.js`: that module reaches `cannon-es`, so it is loaded dynamically on mount, which
 keeps a physics engine out of a page of static piece cards — and out of `Sketch`, which
 never drops anything. The train is a `train` object of callbacks (`at`, `onAt`, `onCell`,

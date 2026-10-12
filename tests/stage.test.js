@@ -24,9 +24,10 @@ import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
 import { createStage, together, deferred, OVERLAY } from '../site/src/lib/render/stage.js';
 import { movePhase, MOVE } from '../site/src/lib/render/move.js';
+import { fadeInPhase, fadeOutPhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT, STEP } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute } from '../site/src/lib/scenes.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, layoutScene } from '../site/src/lib/scenes.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, labelSpots } from '../site/src/lib/render/axes.js';
@@ -1230,6 +1231,73 @@ test('there is no train while the cubes move, and one once they have landed', ()
   assert.equal(alive(), 18, 'a train was put on a track still being moved');
   clock.run(MOVE);
   assert.equal(alive(), 19, '18 cubes and exactly one train');
+});
+
+test('a stretch moved whole keeps its shape, and goes straight to its place', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  const joined = layoutScene('SLSLR');
+  stage.frameTo(joined.camera);
+  stage.run([trackPhase(stage, apartScene(2)('SLSLR').pieces, { drive: false })]);
+  clock.run(0.1);
+
+  const ids = identify(joined.pieces);
+  const [first, second] = [ids.slice(0, 2), ids.slice(2)].map(group => group.map(id => stage.cubes.get(id)));
+  const writes = first.map(cube => handleOf(cube).transforms.length);
+  const spread = () => second.flatMap((a, i) => second.slice(i + 1)
+    .map(b => Math.hypot(...a.position.map((v, k) => v - b.position[k]))));
+  const shape = spread();
+
+  stage.run([movePhase(stage, joined.pieces, { frame: joined.camera })]);
+  stage.start();
+  let elapsed = 0;
+  let home = null;
+  clock.run(MOVE + 0.1, () => {
+    elapsed += 0.016;
+    spread().forEach((d, i) => assert.ok(Math.abs(d - shape[i]) < 1e-9, `the stretch bent at ${elapsed.toFixed(3)}s`));
+    if (home === null && near(second[0].position, restingPlace(joined.pieces[2]))) home = elapsed;
+  });
+
+  assert.ok(home !== null && home >= MOVE, `the stretch was home at ${home}s, before its flight was over`);
+  second.forEach((cube, i) => assert.ok(near(cube.position, restingPlace(joined.pieces[2 + i])), `${ids[2 + i]} landed off its cell`));
+  first.forEach((cube, i) => assert.equal(handleOf(cube).transforms.length, writes[i], `${ids[i]} was moved, and it was standing`));
+});
+
+// ---- A new step fading in -----------------------------------------------------
+
+test('a new step fades the old layout out, then the new one in left group first, standing still', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  stage.run([trackPhase(stage, piecesOf(RING), { drive: false })]);
+  clock.run(0.1);
+  const leaving = [...stage.cubes.keys()].map(id => stage.detach(id));
+
+  const apart = apartScene(2)('SLSLR').pieces;
+  const ids = identify(apart);
+  stage.run([fadeOutPhase(leaving), deferred(() => fadeInPhase(stage, apart))]);
+  stage.start();
+
+  clock.run(FADE_OUT / 2);
+  assert.ok(leaving.every(cube => cube.opacity > 0 && cube.opacity < 1), 'the old layout did not fade out');
+  assert.equal(stage.cubes.size, 0, 'the new layout came in before the old one had gone');
+  clock.run(FADE_OUT / 2 + 0.05);
+  assert.ok(leaving.every(cube => handleOf(cube).disposed), 'a faded cube was never taken away');
+
+  const [left, right] = [ids.slice(0, 2), ids.slice(2)].map(group => group.map(id => stage.cubes.get(id)));
+  const writes = [...left, ...right].map(cube => handleOf(cube).transforms.length);
+  let frames = 0;
+  clock.run(FADE_IN * 2 + 0.05, () => {
+    if (right.some(cube => cube.opacity > 0)) {
+      assert.ok(left.every(cube => cube.opacity === 1), 'the right group started before the left was in');
+    }
+    if (left.some(cube => cube.opacity > 0 && cube.opacity < 1)) frames += 1;
+  });
+  assert.ok(frames > 5, `the left group came in over only ${frames} frames`);
+  assert.ok([...left, ...right].every(cube => cube.opacity === 1), 'a cube was left see-through');
+  [...left, ...right].forEach((cube, i) => {
+    assert.equal(handleOf(cube).transforms.length, writes[i], `${cube.id} moved as it faded in`);
+    assert.ok(near(cube.position, restingPlace(apart[i])), `${cube.id} is not in its slot`);
+  });
 });
 
 // ---- The cell lattice -------------------------------------------------------

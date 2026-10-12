@@ -9,7 +9,6 @@
 	import Opening from "./Opening.svelte";
 	import Coordinates from "./Coordinates.svelte";
 	import TrackBuilding from "./TrackBuilding.svelte";
-	import TrackGenerator from "./TrackGenerator.svelte";
 	import Optimising from "./Optimising.svelte";
 	import AuthorNotes from "./AuthorNotes.svelte";
 	import { tick } from "svelte";
@@ -19,7 +18,6 @@
 	const stretches = [
 		{ id: "coordinates", chapters: [Coordinates] },
 		{ id: "track-building", chapters: [TrackBuilding] },
-		{ id: "track-generator", chapters: [TrackGenerator] },
 		{ id: "optimising", chapters: [Optimising, AuthorNotes] },
 	];
 

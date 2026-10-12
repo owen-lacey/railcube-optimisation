@@ -17,6 +17,8 @@
  * @property {object | null} [train]  The train's callbacks, or null for none —
  *   see `train` in TrackViewer.
  * @property {boolean} [paused]  Hold the train where it is.
+ * @property {object} [transition]  What a change of view looks like on its own —
+ *   see `transition` in TrackViewer. A host has its own.
  */
 
 /**

@@ -25,7 +25,7 @@
 // tracks that collapse into it was the one — so nothing here touches cannon.
 
 import { CUBE, ALARM, ALARM_FLASH, ALARM_PERIOD } from './dimensions.js';
-import { cubePosition, poseRotation, axisAngle, compose, turnToward, add } from './vec.js';
+import { cubePosition, poseRotation, axisAngle, compose, turnToward, add, through } from './vec.js';
 import { createDriver } from './drive.js';
 import { originAt, comAt } from '../shapes.js';
 import { identify } from '../../../../src/layouts.js';
@@ -179,9 +179,29 @@ function finish(stage, slot) {
  */
 export function arcTo(cube, from, to, s) {
   const basis = turnToward(from.basis, to.basis, liftTurnEase(s));
-  const com = lerp(from.com, to.com, smooth(s));
-  const risen = add(com, scale(UP, Math.sin(Math.PI * clamp(s)) * LIFT_HEIGHT * CUBE));
+  const risen = arcPoint(from.com, to.com, s);
   cube.place(basis, originAt(cube.type, basis, risen));
+}
+
+const arcPoint = (from, to, s) =>
+  add(lerp(from, to, smooth(s)), scale(UP, Math.sin(Math.PI * clamp(s)) * LIFT_HEIGHT * CUBE));
+
+const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+
+/**
+ * Cubes carried through the air as one: `arcTo` for a group. Every member is turned
+ * by the same turn about the group's centre and moved along the same arc, so the
+ * group keeps its shape the whole way — a stretch of track picked up whole.
+ *
+ * `group` is `{ members, pivot, turn, to }`: each member `{ cube, offset, basis }`,
+ * its place from the pivot and its basis where it set off; `turn` the rotation that
+ * takes the group home and `to` where the pivot ends. With the pivot at a lone
+ * cube's centre of mass, this is `arcTo`.
+ */
+export function carryTo({ members, pivot, turn, to }, s) {
+  const now = turnToward(IDENTITY, turn, liftTurnEase(s));
+  const centre = arcPoint(pivot, to, s);
+  for (const { cube, offset, basis } of members) cube.place(compose(now, basis), add(centre, through(now, offset)));
 }
 
 /**
