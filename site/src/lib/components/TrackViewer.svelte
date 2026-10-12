@@ -64,7 +64,8 @@
     // its edges are plain to see. See `render/blueprint.js`.
     blueprint = false,
     // Outline the origin cell and stand the axis arrows (x right, y forwards, z up)
-    // at this box's corner, `{ lo, hi }`; null draws neither. See `render/axes.js`.
+    // at this box's corner, `{ lo, hi }`; null draws neither. `cell: false` leaves out
+    // the outline, `size` scales the arrows and `gap` sets how far outside the box they start. See `render/axes.js`.
     origin = null,
     // A box of cells, `{ lo, hi }`, whose three side lengths are written beside its
     // edges; null writes none. See `render/lengths.js`.
@@ -510,7 +511,7 @@
 
   let originKey = null;
   $effect(() => {
-    const key = origin ? `${origin.lo}|${origin.hi}` : null;
+    const key = origin ? `${origin.lo}|${origin.hi}|${origin.cell}|${origin.size}|${origin.gap}` : null;
     if (!ready || !stage || key === originKey) return;
     stage.setOrigin(origin);
     originKey = key;

@@ -81,37 +81,44 @@ const TIP = 0.05;   // the tip's width as a fraction of the base's
 
 const AXES = [['x', 0], ['y', 1], ['z', 2]];
 
-/** Where each axis's label sits, in world units from the arrows' corner: just past the tip. */
-export const LABEL_SPOTS = AXES.map(([name, k]) => {
+/**
+ * Where each axis's label sits, in world units from the arrows' corner: just past the
+ * tip. `size` scales the arrows, 1 being the post's usual.
+ */
+export const labelSpots = (size = 1) => AXES.map(([name, k]) => {
   const spot = [0, 0, 0];
-  spot[k] = AXIS_LENGTH + AXIS_LABEL;
+  spot[k] = (AXIS_LENGTH + AXIS_LABEL) * size;
   return { name, position: at(spot) };
 });
 
 /**
- * Where the arrows' corner goes, in world units: `AXIS_GAP` cells outside the
+ * Where the arrows' corner goes, in world units: `gap` cells (`AXIS_GAP` unless given) outside the
  * lattice box's outer corner (high x, low y and z), so the arrows run alongside the box and
  * never through the track. `box` is `{ lo, hi }` in the model's frame.
  */
-export const axisAnchor = ({ lo, hi }) => toWorld([hi[0] + 0.5 + AXIS_GAP, lo[1] - 0.5 - AXIS_GAP, lo[2] - 0.5 - AXIS_GAP]);
+export const axisAnchor = ({ lo, hi }, gap = AXIS_GAP) =>
+  toWorld([hi[0] + 0.5 + gap, lo[1] - 0.5 - gap, lo[2] - 0.5 - gap]);
 
 /** The origin cell's outline, in world units about the cell whose centre is `[0, 0, 0]`. */
 export const originCell = () => cellEdges(ORIGIN_W);
 
-/** The three arrows, in world units, leaving `[0, 0, 0]` along the reader's x, y and z. */
+/**
+ * The three arrows, in world units, leaving `[0, 0, 0]` along the reader's x, y and z,
+ * every dimension scaled by `size`.
+ */
 // The shaft runs on into the head rather than stopping at its base: a shaft's end
 // cap and the head's base would otherwise be coplanar and face opposite ways, and
 // that pair is what showed white.
-export function axisArrows() {
+export function axisArrows(size = 1) {
   return AXES.flatMap(([, k]) => {
     const dir = [0, 0, 0];
     dir[k] = 1;
-    const tip = scale(dir, AXIS_LENGTH);
-    const headBase = sub(tip, scale(dir, AXIS_HEAD));
+    const tip = scale(dir, AXIS_LENGTH * size);
+    const headBase = sub(tip, scale(dir, AXIS_HEAD * size));
     const d = unit(at(dir));
     return [
-      ...bar(at([0, 0, 0]), at(add(headBase, scale(dir, AXIS_HEAD / 2))), AXIS_W / 2),
-      ...head(at(headBase), d, AXIS_HEAD * CUBE, AXIS_HEAD_W * CUBE),
+      ...bar(at([0, 0, 0]), at(add(headBase, scale(dir, (AXIS_HEAD * size) / 2))), (AXIS_W * size) / 2),
+      ...head(at(headBase), d, AXIS_HEAD * size * CUBE, AXIS_HEAD_W * size * CUBE),
     ];
   });
 }

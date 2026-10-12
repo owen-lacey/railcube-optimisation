@@ -29,7 +29,7 @@ import { buildPhase, growPhase, trackPhase, PACE, FLIGHT, STEP } from '../site/s
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute } from '../site/src/lib/scenes.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
-import { axisArrows, axisAnchor, LABEL_SPOTS } from '../site/src/lib/render/axes.js';
+import { axisArrows, axisAnchor, labelSpots } from '../site/src/lib/render/axes.js';
 import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { trackPath } from '../site/src/lib/render/rail.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
@@ -1477,7 +1477,7 @@ test('the arrows stand outside the box\'s corner and reach left, forwards and up
     assert.ok(Math.max(...along(k)) >= CUBE * 1.5, `axis ${k} is too short to read`);
   }
   // Each label sits past its own arrow's tip, on its own axis.
-  for (const [k, { name, position }] of LABEL_SPOTS.entries()) {
+  for (const [k, { name, position }] of labelSpots().entries()) {
     assert.equal(name, 'xyz'[k]);
     assert.ok(position[k] * dirs[k] > Math.max(...along(k)) - 1, `${name}'s label is not past its tip`);
     for (const other of [0, 1, 2].filter(o => o !== k)) {

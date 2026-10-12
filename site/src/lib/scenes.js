@@ -9,7 +9,7 @@ import { routeOf, identify } from '../../../src/layouts.js';
 import { COLORS, ALARM, CUBE } from './render/dimensions.js';
 import { DIR, toWorld } from './render/vec.js';
 import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT, describedZoom } from './render/camera.js';
-import { axisAnchor, LABEL_SPOTS } from './render/axes.js';
+import { axisAnchor, labelSpots } from './render/axes.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
 export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[piece.type] }));
@@ -140,7 +140,7 @@ export function cellScene(letters) {
 export function axesScene(letters) {
   const scene = cellScene(letters);
   const anchor = axisAnchor(scene.grid);
-  const labels = LABEL_SPOTS.map(({ position }) => position.map((v, a) => v + anchor[a]));
+  const labels = labelSpots().map(({ position }) => position.map((v, a) => v + anchor[a]));
   return { ...scene, origin: scene.grid, camera: frameFit([...cornersOf(scene.grid), anchor, ...labels]) };
 }
 
@@ -458,17 +458,25 @@ export function pieceMove(type, { pose = 'DF', cell = startCell(pose) } = {}) {
 
 // ---- Every pose inside one cell --------------------------------------------
 
+/** The axis arrows beside `poseCycle`'s one cell, as a fraction of the post's usual: the cell is zoomed in, so full-size arrows swamp it. */
+const CYCLE_ARROWS = 0.3;
+/** How far outside the cell they start, in cells: the post's 1 would leave them adrift, and closer touches the cell's label. */
+const CYCLE_GAP = 0.6;
+
 /**
  * One cell with nothing in it, lattice only, for a train to be shown in each
  * of its 24 poses in turn — see `poseGhost`. Framed like `pieceMove`, on the cell.
  */
 export function poseCycle() {
   const grid = { lo: [0, 0, 0], hi: [0, 0, 0] };
+  const anchor = axisAnchor(grid, CYCLE_GAP);
+  const labels = labelSpots(CYCLE_ARROWS).map(({ position }) => position.map((v, a) => v + anchor[a]));
   return {
     pieces: [],
     drive: false,
     grid,
-    camera: { ...frameTight(grid), zoom: 42 / Math.sqrt(3) },
+    origin: { ...grid, cell: false, size: CYCLE_ARROWS, gap: CYCLE_GAP },
+    camera: frameFit([...cornersOf(grid), anchor, ...labels]),
   };
 }
 

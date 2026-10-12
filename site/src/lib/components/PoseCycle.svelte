@@ -1,7 +1,8 @@
 <script>
 	// The 24 poses: one see-through cell with the train in it, stepped from one
 	// pose to the next by hand, in the order the model lists them, wrapping both ways.
-	// It starts on the first: nothing in the post moves until it is asked to.
+	// It starts on DF, the canonical orientation (−z +y): nothing in the post moves
+	// until it is asked to.
 	import ChevronLeft from "@lucide/svelte/icons/chevron-left";
 	import ChevronRight from "@lucide/svelte/icons/chevron-right";
 	import TrackViewer from "./TrackViewer.svelte";
@@ -13,7 +14,7 @@
 	let { aspect = "3 / 2" } = $props();
 
 	const scene = poseCycle();
-	let index = $state(0);
+	let index = $state(POSES.indexOf("DF"));
 	const pose = $derived(POSES[index]);
 
 	const turn = (by) => {
@@ -26,19 +27,20 @@
 		pieces={scene.pieces}
 		camera={scene.camera}
 		grid={scene.grid}
+		origin={scene.origin}
 		ghosts={[poseGhost(pose)]}
 		{aspect}
-		label="The train inside one cube, in each of its 24 poses in turn"
+		label="The train inside one cube, in each of its 24 orientations in turn"
 	/>
 </LayoutCard>
 
 {#snippet controls()}
-	<div class="poses" role="group" aria-label="Pose">
-		<button class="turn" aria-label="Previous pose" onclick={() => turn(-1)}><ChevronLeft /></button>
+	<div class="poses" role="group" aria-label="Orientation">
+		<button class="turn" aria-label="Previous orientation" onclick={() => turn(-1)}><ChevronLeft /></button>
 		<p class="caption">{describePose(pose)}</p>
-		<button class="turn" aria-label="Next pose" onclick={() => turn(1)}><ChevronRight /></button>
+		<button class="turn" aria-label="Next orientation" onclick={() => turn(1)}><ChevronRight /></button>
 	</div>
-	<span class="readout">Pose {index + 1}/{POSES.length}</span>
+	<span class="readout">Orientation {index + 1}/{POSES.length}</span>
 {/snippet}
 
 <style>

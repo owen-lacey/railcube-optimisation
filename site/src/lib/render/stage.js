@@ -39,7 +39,7 @@ import { sharedRenderer } from './renderer.js';
 import { cellBox, cellFace } from './grid.js';
 import { backdropOf } from './blueprint.js';
 import { PROJ } from '../../../../src/track.js';
-import { originCell, axisArrows, axisAnchor, LABEL_SPOTS } from './axes.js';
+import { originCell, axisArrows, axisAnchor, labelSpots } from './axes.js';
 import { TRAIN_CELL_INSET, LIGHT, ALARM_SWELL, ALARM_OPACITY } from './dimensions.js';
 import { toWorld } from './vec.js';
 import { trainAt } from './rail.js';
@@ -547,13 +547,14 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     origin = [];
     tips = [];
     if (!box) return;
-    const anchor = axisAnchor(box);
+    const { cell = true, size = 1, gap } = box;
+    const anchor = axisAnchor(box, gap);
     origin = [
-      fixedMesh(soupGeometry(originCell()), paint.origin, { name: OVERLAY.origin }),
-      fixedMesh(soupGeometry(axisArrows()), paint.origin, { name: OVERLAY.origin, at: anchor }),
+      ...(cell ? [fixedMesh(soupGeometry(originCell()), paint.origin, { name: OVERLAY.origin })] : []),
+      fixedMesh(soupGeometry(axisArrows(size)), paint.origin, { name: OVERLAY.origin, at: anchor }),
     ];
     for (const mesh of origin) scene.add(mesh);
-    tips = LABEL_SPOTS.map(({ name, position }) => ({ name, at: position.map((c, k) => c + anchor[k]) }));
+    tips = labelSpots(size).map(({ name, position }) => ({ name, at: position.map((c, k) => c + anchor[k]) }));
     invalidate();
   }
 
