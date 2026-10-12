@@ -40,12 +40,12 @@
 		<p class="caption">{describePose(pose)}</p>
 		<button class="turn" aria-label="Next orientation" onclick={() => turn(1)}><ChevronRight /></button>
 	</div>
-	<span class="readout">Orientation {index + 1}/{POSES.length}</span>
 {/snippet}
 
 <style>
 	.poses {
 		display: flex;
+		flex-basis: 100%;
 		align-items: center;
 		justify-content: center;
 		gap: 0.5rem;
@@ -68,11 +68,5 @@
 		background: transparent;
 		color: inherit;
 		cursor: pointer;
-	}
-
-	.readout {
-		margin-left: auto;
-		font-family: ui-monospace, monospace;
-		font-weight: 600;
 	}
 </style>
