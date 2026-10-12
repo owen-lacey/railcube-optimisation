@@ -440,6 +440,23 @@ of 15–17 give ~250 layouts each, A ≤ 9 gives almost none, and A ≤ 3 cannot
 low ladder rungs are not served by uniform draws, and about half of a run's rounds are spent on
 lengths that yield little.
 
+**Where the joins are lost**, measured on the 35-cube crossed set at box 8 and 20k halves
+(11 October 2026; 30 rounds at seed 3, and one round per length broken down by hand). The round
+line's `lobes x/y matches` reads high, ~14%, because its denominator is only the pairs that
+*already close*: `by_end` hands back only the `v` that complete the lobe, so the rare event is
+filtered out before anything is counted. Unconditionally a random pair of halves closes a lobe
+about 1 in 50,000 (8×10⁻⁶ to 1.3×10⁻⁴; a lobe of 17 is 6,056 of 2.9×10⁸ pairs), which is the
+meet-in-the-middle earning its keep: one lookup per `u`, and the 10⁸ pairs that do not close are
+never touched. `tracks x/y pairs` is ~78%, and its denominator is likewise pre-filtered, to lobe
+pairs whose counts already spend the inventory.
+
+Of the pairs that close, what kills most is **counts, not collisions**. A half is capped only at
+the whole inventory, so two halves together often overspend a type: 41–66% of closing pairs on
+lobes of 13–17, and 87–98% on lobes of 21–27. Hitting the cross or each other is 1–30%. That is
+why short-A rounds yield nothing — not that lobe A fails (it is exhaustive at those lengths:
+125 = 5³ and 625 = 5⁴ halves), but that the long lobe B left over has almost no legal joins. 25–45%
+of sampled walks also dead-end before reaching their length.
+
 ### Sweep logs are a staging area: `scripts/merge-sweeps.js` → `sweeps.db`
 
 The gitignored `sweep-*.jsonl` logs are where solves land; `sweeps.db` at the repo root is what
