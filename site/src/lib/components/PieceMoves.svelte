@@ -83,7 +83,7 @@
 
   :global(.piece-moves .key[data-state='active']) {
     background: var(--piece);
-    color: white;
+    color: var(--page);
   }
 
   .legend {

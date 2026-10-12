@@ -5,6 +5,10 @@ html {
 }
 
 :root {
+  /* The page is dark, so the browser's own controls, scrollbars and default
+     text colours must be too. */
+  color-scheme: dark;
+
   /* The ghost trains' tints, here rather than in the viewer because a legend
      outside the viewer has to name them in the same colours. */
   --ghost-before: #b4bfcd;
@@ -13,14 +17,14 @@ html {
 
   /* The lattice's colour, here for the same reason: the train-cell caption sits
      outside the viewer and is written in it. */
-  --grid-color: #4f75b8;
+  --grid-color: #8fb7ff;
 
   /* The page itself, for anything opaque that has to look like a hole in it. */
-  --page: #fff;
+  --page: #0e1828;
 
-  /* The grey outline of the card every layout sits in. */
-  --card-border: #aab2bf;
-  --card-footer: #e9ecf1;
+  /* The outline of the card every layout sits in. */
+  --card-border: #34476a;
+  --card-footer: #19263d;
 }
 
 body {

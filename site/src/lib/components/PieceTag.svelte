@@ -15,7 +15,7 @@
     padding: 0 0.35em;
     border-radius: 0.3em;
     background: var(--piece);
-    color: white;
+    color: var(--page);
     font-family: ui-monospace, monospace;
     font-size: 0.85em;
     font-weight: 700;

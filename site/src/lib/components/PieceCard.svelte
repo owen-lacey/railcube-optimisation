@@ -47,7 +47,7 @@
 	figcaption {
 		padding: 0.15rem 0;
 		background: var(--piece);
-		color: white;
+		color: var(--page);
 		font-size: 1rem;
 		font-weight: 700;
 		text-align: center;

@@ -72,6 +72,6 @@
 
   .key:active {
     background: var(--piece);
-    color: white;
+    color: var(--page);
   }
 </style>

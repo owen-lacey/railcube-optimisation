@@ -182,7 +182,7 @@
   .piece {
     border: none;
     background: var(--piece);
-    color: white;
+    color: var(--page);
     font-family: ui-monospace, monospace;
     font-size: 1.25rem;
     font-weight: 700;

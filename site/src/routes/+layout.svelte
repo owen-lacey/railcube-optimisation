@@ -12,10 +12,10 @@
   /* The colours are the renderer's own, from lib/render/dimensions.js, so the
      post and the viewers eventually sitting in it read as one scheme. */
   main {
-    --ink: #1e2530;
-    --muted: #6b7382;
-    --rule: #aab2bf;
-    --wash: #f8fafc;
+    --ink: #e8eef8;
+    --muted: #a0b1cd;
+    --rule: #34476a;
+    --wash: #19263d;
     /* The post's running text, wherever it is laid out. */
     --prose-size: 1.0625rem;
     --prose-leading: 1.65;

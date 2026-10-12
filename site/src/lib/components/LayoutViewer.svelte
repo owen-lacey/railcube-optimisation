@@ -190,6 +190,12 @@
 </div>
 
 <style>
+  /* The browser paints a dialog's text in its own default colour, open or modal,
+     so the card would not take the page's ink without this. */
+  dialog {
+    color: inherit;
+  }
+
   /* In the page the dialog is laid out as if it were not there. */
   dialog:not(:modal) {
     display: contents;
@@ -209,7 +215,6 @@
     box-sizing: border-box;
     border: 0;
     background: var(--page);
-    color: inherit;
   }
 
   dialog::backdrop {
