@@ -11,6 +11,8 @@
 	// the section's and is never remounted, a step change swaps only the figure's
 	// footer, and the camera eases to the new step's frame.
 	import { onMount } from "svelte";
+	import { Tween, prefersReducedMotion } from "svelte/motion";
+	import { cubicOut } from "svelte/easing";
 	import scrollama from "scrollama";
 	import LayoutViewer from "./LayoutViewer.svelte";
 	import FigureHost from "./FigureHost.svelte";
@@ -41,23 +43,28 @@
 
 	/** @type {import('$lib/figure.js').FigureView | undefined} */
 	let view = $state();
-	// Whether the step's figure has a footer. One that does not leaves the viewer the
-	// whole card.
-	let footed = $state(false);
+	// How much of the footer is showing, 0 to 1: all of it when the step's figure has
+	// one, none when it does not, and easing between the two with the pan, so the bar
+	// slides in and out over the card's bottom edge rather than the viewer snapping.
+	const footed = new Tween(0, { easing: cubicOut });
+	let shown = false;
 
 	const Figure = $derived(steps[active].figure);
 	// The card fills the box, so it is the same size for every step; the viewer is
-	// what is left of it under the footer, if there is one. The card's 2px border is
-	// outside both.
+	// what is left of it above however much footer is showing. The card's 2px border
+	// is outside both.
 	const aspect = $derived.by(() => {
 		if (!width || !height) return undefined;
 		const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-		return `${width - 4} / ${height - 4 - (footed ? FOOTER * rem : 0)}`;
+		return `${width - 4} / ${height - 4 - footed.current * FOOTER * rem}`;
 	});
 
 	function show(next, hasFooter) {
 		view = next;
-		footed = hasFooter;
+		// The first step is as it is, not slid in: the title's zoom lands on it.
+		const instant = !shown || prefersReducedMotion.current;
+		footed.set(hasFooter ? 1 : 0, { duration: instant ? 0 : PAN * 1000 });
+		shown = true;
 	}
 
 	// The band is tall enough for the tallest step to be read whole, clear of the fade:
@@ -147,7 +154,6 @@
 		<div class="stage" bind:this={stage}>
 			<div
 				class="box"
-				class:footless={!footed}
 				style:--footer-height="{FOOTER}rem"
 				bind:clientWidth={width}
 				bind:clientHeight={height}
@@ -259,8 +265,17 @@
 		height: 100%;
 	}
 
+	/* Exactly the box, so a footer the viewer has grown over is pushed out of the
+	   bottom and clipped by the card, rather than the card growing. The viewer's room
+	   is the box too, or the card's height would be a share of nothing. */
+	.box :global(.room) {
+		height: 100%;
+	}
+
 	.box :global(.card) {
 		margin: 0;
+		height: 100%;
+		box-sizing: border-box;
 	}
 
 	/* Always the same height, whatever the step's figure puts in it. */
@@ -268,12 +283,6 @@
 		height: var(--footer-height);
 		box-sizing: border-box;
 		align-content: center;
-	}
-
-	/* A figure with no footer is still mounted in it, since it is what says what to
-     draw; there is just no bar. */
-	.footless :global(.footer) {
-		display: none;
 	}
 
 	/* A paragraph being read sits clear of the fade, and fades only once it moves
