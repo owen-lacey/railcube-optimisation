@@ -19,10 +19,11 @@
 
 <style>
 	/* `POSES` runs floor by floor, four headings each, so filling down the columns
-	   gives a column per floor. */
+	   gives a column per floor. A chip's label is one line where there is room for
+	   it, and its heading wraps under its floor where there is not. */
 	.chips {
 		display: grid;
-		grid-template-columns: repeat(6, minmax(0, 3.5rem));
+		grid-template-columns: repeat(6, minmax(0, max-content));
 		grid-template-rows: repeat(4, auto);
 		grid-auto-flow: column;
 		justify-content: center;
