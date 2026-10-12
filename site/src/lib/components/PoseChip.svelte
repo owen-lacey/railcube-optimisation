@@ -8,7 +8,7 @@
 	// else, a scroll or Escape closes it.
 	import { Tooltip } from "bits-ui";
 	import Check from "@lucide/svelte/icons/check";
-	import { describePose } from "$lib/catalogue.js";
+	import { describePose, poseLabel } from "$lib/catalogue.js";
 
 	// `pose` is a code like `'DF'`; `taken` whether the train has taken it yet.
 	let { pose, taken = false } = $props();
@@ -35,7 +35,7 @@
 				if (tapped) open = !wasOpen;
 			}}
 		>
-			<span aria-hidden="true">{pose}</span>
+			<span aria-hidden="true">{poseLabel(pose)}</span>
 			<Check class="tick" aria-hidden="true" />
 			<span class="visually-hidden">{name}, {taken ? "taken" : "not yet"}</span>
 		</Tooltip.Trigger>

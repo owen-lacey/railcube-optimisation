@@ -109,9 +109,15 @@ export function describeMove(type) {
 const FACE_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'front', B: 'back' };
 const HEADING_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'forwards', B: 'backwards' };
 
-/** A pose as the post words it: `DL` is "down face, heading left (DL)". */
+// The reader's axes (docs/coordinates.md): x left, y forwards, z up.
+const AXIS = { L: '+x', R: '−x', F: '+y', B: '−y', U: '+z', D: '−z' };
+
+/** A pose as the post writes it: `DF` is floor −z, heading +y, "−z +y". */
+export const poseLabel = pose => `${AXIS[pose[0]]} ${AXIS[pose[1]]}`;
+
+/** A pose as the post words it: `DL` is "down face, heading left (−z +x)". */
 export const describePose = pose =>
-  `${FACE_WORD[pose[0]]} face, heading ${HEADING_WORD[pose[1]]} (${pose})`;
+  `${FACE_WORD[pose[0]]} face, heading ${HEADING_WORD[pose[1]]} (${poseLabel(pose)})`;
 
 // ---- A position, in the reader's frame --------------------------------------
 
