@@ -36,7 +36,7 @@
 			}}
 		>
 			<span aria-hidden="true">{poseLabel(pose)}</span>
-			<Check class="tick" aria-hidden="true" />
+			<span class="badge" aria-hidden="true"><Check strokeWidth={4} /></span>
 			<span class="visually-hidden">{name}, {taken ? "taken" : "not yet"}</span>
 		</Tooltip.Trigger>
 		<!-- Not portalled: a full-screen card is a modal dialog, and anything put on
@@ -53,11 +53,11 @@
 	}
 
 	.item :global(.chip) {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.125rem;
-		padding: 0.125rem 0.25rem;
+		padding: 0.125rem 0.375rem;
 		border: 2px solid var(--card-border);
 		border-radius: 999px;
 		background: transparent;
@@ -83,16 +83,31 @@
 		outline-offset: 2px;
 	}
 
-	/* The tick holds its room either way, so a chip never changes width. */
-	.item :global(.tick) {
-		width: 1em;
-		height: 1em;
-		flex: none;
-		visibility: hidden;
+	/* The tick is a badge over the chip's top-right corner, so it takes no room
+	   and a chip never changes width. */
+	.badge {
+		position: absolute;
+		top: 0;
+		right: 0;
+		display: grid;
+		place-items: center;
+		width: 0.875rem;
+		height: 0.875rem;
+		border-radius: 999px;
+		background: currentColor;
+		translate: 40% -40%;
+		opacity: 0;
+		transition: opacity 0.2s;
 	}
 
-	.item :global(.chip.taken .tick) {
-		visibility: visible;
+	.badge :global(svg) {
+		width: 0.625rem;
+		height: 0.625rem;
+		color: var(--page);
+	}
+
+	.item :global(.chip.taken .badge) {
+		opacity: 1;
 	}
 
 	.item :global(.tooltip) {
@@ -116,7 +131,8 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.item :global(.chip) {
+		.item :global(.chip),
+		.badge {
 			transition: none;
 		}
 	}
