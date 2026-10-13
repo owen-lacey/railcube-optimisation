@@ -32,6 +32,7 @@ import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE,
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, labelSpots } from '../site/src/lib/render/axes.js';
 import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
+import { screenAxes, CAMERA } from '../site/src/lib/render/camera.js';
 import { trackPath } from '../site/src/lib/render/rail.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { orbit, slid, zoomed } from '../site/src/lib/render/controls.js';
@@ -1582,6 +1583,20 @@ test('the arrows stand outside the box\'s corner and reach left, forwards and up
   // Clear of the box: the anchor is outside its high x corner and its low y and z ones.
   const [ax, ay, az] = axisAnchor({ lo: [0, 0, 0], hi: [3, 3, 3] });
   assert.ok(ax > 3.5 * CUBE && ay < -CUBE / 2 && az < -CUBE / 2, 'the arrows start inside the box');
+});
+
+test('from the default angle, the z label sits below the box on screen, not over it', () => {
+  // The arrows stand at the box's corner nearest the camera, so z climbs up the
+  // box's near edge on screen; it must top out before the box begins.
+  const box = { lo: [0, 0, 0], hi: [3, 3, 3] };
+  const { up } = screenAxes(CAMERA);
+  const height = p => new Vector3(...p).dot(up);
+  const anchor = axisAnchor(box);
+  const z = labelSpots().find(({ name }) => name === 'z').position.map((v, a) => v + anchor[a]);
+  const corners = [0, 1, 2, 3, 4, 5, 6, 7].map(i => toWorld([0, 1, 2].map(a =>
+    (i >> a) & 1 ? box.hi[a] + 0.5 : box.lo[a] - 0.5)));
+  const letter = CUBE / 2;   // room for the glyph above its spot
+  assert.ok(height(z) + letter < Math.min(...corners.map(height)), 'the z label overlaps the box');
 });
 
 test('the train cell\'s fill is six outward faces, clear of the lattice\'s lines', () => {

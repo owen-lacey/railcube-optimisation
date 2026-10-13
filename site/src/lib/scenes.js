@@ -524,7 +524,7 @@ export function pieceMove(type, { pose = 'DF', cell = startCell(pose) } = {}) {
 
 /** The axis arrows beside `poseCycle`'s one cell, as a fraction of the post's usual: the cell is zoomed in, so full-size arrows swamp it. */
 const CYCLE_ARROWS = 0.3;
-/** How far outside the cell they start, in cells: the post's 1 would leave them adrift, and closer touches the cell's label. */
+/** How far outside the cell they start, in cells: the post's 2 would leave them adrift, and closer touches the cell's label. */
 const CYCLE_GAP = 0.6;
 
 /**
