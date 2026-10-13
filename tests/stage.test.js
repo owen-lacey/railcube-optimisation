@@ -27,7 +27,8 @@ import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js
 import { fadeInPhase, fadeOutPhase, overlayFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, layoutScene } from '../site/src/lib/scenes.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene } from '../site/src/lib/scenes.js';
+import { poseReadout } from '../site/src/lib/catalogue.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, labelSpots } from '../site/src/lib/render/axes.js';
@@ -1728,6 +1729,46 @@ test('the origin\'s outline and arrows are overlays that clear() leaves and setO
   assert.ok(axes().every(h => !h.disposed), 'clear() took the axes down');
   stage.setOrigin(null);
   assert.ok(axes().every(h => h.disposed));
+});
+
+test('a sum outlines each group\'s start and stands an after ghost at each end, then one of each joined', () => {
+  const [a, b] = ['SL', 'SLR'];
+  const apart = apartScene(a.length)(a + b);
+  const joined = joinedScene(a.length)(a + b);
+  const [first, second, whole] = [a, b, a + b].map(letters => openScene(letters).head);
+  // The second group is drawn slid: its start cube's slide is its outline, and the
+  // same slide takes its own end to where its ghost stands.
+  const [moved] = apart.pieces.filter(p => p.group === 1);
+  const slid = openScene(b).pieces[0];
+  const by = moved.cell.map((v, k) => v - slid.cell[k]);
+
+  assert.deepEqual(apart.outlines, [[0, 0, 0], by]);
+  assert.deepEqual(apart.ghosts.map(g => [g.cell, g.pose]), [
+    [first.cell, first.pose], [second.cell.map((v, k) => v + by[k]), second.pose],
+  ]);
+  // Each callout reads its group's own end, not where it is drawn.
+  assert.deepEqual(apart.notes.map(n => n.lines), [first, second].map(h => poseReadout(h)));
+  assert.deepEqual(joined.outlines, [[0, 0, 0]]);
+  assert.deepEqual(joined.ghosts.map(g => [g.cell, g.pose]), [[whole.cell, whole.pose]]);
+  assert.deepEqual(joined.notes.map(n => n.lines), [poseReadout(whole)]);
+});
+
+test('setOutlines outlines each cell where it is, without arrows, and clear() leaves them', () => {
+  const { handles, stage } = staged();
+  const outlines = () => handles.filter(h => h.name === OVERLAY.origin && !h.disposed);
+  const cells = [[0, 0, 0], [3, 0, 3]];
+
+  stage.setOutlines(cells);
+  assert.deepEqual(
+    outlines().map(h => String(new Vector3().setFromMatrixPosition(h.mesh.matrix).toArray())),
+    cells.map(c => String(toWorld(c))),
+  );
+  stage.clear();
+  assert.equal(outlines().length, 2, 'clear() took the outlines down');
+  stage.setOutlines([[0, 0, 0]]);
+  assert.equal(outlines().length, 1);
+  stage.setOutlines([]);
+  assert.equal(outlines().length, 0);
 });
 
 test('each axis label is projected to where its spot lands on the canvas', () => {

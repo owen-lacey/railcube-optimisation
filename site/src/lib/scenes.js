@@ -10,6 +10,7 @@ import { COLORS, ALARM, CUBE } from './render/dimensions.js';
 import { DIR, toWorld, toCell, add } from './render/vec.js';
 import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT, describedZoom } from './render/camera.js';
 import { axisAnchor, labelSpots } from './render/axes.js';
+import { poseReadout } from './catalogue.js';
 
 /** chainTrack returns the model's view of a route; colour is ours to add. */
 export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[piece.type] }));
@@ -149,20 +150,51 @@ const GAP = 1;
  * moves it straight across, keeping both starts level. A cube spans one unit of
  * `right + forwards` either side of its own.
  *
+ * Each group's start cube is outlined, and where it leaves the train is an after
+ * ghost with its pose called out. The second group's callout reads its own pose,
+ * from its own start: the position it is slid to is only where it is drawn.
+ *
  * Framed on the groups apart and joined together, the same shot as `joinedScene`,
  * so joining moves the second group and nothing else.
  */
 export function apartScene(at) {
   return letters => {
-    const { apart, camera } = groupsOf(letters, at);
-    return { pieces: apart, closed: false, offender: null, camera };
+    const { apart, slide, ends, camera } = groupsOf(letters, at);
+    const [first, second] = ends;
+    return {
+      pieces: apart,
+      closed: false,
+      offender: null,
+      outlines: [[0, 0, 0], slide([0, 0, 0])],
+      ghosts: [afterGhost(first), afterGhost({ ...second, cell: slide(second.cell) })],
+      notes: [endNote('first', first), endNote('second', second, slide(second.cell))],
+      camera,
+    };
   };
 }
 
-/** The two groups of `apartScene` joined: the whole route, in the same shot. */
+/**
+ * The two groups of `apartScene` joined: the whole route, in the same shot. Only
+ * the route's start is outlined, and one after ghost stands where it leaves the train.
+ */
 export function joinedScene(at) {
-  return letters => ({ ...openScene(letters), camera: groupsOf(letters, at).camera });
+  return letters => {
+    const scene = openScene(letters);
+    return {
+      ...scene,
+      outlines: [[0, 0, 0]],
+      ghosts: [afterGhost(scene.head)],
+      notes: [endNote('joined', scene.head)],
+      camera: groupsOf(letters, at).camera,
+    };
+  };
 }
+
+/** A ghost train where a head leaves it, standing on the straight that would click in next. */
+const afterGhost = ({ cell, pose }) => ({ type: 'straight', cell, pose, tint: 'after', floor: false });
+
+/** A callout of `head`'s pose, on the cell it is drawn at. */
+const endNote = (key, head, cell = head.cell) => ({ key, cell, lines: poseReadout(head) });
 
 function groupsOf(letters, at) {
   const [first, second] = [letters.slice(0, at), letters.slice(at)].map(group => openScene(group));
@@ -181,9 +213,19 @@ function groupsOf(letters, at) {
     ...p, cell: slide(p.cell), material: p.material.map(slide), train: p.train.map(slide), group: 1,
   }))];
   // Fitted to the cubes' outline rather than aimed at their centre of gravity, which
-  // two groups and a join pull well off the middle of what is drawn.
-  const cells = [...apart, ...openScene(letters).pieces].flatMap(p => p.material);
-  return { apart, camera: frameFit(cells.flatMap(c => cornersOf({ lo: c, hi: c }))) };
+  // two groups and a join pull well off the middle of what is drawn. The cells the
+  // after ghosts stand in too, apart and joined, since an end can be over empty space.
+  const joined = openScene(letters);
+  const cells = [
+    ...[...apart, ...joined.pieces].flatMap(p => p.material),
+    first.head.cell, slide(second.head.cell), joined.head.cell,
+  ];
+  return {
+    apart,
+    slide,
+    ends: [first.head, second.head],
+    camera: frameFit(cells.flatMap(c => cornersOf({ lo: c, hi: c }))),
+  };
 }
 
 /**

@@ -779,6 +779,23 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     invalidate();
   }
 
+  // ---- Outlined cells -------------------------------------------------------
+  //
+  // The origin cell's outline, round other cells as well: each start of a set of
+  // groups, say. No arrows. An overlay like the fills.
+
+  let outlines = [];
+
+  /** Outline these cells, `[x, y, z]` each, replacing any outlined before. */
+  function setOutlines(cells) {
+    remove(outlines);
+    outlines = cells.map(cell => fixedMesh(soupGeometry(originCell()), paint.origin, {
+      name: OVERLAY.origin, at: toWorld(cell),
+    }));
+    for (const mesh of outlines) scene.add(mesh);
+    invalidate();
+  }
+
   return {
     scene,
     camera,
@@ -814,6 +831,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     dropRider: () => rider?.dispose(),
     riderSpot: () => rider?.spot ?? null,
     setFill,
+    setOutlines,
     setOverlayOpacity,
     overlayOpacity: () => overlayShare,
     markTrainCell,

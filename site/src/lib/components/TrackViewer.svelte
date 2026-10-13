@@ -84,6 +84,9 @@
     // Cells, `[x, y, z]` each, filled see-through in the train cell's paint whether
     // or not a train is driving. See `setFill` in stage.js.
     fill = [],
+    // Cells, `[x, y, z]` each, outlined the way `origin` outlines the origin cell,
+    // without its arrows. See `setOutlines` in stage.js.
+    outlines = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
     // Callouts on cells, `{ key, lines, cell, side, flash }` each: set outside what
@@ -146,6 +149,9 @@
   // put the overlays it is holding back up. Not `$state`, for the same reason.
   let shownStart = undefined;
   let turning = false;
+  // Whether a move has yet to land, and so to put up the overlays it brings. Not
+  // `$state`, for the same reason as `shown`.
+  let moving = false;
   let handle = null;
   // This viewer's entry in `CHANGES`, fixed at mount.
   let change = null;
@@ -325,6 +331,7 @@
     showGrid();
     showOrigin();
     showGhosts();
+    showNotes();
     scheduleLabels();
   }
 
@@ -356,10 +363,39 @@
     const keep = new Set(identify(next));
     const leaving = [...stage.cubes.keys()].filter(id => !keep.has(id)).map(id => stage.detach(id));
     const { speed } = settings();
+    moving = true;
     stage.run([
       movePhase(stage, next, { leaving, frame: camera, speed: Number(speed) }),
-      deferred(() => finished(next)),
+      deferred(() => {
+        landed();
+        return finished(next);
+      }),
     ]);
+  }
+
+  /**
+   * Is a move holding new overlays back? From the moment new pieces are asked for
+   * — which the overlays' effects may see before `show` does — until every cube has
+   * landed. Meanwhile only the overlays both layouts have stay up: an outline, ghost
+   * or callout the new layout lacks goes at once, and one it brings waits for its
+   * cubes, so nothing is drawn where they have yet to arrive.
+   */
+  const landing = () => moving
+    || (change === CHANGES.move && Boolean(shown) && !reduced && keyOf(pieces) !== shownKey);
+
+  /** Of `next`, the ones already `up` while a move is landing, matched by `key`; all of them otherwise. */
+  function arriving(up, next, key) {
+    if (!landing()) return next;
+    const kept = new Set(up.map(key));
+    return next.filter(item => kept.has(key(item)));
+  }
+
+  /** Put up the overlays a move held back: the ones asked for now. */
+  function landed() {
+    moving = false;
+    showOutlines();
+    showGhosts();
+    showNotes();
   }
 
   /**
@@ -594,7 +630,7 @@
   function calloutsFor(local, { width, height }) {
     const bounds = stage.outline();
     // A note on the rider waits for there to be one.
-    const shown = notes.filter(n => !n.rider || stage.riderSpot());
+    const shown = notesUp.filter(n => !n.rider || stage.riderSpot());
     if (!bounds || !shown.length) return [];
     const within = (v, size, room) => Math.min(Math.max(v, size + CALLOUT_GAP), room - CALLOUT_GAP);
     const { x: left, y: top } = local({ x: bounds.left, y: bounds.top });
@@ -662,21 +698,35 @@
   });
 
   // The notes, keyed on what they say and where, for the same reason as the lattice.
+  // `notesUp` is the ones placed, which a landing move may hold some of back.
   let notesKey = null;
-  $effect(() => {
-    const key = notes.map(n => `${n.key}${n.rider ? 'rider' : n.cell}${n.flash}${JSON.stringify(n.lines)}`).join('|');
-    if (!ready || !stage || held() || key === notesKey) return;
+  let notesUp = [];
+  const noteKey = n => `${n.key}${n.rider ? 'rider' : n.cell}${n.flash}${JSON.stringify(n.lines)}`;
+  function showNotes() {
+    const next = arriving(notesUp, notes, noteKey);
+    const key = next.map(noteKey).join('|');
+    if (key === notesKey) return;
+    notesUp = next;
     notesKey = key;
     scheduleLabels();
+  }
+  $effect(() => {
+    void notes;
+    if (!ready || !stage || held()) return;
+    showNotes();
   });
 
   // The ghost trains, keyed on what they are for the same reason as the lattice.
   let ghostKey = null;
+  let ghostsUp = [];
+  const ghostKeyOf = g => `${g.type}${g.cell}${g.pose}${g.tint}`;
   function showGhosts() {
-    const key = ghosts.map(g => `${g.type}${g.cell}${g.pose}${g.tint}`).join('|');
+    const next = arriving(ghostsUp, ghosts, ghostKeyOf);
+    const key = next.map(ghostKeyOf).join('|');
     if (key === ghostKey) return;
-    stage.setGhosts(ghosts);
+    stage.setGhosts(next);
     ghostKey = key;
+    ghostsUp = next;
   }
   $effect(() => {
     void ghosts;
@@ -691,6 +741,23 @@
     if (!ready || !stage || key === fillKey) return;
     stage.setFill(fill);
     fillKey = key;
+  });
+
+  // The outlined cells, keyed the same way.
+  let outlinesKey = null;
+  let outlinesUp = [];
+  function showOutlines() {
+    const next = arriving(outlinesUp, outlines, String);
+    const key = next.join('|');
+    if (key === outlinesKey) return;
+    stage.setOutlines(next);
+    outlinesKey = key;
+    outlinesUp = next;
+  }
+  $effect(() => {
+    void outlines;
+    if (!ready || !stage) return;
+    showOutlines();
   });
 
   // Framing. A tumble's frame deliberately does *not* read `pieces` or `camera`:

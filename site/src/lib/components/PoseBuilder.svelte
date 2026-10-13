@@ -20,7 +20,7 @@
   import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, extentOf } from '$lib/scenes.js';
-  import { describePose, poseAxes, readerFrame } from '$lib/catalogue.js';
+  import { describePose, poseReadout } from '$lib/catalogue.js';
   import { claimKeys } from '$lib/keys.js';
   import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
   import { startCell } from '../../../../src/track.js';
@@ -66,25 +66,11 @@
     },
   };
 
-  /** A callout's line: `label: (a, b, c)`, each value marked if it differs from `was`'s. */
-  const line = (label, values, was, gap) => [
-    { text: `${label}: (` },
-    ...values.flatMap((text, i) => [
-      ...(i ? [{ text: gap }] : []),
-      { text, changed: Boolean(was) && was[i] !== text },
-    ]),
-    { text: ')' },
-  ];
-  const position = cell => readerFrame(cell).map(String);
-  const readout = ({ cell, pose: p }, was = null) => [
-    line('Position', position(cell), was && position(was.cell), ', '),
-    line('Orientation', poseAxes(p), was && poseAxes(was.pose), ' '),
-  ];
   // The start's callout stands to the left, clear of the axis arrows below. The
   // end's is on the train, and stays there even once the loop closes on the start.
   const notes = $derived([
-    { key: 'before', cell: start.cell, side: 'left', lines: readout(start) },
-    { key: 'after', rider: true, flash, lines: readout(reached ?? start, previous) },
+    { key: 'before', cell: start.cell, side: 'left', lines: poseReadout(start) },
+    { key: 'after', rider: true, flash, lines: poseReadout(reached ?? start, previous) },
   ]);
 
   let expanded = $state(false);

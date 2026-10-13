@@ -130,6 +130,27 @@ export const describePose = pose =>
  */
 export const readerFrame = ([right, up, forwards]) => [0 - right, forwards, up];
 
+/** A callout's line: `label: (a, b, c)`, each value marked if it differs from `was`'s. */
+const calloutLine = (label, values, was, gap) => [
+  { text: `${label}: (` },
+  ...values.flatMap((text, i) => [
+    ...(i ? [{ text: gap }] : []),
+    { text, changed: Boolean(was) && was[i] !== text },
+  ]),
+  { text: ')' },
+];
+
+const position = cell => readerFrame(cell).map(String);
+
+/**
+ * A pose as a callout's two lines, position and orientation, for `notes` in
+ * TrackViewer — with whatever differs from the pose `was` marked as changed.
+ */
+export const poseReadout = ({ cell, pose }, was = null) => [
+  calloutLine('Position', position(cell), was && position(was.cell), ', '),
+  calloutLine('Orientation', poseAxes(pose), was && poseAxes(was.pose), ' '),
+];
+
 /**
  * Where `to` is from `from`, written as `from` were `(x, y, z)` in the reader's
  * frame: two cubes left and one forwards is `(x + 2, y + 1, z)`.
