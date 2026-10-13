@@ -26,7 +26,7 @@ import { createStage, together, deferred, OVERLAY } from '../site/src/lib/render
 import { movePhase, MOVE } from '../site/src/lib/render/move.js';
 import { fadeInPhase, fadeOutPhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
-import { buildPhase, growPhase, trackPhase, PACE, FLIGHT, STEP } from '../site/src/lib/render/build.js';
+import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, layoutScene } from '../site/src/lib/scenes.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
@@ -627,31 +627,40 @@ test('a driven train reports the pose of each piece it enters, in route order, o
   assert.equal(reported.at(-1), null, 'the train went and nobody was told');
 });
 
-test('a handed-over train stands on each piece for one step, then jumps to the next', () => {
+test('a handed-over train drives along the rail like an unheld one, reporting each piece it is on', () => {
   const clock = fakeClock();
-  const { handles, stage } = staged();
   const pieces = piecesOf(SET);
+  const free = staged();
+  free.stage.run([trackPhase(free.stage, pieces)]);
+  free.stage.start();
+  const handed = staged();
   const told = [];
+  handed.stage.run([trackPhase(handed.stage, pieces, { trainAt: () => null, onTrainAt: i => told.push(i) })]);
+  handed.stage.start();
+  clock.run(30);
 
-  stage.run([trackPhase(stage, pieces, { trainAt: () => null, onTrainAt: i => told.push(i) })]);
-  stage.start();
-  const train = handles.at(-1);
-  clock.run(STEP * pieces.length * 1.5);
-
-  // Each frame's report, grouped into runs of the same piece.
-  const runs = [];
-  for (const [k, piece] of told.entries()) {
-    if (k === 0 || piece !== told[k - 1]) runs.push({ piece, frames: 0 });
-    runs.at(-1).frames += 1;
-  }
+  const a = free.handles.at(-1).transforms, b = handed.handles.at(-1).transforms;
+  assert.ok(b.length > told.length / 2, 'written as it goes, not once a piece');
+  assert.equal(a.length, b.length, 'written on the same frames');
+  assert.ok(a.every((t, k) => near(t.position, b[k].position)), 'and to the same places');
   const order = pieces.map((_, i) => i);
-  assert.deepEqual(runs.slice(0, pieces.length + 1).map(r => r.piece), [...order, 0], 'piece by piece, and round');
-  assert.equal(train.transforms.length, 1 + runs.length, 'mounted, then one write per piece and none between');
-  // Straights, curves and inside curves all take the same time: a fixed step, not
-  // the time it would take to drive them. The last run may be cut short by the clock.
-  const frames = runs.slice(0, -1).map(r => r.frames);
-  const step = STEP / 0.016;
-  assert.ok(frames.every(f => Math.abs(f - step) <= 1), `every piece is one step (${frames})`);
+  const runs = told.filter((i, k) => k === 0 || i !== told[k - 1]);
+  assert.deepEqual(runs.slice(0, pieces.length + 1), [...order, 0], 'piece by piece, and round');
+});
+
+test('a handed-over train marks the cell it entered its piece from until it finishes the piece', () => {
+  const clock = fakeClock();
+  const marked = [];
+  const { stage } = staged({ onTrainCell: cell => marked.push(cell) });
+  const pieces = piecesOf(SET);
+  stage.run([trackPhase(stage, pieces, { trainAt: () => null })]);
+  stage.start();
+  clock.run(30);
+
+  const laps = Math.ceil(marked.length / pieces.length) + 1;
+  const route = Array.from({ length: laps * pieces.length }, (_, i) => pieces[i % pieces.length].cell);
+  assert.ok(marked.length > pieces.length, 'not even a lap was marked');
+  assert.deepEqual(marked, route.slice(0, marked.length), 'one cell a piece, in route order');
 });
 
 test('a hold let go drives on from the piece it held', () => {

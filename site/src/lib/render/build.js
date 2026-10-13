@@ -36,7 +36,6 @@ import { identify } from '../../../../src/layouts.js';
 // build, so a story can stretch the gap and look at one arrival on its own.
 export const PACE = 0.1;        // seconds per piece
 export const FLIGHT = 0.34;     // seconds the axial slide takes
-export const STEP = 0.8;        // seconds a handed-over train stands on each piece
 const HOLD = 0.6;      // seconds the closed loop is left alone before the train starts
 
 // A pick-up's first leg: off the floor and up to the standoff. Longer than the
@@ -361,11 +360,11 @@ function alarmFor(stage, slots, alarm, from = () => 0) {
  *
  * `trainAt` hands the train to someone else, a piece at a time: asked every frame,
  * a number is the piece in route order to hold it at the entry of (one past the
- * last is a whole lap on, the first again), and null lets it drive on from there.
- * Given one, the drive is stepped too — the train stands on each piece for STEP,
- * whatever its length, then jumps to the next one's entry — and `onTrainAt`
- * is told the piece it is on, every frame, so a slider can follow. A train standing
- * on a piece is written once, when it gets there, so it costs no draws.
+ * last is a whole lap on, the first again), and null lets it drive on from there,
+ * along the rail as an unheld train does, while `onTrainAt` is told the piece it
+ * is on, every frame, so a slider can follow. Its cell is the one it entered its
+ * piece from, so it moves only once a piece is finished. A held train is written once, when
+ * it gets there, so it costs no draws.
  *
  * `alarm` is a rejected piece to flag — see `alarmFor`. A track with one never
  * closes, so it is never driven.
@@ -377,17 +376,20 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
   flag?.(0);
   if (!drive) return { advance: (_, elapsed) => (flag?.(elapsed) ? undefined : false) };
 
-  const driver = createDriver(stage);
+  // A handed-over train is read out a piece at a time, so its cell moves only
+  // once it has finished a piece, as a held one's does.
+  const driver = createDriver(stage, { byPiece: Boolean(trainAt) });
   driver.setRoute(pieces);
   if (!trainAt) return { advance: (_, elapsed) => { driver.at(elapsed); }, dispose: driver.dispose };
 
   // A hold let go carries on from the piece it held, not from wherever the clock
-  // says it would have got to: the drive counts steps from `since`, starting on
-  // piece `from`. Counted rather than subtracted, so a release can never land a
-  // rounding error short and step back one.
+  // says it would have got to: the drive is timed from `since`, starting at the
+  // entry of piece `from`.
   let heldAt = null;
   let from = 0;
   let since = 0;
+  // The piece a held train was last put at; null while it drives, so the next
+  // hold puts it back at its piece's entry even if that is the piece it is on.
   let shown = null;
   const show = piece => {
     const i = piece % pieces.length;
@@ -407,8 +409,8 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
         since = elapsed;
         heldAt = null;
       }
-      const piece = (from + Math.floor((elapsed - since) / STEP)) % pieces.length;
-      show(piece);
+      shown = null;
+      const piece = driver.at(elapsed - since, from);
       onTrainAt?.(piece);
     },
     // The train is the one thing here the stage does not own, so it is the one

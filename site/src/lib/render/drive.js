@@ -24,8 +24,12 @@ const BODY_REF = BODY_Z + TRAIN_H / 2;
 // or a wall — Owen's call, and the picture the site has always drawn.
 const UNTURNED = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
-/** Bind a train to a live stage. It has no mesh until it has a route. */
-export function createDriver(stage) {
+/**
+ * Bind a train to a live stage. It has no mesh until it has a route. `byPiece`
+ * marks the cell a piece is entered from for the whole of that piece, so the mark
+ * moves only once a piece is finished, rather than following the body through it.
+ */
+export function createDriver(stage, { byPiece = false } = {}) {
   let mesh = null;
   let path = [], gaps = [], lap = 0;
   let entries = [];          // how far along the lap each piece begins, in route order
@@ -64,19 +68,21 @@ export function createDriver(stage) {
   }
 
   /**
-   * Put the train where it has got to after `seconds` of driving, and say how far
-   * round the lap that is, from 0 up to (but never reaching) 1.
+   * Put the train where it has got to after `seconds` of driving from the entry of
+   * piece `from`, and say which piece in route order it is on.
    */
-  function at(seconds) {
+  function at(seconds, from = 0) {
     if (!lap) return null;   // no track yet, so nowhere to put a train
-    const d = (seconds * SPEED) % lap;
-    // The lattice cell is the one the body is in, not the wheels: the body is what
-    // is seen, and it rides clear of the cube, in the cell the model books as train.
-    stage.markTrainCell(toCell(place(d)));
+    const d = (entries[from % entries.length] + seconds * SPEED) % lap;
+    const body = place(d);
     // The pose is the last piece entered's: `place` leaves the cursor on the
     // current sample, and every piece has `per` of them.
-    stage.markTrainPose(poses[Math.floor(k / per)]);
-    return d / lap;
+    const piece = Math.floor(k / per);
+    // The lattice cell is the one the body is in, not the wheels: the body is what
+    // is seen, and it rides clear of the cube, in the cell the model books as train.
+    stage.markTrainCell(byPiece ? cells[piece] : toCell(body));
+    stage.markTrainPose(poses[piece]);
+    return piece;
   }
 
   /**
