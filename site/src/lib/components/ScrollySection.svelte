@@ -10,6 +10,10 @@
 	// the same props, as it would be used on its own. Here it is hosted: the viewer is
 	// the section's and is never remounted, a step change swaps only the figure's
 	// footer, and the camera eases to the new step's frame.
+	//
+	// A step may also carry a `cue`, words under its prose over a bobbing chevron,
+	// telling the reader to scroll on. Not a button: the reader is to scroll. It fades
+	// once the page first scrolls, and stays gone.
 	import { onMount } from "svelte";
 	import { Tween, prefersReducedMotion } from "svelte/motion";
 	import { cubicOut } from "svelte/easing";
@@ -18,6 +22,7 @@
 	import FigureHost from "./FigureHost.svelte";
 	import { layoutScene } from "$lib/scenes.js";
 	import { O_TRACK } from "$lib/letters.js";
+	import ChevronDown from "@lucide/svelte/icons/chevron-down";
 
 	// How long the camera takes to ease to a new step's frame, in seconds.
 	const PAN = 0.6;
@@ -120,6 +125,9 @@
 
 	let scroller;
 
+	// Whether the page has scrolled since the section mounted, which the cue goes on.
+	let scrolled = $state(false);
+
 	// The band moves the line, and scrollama has to be told.
 	$effect(() => {
 		tallest;
@@ -142,6 +150,8 @@
 		};
 	});
 </script>
+
+<svelte:window onscroll={() => (scrolled ||= window.scrollY > 0)} />
 
 <section
 	class="scrolly"
@@ -183,6 +193,12 @@
 			<div class="step" bind:this={triggers[i]}>
 				<div class="prose" bind:clientHeight={prose[i]}>
 					{@render step.body()}
+					{#if step.cue}
+						<div class="cue" class:gone={scrolled}>
+							{step.cue}
+							<ChevronDown aria-hidden="true" />
+						</div>
+					{/if}
 				</div>
 			</div>
 		{/each}
@@ -307,6 +323,40 @@
 	/* Holds its paragraphs' margins, so measuring it measures them too. */
 	.prose {
 		display: flow-root;
+	}
+
+	.cue {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		margin-top: 1.5rem;
+		color: var(--muted);
+		font-size: 0.875rem;
+		transition: opacity var(--words) ease-out;
+	}
+
+	.cue.gone {
+		opacity: 0;
+	}
+
+	.cue :global(svg) {
+		animation: bob 1.6s ease-in-out infinite;
+	}
+
+	@keyframes bob {
+		0%,
+		100% {
+			transform: translateY(0);
+		}
+		50% {
+			transform: translateY(0.375rem);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.cue :global(svg) {
+			animation: none;
+		}
 	}
 
 	.step :global(p) {

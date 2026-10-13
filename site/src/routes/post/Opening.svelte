@@ -12,7 +12,12 @@
 	let { scrolly = $bindable() } = $props();
 
 	const steps = [
-		{ body: intro, figure: TrackFigure, props: { shape: "SIOSLLSOISLL" } },
+		{
+			body: intro,
+			figure: TrackFigure,
+			props: { shape: "SIOSLLSOISLL" },
+			cue: "Scroll down"
+		},
 		{
 			body: instead,
 			figure: TrackFigure,
