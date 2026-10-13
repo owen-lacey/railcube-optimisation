@@ -84,11 +84,17 @@
     fill = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
-    // Callouts on cells, `{ key, lines, cell, side }` each: `lines` an array of strings, set
-    // outside what is drawn with a leader line to the middle of `cell`, and kept
-    // there as the camera moves. `side` pins it 'left', 'above' or 'below'; unset,
-    // it is chosen. See `calloutsFor`.
+    // Callouts on cells, `{ key, lines, cell, side, flash }` each: set outside what
+    // is drawn with a leader line to the middle of `cell`, and kept there as the
+    // camera moves. `rider: true` in place of `cell` points it at the rider instead,
+    // and it follows the train. A line is an array of parts, `{ text, changed }`, and
+    // a changed part is picked out each time `flash` changes. `side` pins it 'left',
+    // 'above' or 'below'; unset, it is chosen. See `calloutsFor`.
     notes = [],
+    // A ghost train riding the track as it grows, `{ tint, onArrive }`, or null for
+    // none: a grow only. `onArrive(head)` is told each `{ cell, pose, index }` it
+    // comes to rest at, and null when it goes. See `growPhase` in build.js.
+    rider = null,
     // The ID of a cube the model has rejected, `5L` say, or null. It is drawn where
     // it was asked to go and pulses there, whatever the transition — see `alarmFor`
     // in build.js. Read when a layout is shown.
@@ -239,13 +245,14 @@
     const leaving = [];
     for (let i = prefix; i < before.length; i++) {
       const cube = ids[i] && stage.detach(ids[i]);
-      if (cube) leaving.push({ cube, piece: before[i] });
+      if (cube) leaving.push({ cube, piece: before[i], index: i });
     }
 
     const { pace, speed, from, arrival } = settings();
     stage.run([growPhase(stage, next, {
       leaving,
       arrival,
+      ride: rider,
       pace: Number(pace),
       speed: Number(speed),
       drive: Boolean(train),
@@ -369,6 +376,9 @@
             touched = stage?.touched() ?? false;
             if (origin || lengths || notes.length) scheduleLabels();
             if (blueprint) placeSheet();
+          },
+          onRider: () => {
+            if (notes.some(n => n.rider)) scheduleLabels();
           },
         });
         stage.setPaused(paused);
@@ -510,12 +520,14 @@
 
   function calloutsFor(local, { width, height }) {
     const bounds = stage.outline();
-    if (!bounds || !notes.length) return [];
+    // A note on the rider waits for there to be one.
+    const shown = notes.filter(n => !n.rider || stage.riderSpot());
+    if (!bounds || !shown.length) return [];
     const within = (v, size, room) => Math.min(Math.max(v, size + CALLOUT_GAP), room - CALLOUT_GAP);
     const { x: left, y: top } = local({ x: bounds.left, y: bounds.top });
     const bottom = local({ x: bounds.left, y: bounds.bottom }).y;
-    const spots = stage.project(notes.map(({ cell }) => toWorld(cell))).map(local);
-    const order = notes.map((_, i) => i).filter(i => !notes[i].side).sort((a, b) => spots[a].y - spots[b].y);
+    const spots = stage.project(shown.map(n => (n.rider ? stage.riderSpot() : toWorld(n.cell)))).map(local);
+    const order = shown.map((_, i) => i).filter(i => !shown[i].side).sort((a, b) => spots[a].y - spots[b].y);
     const above = new Set(order.slice(0, Math.ceil(order.length / 2)));
     // Where each side puts a note `w` by `h` for the cell at `to`: the point on its
     // edge nearest the drawing, which is the leader's end.
@@ -524,12 +536,12 @@
       above: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(top - CALLOUT_GAP, h, height) }),
       below: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(bottom + CALLOUT_GAP + h, h, height) - h }),
     };
-    return notes.map(({ key, lines, side: pinned }, i) => {
+    return shown.map(({ key, lines, flash, side: pinned }, i) => {
       const side = pinned ?? (above.has(i) ? 'above' : 'below');
       const w = noteEls[key]?.offsetWidth ?? 0;
       const h = noteEls[key]?.offsetHeight ?? 0;
       const { x, y } = PLACE[side](w, h, spots[i]);
-      return { key, lines, side, x, y, to: spots[i], measured: Boolean(noteEls[key]) };
+      return { key, lines, flash, side, x, y, to: spots[i], measured: Boolean(noteEls[key]) };
     });
   }
 
@@ -574,7 +586,7 @@
   // The notes, keyed on what they say and where, for the same reason as the lattice.
   let notesKey = null;
   $effect(() => {
-    const key = notes.map(n => `${n.key}${n.cell}${n.lines}`).join('|');
+    const key = notes.map(n => `${n.key}${n.rider ? 'rider' : n.cell}${n.flash}${JSON.stringify(n.lines)}`).join('|');
     if (!ready || !stage || key === notesKey) return;
     notesKey = key;
     scheduleLabels();
@@ -645,9 +657,14 @@
       {/each}
     </svg>
   {/if}
-  {#each noteSpots as { key, lines, side, x, y } (key)}
+  {#each noteSpots as { key, lines, flash, side, x, y } (key)}
     <span class="note {side}" style:left="{x}px" style:top="{y}px" aria-hidden="true" bind:this={noteEls[key]}>
-      {#each lines as line, i (i)}<span>{line}</span>{/each}
+      <!-- Remade on each flash, so a changed part's animation starts again. -->
+      {#key flash}
+        {#each lines as line, i (i)}
+          <span>{#each line as { text, changed }, j (j)}<span class:changed>{text}</span>{/each}</span>
+        {/each}
+      {/key}
     </span>
   {/each}
 
@@ -769,6 +786,28 @@
 
   .note.below {
     transform: translate(-50%, 0);
+  }
+
+  /* A part of a callout that has just changed: lit in the lattice's colour, then
+     faded back. Held lit for a reader who has asked for reduced motion. */
+  .changed {
+    border-radius: 0.2em;
+    animation: changed 1.6s ease-out;
+  }
+
+  @keyframes changed {
+    from, 25% {
+      background: var(--grid-color);
+      color: var(--card-footer);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .changed {
+      animation: none;
+      background: var(--grid-color);
+      color: var(--card-footer);
+    }
   }
 
   .note.left {

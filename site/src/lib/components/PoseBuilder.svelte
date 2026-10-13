@@ -4,6 +4,11 @@
   // orientation the stepper says, and only its two ends are read out — the pose the
   // train starts in and the pose the last piece leaves it in.
   //
+  // The end is a ghost train riding the track as it grows: each piece added is
+  // ridden once it is down, and one taken off is ridden back off. Its callout
+  // follows it, and reads the pose it last came to rest in — a pose holds only
+  // between pieces — with whatever that piece changed picked out.
+  //
   // In the page it cannot be handled, so a drag over it scrolls the page: turning,
   // zooming and panning are full screen's, behind `ExpandingCard`'s button. The
   // buttons and the keys work either way.
@@ -15,7 +20,7 @@
   import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, extentOf } from '$lib/scenes.js';
-  import { describePose, poseLabel, readerFrame } from '$lib/catalogue.js';
+  import { describePose, poseAxes, readerFrame } from '$lib/catalogue.js';
   import { claimKeys } from '$lib/keys.js';
   import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
   import { startCell } from '../../../../src/track.js';
@@ -45,19 +50,42 @@
   const empty = $derived(!letters);
 
   const grid = $derived(extentOf([...view.pieces, { material: [], train: [start.cell, end.cell] }]));
-  const ghosts = $derived([
-    { ...start, type: view.pieces[0]?.type ?? 'straight', tint: 'before', floor: false },
-    { ...end, type: 'straight', tint: 'after', floor: false },
+  const ghosts = $derived([{ ...start, type: view.pieces[0]?.type ?? 'straight', tint: 'before', floor: false }]);
+
+  // Where the riding train last came to rest, and where it was before that; each
+  // arrival is a new `flash`, which picks out what changed.
+  let reached = $state(null);
+  let previous = $state(null);
+  let flash = $state(0);
+  const rider = {
+    tint: 'after',
+    onArrive: head => {
+      previous = head && reached;
+      reached = head;
+      flash += 1;
+    },
+  };
+
+  /** A callout's line: `label: (a, b, c)`, each value marked if it differs from `was`'s. */
+  const line = (label, values, was, gap) => [
+    { text: `${label}: (` },
+    ...values.flatMap((text, i) => [
+      ...(i ? [{ text: gap }] : []),
+      { text, changed: Boolean(was) && was[i] !== text },
+    ]),
+    { text: ')' },
+  ];
+  const position = cell => readerFrame(cell).map(String);
+  const readout = ({ cell, pose: p }, was = null) => [
+    line('Position', position(cell), was && position(was.cell), ', '),
+    line('Orientation', poseAxes(p), was && poseAxes(was.pose), ' '),
+  ];
+  // The start's callout stands to the left, clear of the axis arrows below. The
+  // end's is on the train, and stays there even once the loop closes on the start.
+  const notes = $derived([
+    { key: 'before', cell: start.cell, side: 'left', lines: readout(start) },
+    { key: 'after', rider: true, flash, lines: readout(reached ?? start, previous) },
   ]);
-  const note = (key, { cell, pose: p }, side) => ({
-    key,
-    cell,
-    side,
-    lines: [`Position: (${readerFrame(cell).join(', ')})`, `Orientation: (${poseLabel(p)})`],
-  });
-  // The start's callout stands to the left, clear of the axis arrows below. A closed
-  // loop, or no track at all, ends where it starts, so one callout says both.
-  const notes = $derived([note('before', start, 'left'), ...(view.closed ? [] : [note('after', end)])]);
 
   let expanded = $state(false);
   let handled = $state(false);
@@ -112,6 +140,7 @@
         origin={empty ? null : { ...grid, cell: false }}
         ghosts={empty ? [] : ghosts}
         notes={empty ? [] : notes}
+        {rider}
         label="The track {letters || 'with no pieces'}, entered {describePose(start.pose)}, leaving the train {describePose(end.pose)}"
       />
       {#if empty}<BuildPrompt />{/if}

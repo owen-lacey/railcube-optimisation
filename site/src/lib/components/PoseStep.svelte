@@ -25,9 +25,13 @@
   const piece = $derived(PIECES.find(p => p.type === active));
   const scene = $derived(pieceMove(active, { pose, cell: START }));
   const camera = $derived({ ...scene.camera, zoom: scene.camera.zoom * ROOM });
+  const readout = (cell, p) => [
+    [{ text: `Position: (${readerFrame(cell).join(', ')})` }],
+    [{ text: `Pose: (${poseLabel(p)})` }],
+  ];
   const notes = $derived([
-    { key: 'before', cell: START, lines: [`Position: (${readerFrame(START).join(', ')})`, `Pose: (${poseLabel(pose)})`] },
-    { key: 'after', cell: scene.after.cell, lines: [`Position: (${readerFrame(scene.after.cell).join(', ')})`, `Pose: (${poseLabel(scene.after.pose)})`] },
+    { key: 'before', cell: START, lines: readout(START, pose) },
+    { key: 'after', cell: scene.after.cell, lines: readout(scene.after.cell, scene.after.pose) },
   ]);
 </script>
 

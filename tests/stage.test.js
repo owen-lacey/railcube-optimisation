@@ -33,7 +33,7 @@ import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, labelSpots } from '../site/src/lib/render/axes.js';
 import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { screenAxes, CAMERA } from '../site/src/lib/render/camera.js';
-import { trackPath } from '../site/src/lib/render/rail.js';
+import { trackPath, trainAt } from '../site/src/lib/render/rail.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { orbit, slid, zoomed } from '../site/src/lib/render/controls.js';
 
@@ -789,13 +789,13 @@ test('a pick-up carries a cube by its centre of mass, not by a corner', () => {
 // exactly what watching the meshes can settle.
 
 /** Type a shape onto a stage, one growth at a time, and run each out. */
-function typing({ pace = 0.1, arrival = 'flip' } = {}) {
+function typing({ pace = 0.1, arrival = 'flip', ride = null } = {}) {
   const clock = fakeClock();
   const { handles, stage } = staged();
   let shown = [];
 
-  const type = shape => {
-    const view = openScene(shape);
+  const type = (shape, startPose = 'DF') => {
+    const view = openScene(shape, startPose);
     // What the viewer does before running the phase: every cube past the point the
     // two layouts stop agreeing is detached, and leaves.
     let prefix = 0;
@@ -806,11 +806,11 @@ function typing({ pace = 0.1, arrival = 'flip' } = {}) {
     const leaving = [];
     for (let i = prefix; i < shown.length; i++) {
       const cube = ids[i] && stage.detach(ids[i]);
-      if (cube) leaving.push({ cube, piece: shown[i] });
+      if (cube) leaving.push({ cube, piece: shown[i], index: i });
     }
 
     stage.run([growPhase(stage, view.pieces, {
-      pace, leaving, arrival, drive: view.closed, alarm: view.offender && { id: view.offender.id, pulse: true },
+      pace, leaving, arrival, ride, drive: view.closed, alarm: view.offender && { id: view.offender.id, pulse: true },
     })]);
     stage.start();
     shown = view.pieces;
@@ -964,6 +964,100 @@ test('there is no train until the loop closes, and then there is one', () => {
   assert.equal(closed.closed, true);
   clock.run(4);
   assert.equal(alive(), 5, 'four cubes and exactly one train');
+});
+
+// ---- The rider --------------------------------------------------------------
+
+/** A typing stage with a rider, and every head it comes to rest at. */
+function ridden(options = {}) {
+  const arrivals = [];
+  const typed = typing({ ...options, ride: { tint: 'after', onArrive: head => arrivals.push(head) } });
+  const rider = () => typed.handles.find(h => h.name === OVERLAY.rider && !h.disposed);
+  return { ...typed, arrivals, rider };
+}
+
+/** Where a train at rest at `head` stands, as the 'after' ghost always has. */
+const stance = head => trainAt('straight', head.cell, head.pose);
+
+test('the rider rides a new piece once it has landed, and comes to rest at its end', () => {
+  const { stage, clock, type, arrivals, rider } = ridden({ arrival: 'fade' });
+  const [piece] = openScene('L').pieces;
+
+  type('L');
+  assert.deepEqual(arrivals.map(a => a.index), [0], 'it did not stand at the start at once');
+  const start = rider().transforms.at(-1);
+  assert.ok(near(start.position, stance(piece).position), 'it did not stand where the train starts');
+
+  let movedWhileFlying = false;
+  clock.run(4, () => {
+    const cube = stage.cubes.get('1L');
+    const down = cube && cube.opacity === 1;
+    if (!down && !near(rider().transforms.at(-1).position, start.position)) movedWhileFlying = true;
+  });
+  assert.equal(movedWhileFlying, false, 'it set off before the piece was down');
+  assert.deepEqual(arrivals.map(a => a.index), [0, 1]);
+  assert.deepEqual(arrivals[1].cell, openScene('L').head.cell);
+  assert.equal(arrivals[1].pose, openScene('L').head.pose);
+  const end = rider().transforms.at(-1);
+  assert.ok(near(end.position, stance(arrivals[1]).position), 'it did not come to rest where the train stands');
+  assert.ok(gap(end.basis, stance(arrivals[1]).basis) < 1e-6, 'it came to rest turned');
+});
+
+test('the rider rides on smoothly, curves included', () => {
+  const { clock, type, rider } = ridden();
+  type('LIRO');
+  const spots = [];
+  clock.run(8, () => spots.push(rider().transforms.at(-1)));
+  const jumps = spots.slice(1).map((s, i) => Math.hypot(...s.position.map((v, k) => v - spots[i].position[k])));
+  const turns = spots.slice(1).map((s, i) => gap(s.basis, spots[i].basis));
+  // Two cubes a second is under a unit a frame; the bound leaves room for a curve's lean.
+  assert.ok(Math.max(...jumps) < 2, `it jumped ${Math.max(...jumps).toFixed(2)} units in a frame`);
+  assert.ok(Math.max(...turns) < 0.2, `it snapped round by ${Math.max(...turns).toFixed(2)} in a frame`);
+});
+
+test('pieces added faster than they can be ridden are ridden in turn', () => {
+  const { clock, type, arrivals } = ridden();
+  type('S');
+  clock.run(0.05);
+  type('SL');
+  clock.run(0.05);
+  type('SLS');
+  clock.run(8);
+  assert.deepEqual(arrivals.map(a => a.index), [0, 1, 2, 3]);
+  assert.deepEqual(arrivals.at(-1).cell, openScene('SLS').head.cell);
+});
+
+test('a piece taken off is ridden back off, and leaves only once the train is clear of it', () => {
+  const { stage, clock, type, arrivals, rider } = ridden();
+  type('SL');
+  clock.run(8);
+  const leaving = handleOf(stage.cubes.get('1L'));
+  const before = rider().transforms.length;
+
+  type('S');
+  let goneBeforeClear = false;
+  clock.run(8, () => {
+    if (leaving.disposed && arrivals.at(-1).index !== 1) goneBeforeClear = true;
+  });
+  assert.ok(rider().transforms.length - before > 10, 'it jumped back rather than riding');
+  assert.equal(goneBeforeClear, false, 'the piece went from under the train');
+  assert.equal(leaving.disposed, true, 'the piece never went');
+  assert.deepEqual(arrivals.map(a => a.index), [0, 1, 2, 1]);
+  assert.ok(near(rider().transforms.at(-1).position, stance(arrivals.at(-1)).position));
+});
+
+test('a new start puts the rider there, and an empty track takes it off and says so', () => {
+  const { clock, type, arrivals, rider } = ridden();
+  type('S');
+  clock.run(8);
+  type('S', 'LF');
+  clock.run(8);
+  assert.deepEqual(arrivals.map(a => [a.index, a.pose]), [[0, 'DF'], [1, 'DF'], [0, 'DF'], [0, 'LF'], [1, 'LF']],
+    'it did not ride back to the old start, move to the new one and ride on from there');
+
+  type('');
+  assert.equal(rider(), undefined, 'the rider outlived its track');
+  assert.equal(arrivals.at(-1), null);
 });
 
 test('a piece with nowhere to go is drawn there, and pulses', () => {

@@ -20,5 +20,5 @@ export const Default = {};
 /** Started with the train standing on the left wall. */
 export const OnAWall = { args: { initial: 'LF' } };
 
-/** Four left curves close the loop, so its two ends are one callout and adding stops. */
+/** Four left curves close the loop, so the train comes to rest where it started and adding stops. */
 export const Closed = { args: { shape: 'LLLL' } };

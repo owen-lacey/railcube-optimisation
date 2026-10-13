@@ -27,6 +27,7 @@
 import { CUBE, ALARM, ALARM_FLASH, ALARM_PERIOD } from './dimensions.js';
 import { cubePosition, poseRotation, axisAngle, compose, turnToward, add, through } from './vec.js';
 import { createDriver } from './drive.js';
+import { backwards, forwards, riding } from './ride.js';
 import { originAt, comAt } from '../shapes.js';
 import { identify } from '../../../../src/layouts.js';
 
@@ -299,11 +300,13 @@ const ARRIVALS = {
 /**
  * Where each leaving cube is going: the standoff behind its slot, turned by the
  * tilt its arrival comes in with. The last piece of the route goes first, so a
- * tail is taken off the way it was put on, backwards.
+ * tail is taken off the way it was put on, backwards — and none goes before
+ * `offAt(index, piece)`, when a rider backing off it is clear.
  */
-function departuresFor(leaving, { beat, flight }, tilt) {
-  return [...leaving].reverse().map(({ cube, piece }, i) => {
+function departuresFor(leaving, { beat, flight }, tilt, offAt = null) {
+  return [...leaving].reverse().map(({ cube, piece, index }, i) => {
     const basis = poseRotation(piece.pose);
+    const at = Math.max(i * beat, offAt?.(index, piece) ?? 0);
     return {
       cube,
       from: { basis: cube.basis, position: cube.position, opacity: cube.opacity },
@@ -311,10 +314,24 @@ function departuresFor(leaving, { beat, flight }, tilt) {
         basis: compose(axisAngle(basis[0], tilt), basis),
         position: add(cubePosition(piece), scale(basis[1], STANDOFF * CUBE)),
       },
-      at: i * beat,
-      ends: i * beat + flight,
+      at,
+      ends: at + flight,
       gone: false,
     };
+  });
+}
+
+/**
+ * When the rider may ride each piece of `pieces`: once it, and every piece before
+ * it, has landed. A revisit has no slot of its own, so it waits on the last that does.
+ */
+function readiness(pieces, slots, arriving) {
+  const lands = new Map(arriving.map(slot => [slot.id, slot.lands]));
+  let s = 0;
+  let latest = 0;
+  return pieces.map(piece => {
+    if (!piece.revisit) latest = Math.max(latest, lands.get(slots[s++].id) ?? 0);
+    return latest;
   });
 }
 
@@ -442,14 +459,27 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
  * not stop, so the phase never finishes while one is pulsing.
  *
  * `arrival` is how pieces come and go — a name in `ARRIVALS`.
+ *
+ * `ride` is a ghost train riding the track as it grows, `{ tint, onArrive }`, or
+ * null for none — see ride.js. Each new piece is ridden once it has landed, and a
+ * piece taken off is ridden backwards and leaves once the train is off it.
+ * `onArrive` is told each head the train comes to rest at, and null when there
+ * are no pieces for it to stand on and it goes. A `leaving` entry carries its
+ * `index` in the route it was standing in, so the rider can tell which it is on.
  */
 export function growPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = false, alarm = null, instant = false, leaving = [], arrival = 'flip',
+  pace = PACE, speed = 1, drive = false, alarm = null, instant = false, leaving = [], arrival = 'flip', ride = null,
 } = {}) {
   const motion = ARRIVALS[arrival];
   const timing = timingFor(pace, speed, 0);
   const slots = slotsFor(stage, pieces, timing);
-  const departing = departuresFor(leaving, timing, motion.tilt);
+  if (ride && !pieces.length && stage.riderSpot()) {
+    stage.dropRider();
+    ride.onArrive?.(null);
+  }
+  const rider = ride && pieces.length ? stage.rider(ride.tint) : null;
+  const back = rider && backwards(rider, pieces);
+  const departing = departuresFor(leaving, timing, motion.tilt, back?.offAt);
   // Nothing arrives until everything leaving has gone, so a piece put in the place
   // of one taken off never passes through it on the way.
   const clear = departing.reduce((last, d) => Math.max(last, d.ends), 0);
@@ -476,6 +506,12 @@ export function growPhase(stage, pieces, {
   // It is minted in ALARM already — `openScene` paints it — so the first repaint
   // due is the pale one, half a period after it lands.
   const flag = alarmFor(stage, slots, alarm, slot => (arriving.includes(slot) ? slot.lands : 0));
+
+  // The rider backs off what is leaving first, then rides each piece once it is down.
+  const ready = rider && readiness(pieces, slots, arriving);
+  const rides = rider && riding(rider, {
+    route: pieces, back, ahead: forwards(back, pieces, i => ready[i]), onArrive: ride.onArrive, instant,
+  });
 
   const driver = drive ? createDriver(stage) : null;
   const closes = arriving.reduce((last, s) => Math.max(last, s.lands), clear) + timing.hold;
@@ -522,10 +558,12 @@ export function growPhase(stage, pieces, {
         });
       }
 
+      const riderMoving = rides ? rides(elapsed) : false;
+
       // A piece that cannot go down keeps saying so.
       if (flag?.(elapsed)) return undefined;
       if (!driver) {
-        const settled = next === arriving.length && !flying.length && !leavingStill();
+        const settled = next === arriving.length && !flying.length && !leavingStill() && !riderMoving;
         return instant || settled ? false : undefined;
       }
       if (closedAt === null && elapsed >= (instant ? 0 : closes)) {

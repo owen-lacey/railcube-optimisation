@@ -112,8 +112,11 @@ const HEADING_WORD = { U: 'up', D: 'down', L: 'left', R: 'right', F: 'forwards',
 // The reader's axes (docs/coordinates.md): x left, y forwards, z up.
 const AXIS = { L: '+x', R: '−x', F: '+y', B: '−y', U: '+z', D: '−z' };
 
+/** A pose's floor and heading as the post writes them: `DF` is `['−z', '+y']`. */
+export const poseAxes = pose => [AXIS[pose[0]], AXIS[pose[1]]];
+
 /** A pose as the post writes it: `DF` is floor −z, heading +y, "−z +y". */
-export const poseLabel = pose => `${AXIS[pose[0]]} ${AXIS[pose[1]]}`;
+export const poseLabel = pose => poseAxes(pose).join(' ');
 
 /** A pose as the post words it: `DL` is "down face, heading left (−z +x)". */
 export const describePose = pose =>

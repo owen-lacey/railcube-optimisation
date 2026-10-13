@@ -16,7 +16,28 @@ import { cross, add, sub, len, unit, toCell } from './vec.js';
 
 // The height of the body's centre above the rail — the point whose motion the
 // eye reads as the train's speed. Matches where `trainBody` puts the shell.
-const BODY_REF = BODY_Z + TRAIN_H / 2;
+export const BODY_REF = BODY_Z + TRAIN_H / 2;
+
+/**
+ * The rail `f` of the way from sample `a` to sample `b`, as a sample.
+ *
+ * Both the heading and the up direction are blended and squared back up, so a
+ * train leans into the corners instead of snapping between facets.
+ */
+export function railPoint(a, b, f) {
+  const blend = (p, q) => p.map((v, i) => v + (q[i] - v) * f);
+  const fwd = unit(blend(a.fwd, b.fwd));
+  const raw = blend(a.up, b.up);
+  const dot = raw.reduce((acc, v, i) => acc + v * fwd[i], 0);
+  const up = unit(raw.map((v, i) => v - dot * fwd[i])); // square up against the heading
+  return { pos: blend(a.pos, b.pos), fwd, up };
+}
+
+/** A train's basis standing on a rail sample, `[right, fwd, up]`. */
+export const frameOf = ({ fwd, up }) => [cross(fwd, up), fwd, up];
+
+/** Where a train's body is, standing on a rail sample. */
+export const bodyOf = ({ pos, up }) => add(pos, up.map(v => v * BODY_REF));
 
 // The train's polygons are authored facing forwards, and it is mounted turned by
 // nothing. Its colours carry the lighting of that authored pose (see `carriedShade`
@@ -55,8 +76,7 @@ export function createDriver(stage, { byPiece = false } = {}) {
     // therefore makes the visible train lurch through the red pieces and dawdle
     // through the orange ones. Measuring the gaps on the body's own path instead
     // holds the thing you can actually see at SPEED, and lets the wheels vary.
-    const ref = p => p.pos.map((v, i) => v + p.up[i] * BODY_REF);
-    gaps = path.map((p, i) => len(sub(ref(path[(i + 1) % path.length]), ref(p))));
+    gaps = path.map((p, i) => len(sub(bodyOf(path[(i + 1) % path.length]), bodyOf(p))));
     lap = gaps.reduce((a, b) => a + b, 0);
     // `trackPath` lays the same number of samples down for every piece, revisits
     // included, so piece i begins at sample i × per and a crossed cross begins twice.
@@ -103,25 +123,15 @@ export function createDriver(stage, { byPiece = false } = {}) {
   /**
    * Put the train `d` along the lap, measured on the body's path, and say where
    * its body is.
-   *
-   * Between two rail samples both the heading and the up direction are blended
-   * and squared back up, so the train leans into the corners instead of snapping
-   * between facets.
    */
   function place(d) {
     if (d < travelled) { k = 0; travelled = 0; } // lapped, or dragged back: from the start
     while (d - travelled >= gaps[k]) { travelled += gaps[k]; k = (k + 1) % path.length; }
 
-    const a = path[k], b = path[(k + 1) % path.length], f = (d - travelled) / gaps[k];
-    const blend = (p, q) => p.map((v, i) => v + (q[i] - v) * f);
-    const fwd = unit(blend(a.fwd, b.fwd));
-    const raw = blend(a.up, b.up);
-    const dot = raw.reduce((acc, v, i) => acc + v * fwd[i], 0);
-    const up = unit(raw.map((v, i) => v - dot * fwd[i])); // square up against the heading
-    const pos = blend(a.pos, b.pos);
-    mesh.place([cross(fwd, up), fwd, up], pos);
+    const at = railPoint(path[k], path[(k + 1) % path.length], (d - travelled) / gaps[k]);
+    mesh.place(frameOf(at), at.pos);
     stage.invalidate();
-    return add(pos, up.map(v => v * BODY_REF));
+    return bodyOf(at);
   }
 
   function dispose() {

@@ -41,7 +41,8 @@ import { backdropOf } from './blueprint.js';
 import { PROJ } from '../../../../src/track.js';
 import { originCell, axisArrows, axisAnchor, labelSpots } from './axes.js';
 import { TRAIN_CELL_INSET, LIGHT, ALARM_SWELL, ALARM_OPACITY } from './dimensions.js';
-import { toWorld } from './vec.js';
+import { toWorld, add } from './vec.js';
+import { BODY_REF } from './drive.js';
 import { trainAt } from './rail.js';
 import { trainBody } from './train.js';
 
@@ -49,7 +50,7 @@ import { trainBody } from './train.js';
  * The names the overlays' meshes carry, so a test can find them in the scene. A
  * ghost's tint follows its name, `ghost-before` or `ghost-after`.
  */
-export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 'train-cell', ghost: 'ghost' };
+export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 'train-cell', ghost: 'ghost', rider: 'rider' };
 
 // The overlays draw after the solids, and in this order among themselves. With
 // depth writes off that is what PolyCSS's painter's order came to, measured to the
@@ -144,7 +145,7 @@ function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {})
  * `theme` is the overlay paint (see `readTheme` in renderer.js); `renderer` is what
  * draws — the page's shared one, or a stand-in for the tests.
  */
-export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPose, onCamera } = {}) {
+export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPose, onCamera, onRider } = {}) {
   const scene = new Scene();
   scene.add(new AmbientLight(0xffffff, LIGHT.ambient));
   const sun = new DirectionalLight(0xffffff, LIGHT.directional);
@@ -501,6 +502,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     pan = null;
     for (const item of [...cubes.values()]) item.dispose();
     cubes.clear();
+    rider?.dispose();
     invalidate();
   }
 
@@ -693,6 +695,46 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     invalidate();
   }
 
+  // ---- The rider ------------------------------------------------------------
+  //
+  // A ghost train that rides a growing track, a piece at a time (see ride.js). The
+  // stage's rather than a phase's, like a cube, because a growing track replaces its
+  // phase on every letter and the train carries on from wherever it has got to. So
+  // it keeps the route it is on and how far along that it is, `x` pieces. `clear()`
+  // takes it, and so does `dropRider()`.
+
+  let rider = null;
+  const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+
+  /** The rider, mounted in `tint` if there is none yet. Whoever mounts it places it. */
+  function riderOf(tint) {
+    if (rider) return rider;
+    const { mesh, place } = movingMesh(scene, standingTrain(), paint[tint], IDENTITY, [0, 0, 0]);
+    mesh.name = OVERLAY.rider;
+    mesh.renderOrder = ORDER.ghost;
+    const made = {
+      route: null,
+      x: 0,
+      // Where its body is, which is what a callout on it points at.
+      spot: null,
+      place(basis, position) {
+        place(basis, position);
+        made.spot = add(position, basis[2].map(v => v * BODY_REF));
+        invalidate();
+        onRider?.();
+      },
+      dispose() {
+        mesh.removeFromParent();
+        if (rider === made) rider = null;
+        invalidate();
+        onRider?.();
+      },
+      mesh,
+    };
+    rider = made;
+    return made;
+  }
+
   // ---- Filled cells ---------------------------------------------------------
   //
   // Cells picked out whether or not a train is driving, in the train cell's own
@@ -742,6 +784,9 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     project,
     outline,
     setGhosts,
+    rider: riderOf,
+    dropRider: () => rider?.dispose(),
+    riderSpot: () => rider?.spot ?? null,
     setFill,
     markTrainCell,
     markTrainPose,
