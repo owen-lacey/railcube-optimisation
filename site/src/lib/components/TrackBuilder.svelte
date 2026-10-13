@@ -21,6 +21,7 @@
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
   import PieceKeys from './PieceKeys.svelte';
+  import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
   import { claimKeys } from '$lib/keys.js';
@@ -62,6 +63,8 @@
 
   let expanded = $state(false);
   let handled = $state(false);
+  // With no pieces there is nothing to turn about, so the viewer is a prompt only.
+  const empty = $derived(!letters);
 
   // In the page the keys go to whichever builder is mostly on screen (`keys.js`);
   // full screen, the card hands them over itself.
@@ -98,11 +101,12 @@
         transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR }}
         alarm={view.offender?.id ?? null}
         train={view.closed ? {} : null}
-        controls={handled ? attachControls : null}
+        controls={handled && !empty ? attachControls : null}
         aspect={expanded ? 'auto' : shapeOfViewer}
         blueprint
         label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
       />
+      {#if empty}<BuildPrompt />{/if}
     {/snippet}
   </ExpandingCard>
 </div>

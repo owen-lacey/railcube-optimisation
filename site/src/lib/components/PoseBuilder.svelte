@@ -12,6 +12,7 @@
   import ExpandingCard from './ExpandingCard.svelte';
   import OrientationStepper from './OrientationStepper.svelte';
   import PieceKeys from './PieceKeys.svelte';
+  import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, extentOf, BUILD_FLOOR } from '$lib/scenes.js';
   import { describePose, poseLabel, readerFrame } from '$lib/catalogue.js';
@@ -39,6 +40,9 @@
   // the model calls closed, but is not a loop.
   const closed = $derived(Boolean(letters) && view.closed);
   const done = $derived(Boolean(view.offender) || closed || letters.length >= LIMIT);
+
+  // With no pieces it shows only a prompt: no lattice, ghost or callout, and no handling.
+  const empty = $derived(!letters);
 
   const grid = $derived(extentOf([...view.pieces, { material: [], train: [start.cell, end.cell] }]));
   const ghosts = $derived([
@@ -99,14 +103,15 @@
         pieces={view.pieces}
         transition={{ kind: 'grow', from: BUILD_FLOOR, arrival: 'fade' }}
         alarm={view.offender?.id ?? null}
-        controls={handled ? attachControls : null}
+        controls={handled && !empty ? attachControls : null}
         aspect={expanded ? 'auto' : aspect}
         blueprint
-        {grid}
-        {ghosts}
-        {notes}
+        grid={empty ? null : grid}
+        ghosts={empty ? [] : ghosts}
+        notes={empty ? [] : notes}
         label="The track {letters || 'with no pieces'}, entered {describePose(start.pose)}, leaving the train {describePose(end.pose)}"
       />
+      {#if empty}<BuildPrompt />{/if}
     {/snippet}
   </ExpandingCard>
 </div>
