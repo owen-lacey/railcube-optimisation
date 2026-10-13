@@ -779,7 +779,7 @@ test('a pick-up carries a cube by its centre of mass, not by a corner', () => {
 // exactly what watching the meshes can settle.
 
 /** Type a shape onto a stage, one growth at a time, and run each out. */
-function typing({ pace = 0.1 } = {}) {
+function typing({ pace = 0.1, arrival = 'flip' } = {}) {
   const clock = fakeClock();
   const { handles, stage } = staged();
   let shown = [];
@@ -800,7 +800,7 @@ function typing({ pace = 0.1 } = {}) {
     }
 
     stage.run([growPhase(stage, view.pieces, {
-      pace, leaving, drive: view.closed, alarm: view.offender && { id: view.offender.id, pulse: true },
+      pace, leaving, arrival, drive: view.closed, alarm: view.offender && { id: view.offender.id, pulse: true },
     })]);
     stage.start();
     shown = view.pieces;
@@ -840,6 +840,33 @@ test('a new piece is minted in flight', () => {
   const arrival = handles.at(-1);
   assert.ok(arrival.transforms.length > 1, 'a mint did not fly');
   assert.deepEqual(stage.cubes.get('1I').position, restingPlace(openScene('LI').pieces[1]));
+});
+
+test('a faded arrival slides in square at a steady rate, fading in, and lands solid', () => {
+  const { stage, clock, type } = typing({ arrival: 'fade' });
+  const [, piece] = openScene('LI').pieces;
+  const basis = poseRotation(piece.pose);
+  const home = restingPlace(piece);
+
+  type('LI');
+  const seen = [];
+  clock.run(4, () => {
+    const cube = stage.cubes.get('1I');
+    if (cube) seen.push({ opacity: cube.opacity, basis: cube.basis, out: cube.position.map((v, k) => v - home[k]) });
+  });
+
+  const flight = seen.filter(s => s.opacity < 1);
+  assert.ok(flight.length > 3, 'it did not fade in');
+  for (const [i, s] of flight.entries()) {
+    assert.ok(gap(s.basis, basis) < 1e-9, `frame ${i} was turned`);
+    if (i) assert.ok(s.opacity > flight[i - 1].opacity, `frame ${i} got fainter`);
+  }
+  // Steady: the distance still to go falls by the same amount every frame.
+  const along = flight.map(s => s.out.reduce((sum, v, k) => sum + v * basis[1][k], 0));
+  const steps = along.slice(1).map((v, i) => along[i] - v);
+  assert.ok(Math.max(...steps) - Math.min(...steps) < 1e-6, 'it eased rather than sliding steadily');
+  assert.equal(stage.cubes.get('1I').opacity, 1, 'it landed see-through');
+  assert.deepEqual(stage.cubes.get('1I').position, home);
 });
 
 test('backspace slides one cube off and leaves the rest standing', () => {

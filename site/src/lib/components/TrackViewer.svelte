@@ -33,7 +33,8 @@
     //           `{ pace, speed, handover, drop, reach }`.
     //   grow    the layout *extends* the one that is there: whatever the two have in
     //           common is left standing and only the rest arrives. The one kind whose
-    //           camera moves — see `showGrown`. `{ pace, speed, from }`.
+    //           camera moves — see `showGrown`. `{ pace, speed, from, arrival }`,
+    //           `arrival` a name in build.js's `ARRIVALS`.
     //   move    every cube the two layouts share is carried over to its new slot, a
     //           cube with no slot fades out where it stands, and one with no cube
     //           comes in from beyond the edge of the picture. Framed on `camera`, as
@@ -243,9 +244,10 @@
       if (cube) leaving.push({ cube, piece: before[i] });
     }
 
-    const { pace, speed, from } = settings();
+    const { pace, speed, from, arrival } = settings();
     stage.run([growPhase(stage, next, {
       leaving,
+      arrival,
       pace: Number(pace),
       speed: Number(speed),
       drive: Boolean(train),

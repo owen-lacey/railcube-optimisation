@@ -255,18 +255,61 @@ function unslide(leaving, s) {
 }
 
 /**
- * Where each leaving cube is going: the standoff behind its slot, turned by the
- * tilt a mint arrives with. The last piece of the route goes first, so a tail is
- * taken off the way it was put on, backwards.
+ * How a growing track's pieces come and go, by name.
+ *
+ *   flip  a mint's arrival: eased down the connector axis, tumbling end over end
+ *         as it comes, and out again the same way.
+ *   fade  square the whole way, down the connector axis at a steady rate, fading
+ *         in as it comes and out as it goes.
+ *
+ * Each says the tilt a departure turns to, and how a piece slides on, resumes a
+ * cut-short arrival, lands and slides off.
  */
-function departuresFor(leaving, { beat, flight }) {
+const ARRIVALS = {
+  flip: {
+    tilt: TILT,
+    slide,
+    resume,
+    land: slot => slot.cube.place(slot.basis, slot.position),
+    unslide,
+  },
+  fade: {
+    tilt: 0,
+    slide(slot, s) {
+      const t = clamp(s);
+      slot.cube.place(slot.basis, add(slot.position, scale(slot.standoff, 1 - t)));
+      slot.cube.fade(t);
+    },
+    resume(slot, s) {
+      const t = clamp(s);
+      slot.cube.place(slot.basis, lerp(slot.from.position, slot.position, t));
+      slot.cube.fade(slot.from.opacity + (1 - slot.from.opacity) * t);
+    },
+    land(slot) {
+      slot.cube.place(slot.basis, slot.position);
+      slot.cube.fade(1);
+    },
+    unslide(leaving, s) {
+      const t = clamp(s);
+      leaving.cube.place(leaving.to.basis, lerp(leaving.from.position, leaving.to.position, t));
+      leaving.cube.fade(leaving.from.opacity * (1 - t));
+    },
+  },
+};
+
+/**
+ * Where each leaving cube is going: the standoff behind its slot, turned by the
+ * tilt its arrival comes in with. The last piece of the route goes first, so a
+ * tail is taken off the way it was put on, backwards.
+ */
+function departuresFor(leaving, { beat, flight }, tilt) {
   return [...leaving].reverse().map(({ cube, piece }, i) => {
     const basis = poseRotation(piece.pose);
     return {
       cube,
-      from: { basis: cube.basis, position: cube.position },
+      from: { basis: cube.basis, position: cube.position, opacity: cube.opacity },
       to: {
-        basis: compose(axisAngle(basis[0], TILT), basis),
+        basis: compose(axisAngle(basis[0], tilt), basis),
         position: add(cubePosition(piece), scale(basis[1], STANDOFF * CUBE)),
       },
       at: i * beat,
@@ -395,13 +438,16 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
  * `alarm` is a cube the model has rejected — a piece that has been asked to go
  * somewhere it cannot; see `alarmFor`. It pulses from the moment it lands and does
  * not stop, so the phase never finishes while one is pulsing.
+ *
+ * `arrival` is how pieces come and go — a name in `ARRIVALS`.
  */
 export function growPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = false, alarm = null, instant = false, leaving = [],
+  pace = PACE, speed = 1, drive = false, alarm = null, instant = false, leaving = [], arrival = 'flip',
 } = {}) {
+  const motion = ARRIVALS[arrival];
   const timing = timingFor(pace, speed, 0);
   const slots = slotsFor(stage, pieces, timing);
-  const departing = departuresFor(leaving, timing);
+  const departing = departuresFor(leaving, timing, motion.tilt);
   // Nothing arrives until everything leaving has gone, so a piece put in the place
   // of one taken off never passes through it on the way.
   const clear = departing.reduce((last, d) => Math.max(last, d.ends), 0);
@@ -415,8 +461,8 @@ export function growPhase(stage, pieces, {
   let queued = 0;
   for (const slot of arriving) {
     if (slot.pickUp) {
-      const { basis, position } = claim(stage, slot);
-      slot.from = { basis, position };
+      const { basis, position, opacity } = claim(stage, slot);
+      slot.from = { basis, position, opacity };
       slot.at = 0;
     } else {
       slot.at = clear + queued++ * timing.beat;
@@ -443,7 +489,7 @@ export function growPhase(stage, pieces, {
         d.cube.dispose();
         d.gone = true;
       } else {
-        unslide(d, (elapsed - d.at) / timing.flight);
+        motion.unslide(d, (elapsed - d.at) / timing.flight);
       }
     }
   }
@@ -466,10 +512,10 @@ export function growPhase(stage, pieces, {
         }
         flying = flying.filter(slot => {
           if (elapsed >= slot.lands) {
-            slot.cube.place(slot.basis, slot.position);   // home, exactly
+            motion.land(slot);   // home, exactly
             return false;
           }
-          (slot.pickUp ? resume : slide)(slot, (elapsed - slot.at) / timing.flight);
+          (slot.pickUp ? motion.resume : motion.slide)(slot, (elapsed - slot.at) / timing.flight);
           return true;
         });
       }

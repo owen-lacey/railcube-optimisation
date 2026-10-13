@@ -97,7 +97,7 @@
       {@render toggle()}
       <TrackViewer
         pieces={view.pieces}
-        transition={{ kind: 'grow', from: BUILD_FLOOR }}
+        transition={{ kind: 'grow', from: BUILD_FLOOR, arrival: 'fade' }}
         alarm={view.offender?.id ?? null}
         controls={handled ? attachControls : null}
         aspect={expanded ? 'auto' : aspect}
