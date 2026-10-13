@@ -14,7 +14,7 @@
   import PieceKeys from './PieceKeys.svelte';
   import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
-  import { openScene, extentOf, BUILD_FLOOR } from '$lib/scenes.js';
+  import { openScene, extentOf } from '$lib/scenes.js';
   import { describePose, poseLabel, readerFrame } from '$lib/catalogue.js';
   import { claimKeys } from '$lib/keys.js';
   import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
@@ -49,13 +49,15 @@
     { ...start, type: view.pieces[0]?.type ?? 'straight', tint: 'before', floor: false },
     { ...end, type: 'straight', tint: 'after', floor: false },
   ]);
-  const note = (key, { cell, pose: p }) => ({
+  const note = (key, { cell, pose: p }, side) => ({
     key,
     cell,
+    side,
     lines: [`Position: (${readerFrame(cell).join(', ')})`, `Orientation: (${poseLabel(p)})`],
   });
-  // A closed loop, or no track at all, ends where it starts, so one callout says both.
-  const notes = $derived(view.closed ? [note('before', start)] : [note('before', start), note('after', end)]);
+  // The start's callout stands to the left, clear of the axis arrows below. A closed
+  // loop, or no track at all, ends where it starts, so one callout says both.
+  const notes = $derived([note('before', start, 'left'), ...(view.closed ? [] : [note('after', end)])]);
 
   let expanded = $state(false);
   let handled = $state(false);
@@ -101,12 +103,13 @@
       {@render toggle()}
       <TrackViewer
         pieces={view.pieces}
-        transition={{ kind: 'grow', from: BUILD_FLOOR, arrival: 'fade' }}
+        transition={{ kind: 'grow', arrival: 'fade' }}
         alarm={view.offender?.id ?? null}
         controls={handled && !empty ? attachControls : null}
         aspect={expanded ? 'auto' : aspect}
         blueprint
         grid={empty ? null : grid}
+        origin={empty ? null : { ...grid, cell: false }}
         ghosts={empty ? [] : ghosts}
         notes={empty ? [] : notes}
         label="The track {letters || 'with no pieces'}, entered {describePose(start.pose)}, leaving the train {describePose(end.pose)}"

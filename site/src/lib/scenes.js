@@ -7,7 +7,7 @@
 import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step, SCORES } from '../../../src/track.js';
 import { routeOf, identify } from '../../../src/layouts.js';
 import { COLORS, ALARM, CUBE } from './render/dimensions.js';
-import { DIR, toWorld } from './render/vec.js';
+import { DIR, toWorld, toCell, add } from './render/vec.js';
 import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT, describedZoom } from './render/camera.js';
 import { axisAnchor, labelSpots } from './render/axes.js';
 
@@ -304,14 +304,12 @@ export const frameBox = ({ lo, hi }, { drop = 0 } = {}) => frame([{ material: [
 ] }]);
 
 /**
- * The box a track being typed is framed in, given the box it was framed in before.
+ * The box a track being typed is framed in: the track's own bounds, never smaller
+ * than `floor`.
  *
- * It only ever **grows**. A track under construction is not a shape that changes,
- * it is a shape that extends, so a frame derived afresh each keystroke would shrink
- * and re-centre on a backspace — the camera chasing the content, which is the thing
- * `fixedFrame` below exists to avoid. Growing only means the camera settles: it
- * moves while the track is reaching new ground and then stops, and nothing ever
- * gets smaller.
+ * A track under construction is not a shape that changes, it is a shape that
+ * extends or is cut back, so this grows as a piece reaches new ground and shrinks
+ * back as it is taken off. A piece that stays inside the box moves nothing.
  *
  * The floor is what stops a two-piece sketch being drawn at arm's length.
  */
@@ -324,12 +322,25 @@ const SKETCH_FLOOR = { lo: [-1, 0, -1], hi: [1, 1, 1] };
  */
 export const BUILD_FLOOR = { lo: [-4, 0, -4], hi: [4, 3, 4] };
 
-export function growBox(pieces, box = SKETCH_FLOOR) {
-  const { lo, hi } = pieces.length ? boundsOf(pieces) : box;
-  return {
-    lo: box.lo.map((v, a) => Math.min(v, lo[a])),
-    hi: box.hi.map((v, a) => Math.max(v, hi[a])),
-  };
+/** The smallest box holding both, `{ lo, hi }` each. */
+const unionBox = (a, b) => ({
+  lo: a.lo.map((v, k) => Math.min(v, b.lo[k])),
+  hi: a.hi.map((v, k) => Math.max(v, b.hi[k])),
+});
+
+export function sketchBox(pieces, floor = SKETCH_FLOOR) {
+  return pieces.length ? unionBox(floor, boundsOf(pieces)) : floor;
+}
+
+/**
+ * `box` widened to take in the origin's axis arrows and their labels, drawn for
+ * `origin` as `TrackViewer` takes it. The arrows stand outside the lattice, so a
+ * frame of the track alone would crop them.
+ */
+export function withAxes(box, { lo, hi, size, gap }) {
+  const anchor = axisAnchor({ lo, hi }, gap);
+  const cells = [anchor, ...labelSpots(size).map(({ position }) => add(position, anchor))].map(toCell);
+  return unionBox(box, boundsOf([{ material: cells }]));
 }
 
 /**

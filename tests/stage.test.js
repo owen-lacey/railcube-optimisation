@@ -1102,7 +1102,7 @@ test('a stuck track keeps asking for frames, and an unstuck one stops', () => {
 
 // ---- The camera that grows ------------------------------------------------
 
-test('the frame only ever grows, and eases rather than snapping', () => {
+test('the frame eases rather than snapping', () => {
   const clock = fakeClock();
   const { stage } = staged();
 

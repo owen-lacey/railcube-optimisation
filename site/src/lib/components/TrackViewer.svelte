@@ -8,7 +8,7 @@
   import { fadeInPhase, fadeOutPhase } from '../render/fade.js';
   import { gridLines } from '../render/grid.js';
   import { edgeLengths } from '../render/lengths.js';
-  import { fixedFrame, growBox, frameTight, cubeIds } from '$lib/scenes.js';
+  import { fixedFrame, sketchBox, withAxes, frameTight, cubeIds } from '$lib/scenes.js';
   import { identify } from '../../../../src/layouts.js';
   import { toWorld } from '../render/vec.js';
 
@@ -48,8 +48,8 @@
     // `handover` is when the build starts, measured from the moment the track is let
     // go of: the two run *together*. `reach` is how far the fixed frame reaches, in
     // cells — unset, the JS solver's own box constraint (see `fixedFrame`). `from` is
-    // the box a growing frame starts from — unset, the tight one a sketch starts in
-    // (see `growBox`).
+    // the smallest box a growing frame takes — unset, the tight one a sketch starts in
+    // (see `sketchBox`).
     transition = { kind: 'redraw' },
     // The train, as callbacks, or null for none. Read when a layout is shown, and a
     // new one shows the layout again.
@@ -84,9 +84,10 @@
     fill = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
-    // Callouts on cells, `{ key, lines, cell }` each: `lines` an array of strings, set
+    // Callouts on cells, `{ key, lines, cell, side }` each: `lines` an array of strings, set
     // outside what is drawn with a leader line to the middle of `cell`, and kept
-    // there as the camera moves. See `placeLabels`.
+    // there as the camera moves. `side` pins it 'left', 'above' or 'below'; unset,
+    // it is chosen. See `calloutsFor`.
     notes = [],
     // The ID of a cube the model has rejected, `5L` say, or null. It is drawn where
     // it was asked to go and pulses there, whatever the transition — see `alarmFor`
@@ -131,9 +132,6 @@
   // The `step` of a steps transition last shown, which is what makes the next one
   // an entrance or a move. Not `$state`, for the same reason as `shown`.
   let shownStep = undefined;
-  // Grow mode's frame, which only ever enlarges. Not `$state` for the same reason
-  // as `shown`: `showGrown` owns it, and the framing effect below must not read it.
-  let box = undefined;
   let handle = null;
   // This viewer's entry in `CHANGES`, fixed at mount.
   let change = null;
@@ -227,7 +225,7 @@
    * typed. Every cube past that point is detached from the stage and slides back
    * out the way it came, and `growPhase` slides the new tail on.
    *
-   * The frame grows with it, and only grows: see `growBox`.
+   * The frame grows and shrinks with it: see `sketchBox`.
    */
   function showGrown(next) {
     const before = shown ?? [];
@@ -255,12 +253,11 @@
       instant: reduced,
     })]);
 
-    // The one camera in the project that moves. It only ever *enlarges* — see
-    // `growBox` — so it settles once the track stops reaching new ground, rather
-    // than chasing every keystroke the way a per-layout frame would. A reader who
-    // has asked for reduced motion gets the same box, arrived at instantly.
-    box = growBox(next, box ?? from);
-    const shot = frameTight(box);
+    // The track's bounds, never smaller than `from` — see `sketchBox` — so a piece
+    // inside the box moves nothing, and one taken off shrinks the frame back. A
+    // reader who has asked for reduced motion gets the same box, arrived at instantly.
+    const box = sketchBox(next, from);
+    const shot = frameTight(origin ? withAxes(box, origin) : box);
     if (reduced) stage.frameTo(shot);
     else stage.panTo(shot);
   }
@@ -498,7 +495,9 @@
   // is clear of the piece depends on the pose, so a note stands outside the
   // outline of everything drawn instead: the upper half of the cells (on screen)
   // get theirs above it and the rest below, each straight over or under its cell,
-  // with a leader down or up to the cell's middle. So two notes never meet.
+  // with a leader down or up to the cell's middle. So two notes never meet. A note
+  // given a `side` takes it instead and is left out of that split; a left note
+  // stands beside the outline, level with its cell.
   //
   // Where there is not room outside the outline — a small viewer — a note is kept
   // inside the viewer instead, which needs its size: so it is measured once drawn,
@@ -513,19 +512,23 @@
     const bounds = stage.outline();
     if (!bounds || !notes.length) return [];
     const within = (v, size, room) => Math.min(Math.max(v, size + CALLOUT_GAP), room - CALLOUT_GAP);
-    const top = local({ x: bounds.left, y: bounds.top }).y;
+    const { x: left, y: top } = local({ x: bounds.left, y: bounds.top });
     const bottom = local({ x: bounds.left, y: bounds.bottom }).y;
     const spots = stage.project(notes.map(({ cell }) => toWorld(cell))).map(local);
-    const order = spots.map((_, i) => i).sort((a, b) => spots[a].y - spots[b].y);
-    const above = new Set(order.slice(0, Math.ceil(notes.length / 2)));
-    return notes.map(({ key, lines }, i) => {
-      const side = above.has(i) ? 'above' : 'below';
+    const order = notes.map((_, i) => i).filter(i => !notes[i].side).sort((a, b) => spots[a].y - spots[b].y);
+    const above = new Set(order.slice(0, Math.ceil(order.length / 2)));
+    // Where each side puts a note `w` by `h` for the cell at `to`: the point on its
+    // edge nearest the drawing, which is the leader's end.
+    const PLACE = {
+      left: (w, h, to) => ({ x: within(left - CALLOUT_GAP, w, width), y: within(to.y + h / 2, h, height) - h / 2 }),
+      above: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(top - CALLOUT_GAP, h, height) }),
+      below: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(bottom + CALLOUT_GAP + h, h, height) - h }),
+    };
+    return notes.map(({ key, lines, side: pinned }, i) => {
+      const side = pinned ?? (above.has(i) ? 'above' : 'below');
       const w = noteEls[key]?.offsetWidth ?? 0;
       const h = noteEls[key]?.offsetHeight ?? 0;
-      const x = within(spots[i].x + w / 2, w, width) - w / 2;
-      const y = side === 'above'
-        ? within(top - CALLOUT_GAP, h, height)
-        : within(bottom + CALLOUT_GAP + h, h, height) - h;
+      const { x, y } = PLACE[side](w, h, spots[i]);
       return { key, lines, side, x, y, to: spots[i], measured: Boolean(noteEls[key]) };
     });
   }
@@ -766,6 +769,11 @@
 
   .note.below {
     transform: translate(-50%, 0);
+  }
+
+  .note.left {
+    transform: translate(-100%, -50%);
+    align-items: flex-end;
   }
 
   /* Outlined like PlayPause, over a footer-coloured fill so it reads over the dots. */

@@ -19,10 +19,9 @@
 //   - **The train appears when the loop closes**, and not before. There is nothing
 //     for it to run on until then.
 //
-// The camera grows and only grows. It starts tight enough that a two-piece sketch
-// is worth looking at and enlarges as the track reaches new ground, so it settles
-// once the track stops spreading — and never shrinks or re-centres on a backspace,
-// which would be the shot chasing the content.
+// The camera follows the track's bounds. It starts tight enough that a two-piece
+// sketch is worth looking at, enlarges as the track reaches new ground, and shrinks
+// back as a backspace takes it off; a piece inside the box moves nothing.
 
 import SketchViewer from './SketchViewer.svelte';
 

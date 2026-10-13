@@ -9,7 +9,8 @@
 //
 // What is new is that, full screen, the viewer can be handled: drag to turn it, pinch or scroll
 // to zoom, and two fingers (or a right- or shift-drag) to slide it about. The frame
-// starts wide and only grows, and a hand-moved view survives every piece added.
+// starts wide, follows the track past that, and a hand-moved view survives every
+// piece added.
 
 import TrackBuilder from './TrackBuilder.svelte';
 

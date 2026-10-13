@@ -953,11 +953,13 @@ its transition. Four things about it:
   places nothing, so what flashes is the cross already in that cell. `openScene` handles
   that; `cubeIds` is `identify` with revisits kept as `null` so the two line up.
 
-**The camera grows, and only grows.** This is a knowing exception to the doctrine below,
-and the reason the two differ is that they are different motions: `Layout` changes the
-whole shape at once, so a frame read off it moves every time you type, while a sketch only
-ever *extends* — so `growBox` takes the union with what came before and the camera settles
-once the track stops reaching new ground. It never shrinks or re-centres on a backspace.
+**The camera follows the track's bounds, never smaller than a floor.** This is a knowing
+exception to the doctrine below, and the reason the two differ is that they are different
+motions: `Layout` changes the whole shape at once, so a frame read off it moves every time
+you type, while a sketch only ever *extends* or is cut back — so `sketchBox` is the track's
+bounds unioned with the floor, a piece inside the box moves nothing, and a backspace shrinks
+the frame back. It once only grew, never shrinking on a backspace; Owen reversed that for
+`Sketch` and both builders, 13 October 2026, as the builders were left with whitespace.
 `frameTight` rather than `frameBox`, because `frameBox`'s `SPREAD` is room for a *pile* to
 sprawl into and nothing falls here; paying for it drew a four-piece ring at half the size.
 Verified in the browser: over 371 camera writes typing out the 18-cube set, zero went the
@@ -1003,8 +1005,8 @@ a builder uses is `preventDefault`-ed there, so `keys.js` (and a `Gate` behind t
 never sees it. Adding goes dead while the
 track is stuck, since nothing after a rejected piece could be built, and once the loop
 closes, since a finished track takes no more. What it does differently is the camera: it
-starts wide (`BUILD_FLOOR`, passed as `from`, seeds `growBox` in place of the sketch's
-tight floor, and still only grows). Square on a phone, 16/10 otherwise, unless `aspect` is
+starts wide (`BUILD_FLOOR`, passed as `from`, is `sketchBox`'s floor in place of the
+sketch's tight one). `PoseBuilder` keeps the sketch's tight floor. Square on a phone, 16/10 otherwise, unless `aspect` is
 given.
 
 ### Handling a viewer: `render/controls.js`
@@ -1215,10 +1217,10 @@ settle.
 rearrangement*. `Sketch` is the one exception and it is Owen's, asked for by name; the
 scope of everything below is a tumble, and the difference is what is happening on
 screen. A rearrangement replaces the whole shape at once, so a derived frame moves every
-time you type and moves *while eighteen cubes are collapsing*. A sketch only ever extends,
-so a grow-only box converges and then holds. Attempt 2 below was rejected for `Layout` and
-is right for `Sketch`; that is not a contradiction, and do not "fix" either to match the
-other. That is
+time you type and moves *while eighteen cubes are collapsing*. A sketch only ever extends
+or is cut back, so a box read off its bounds moves only when it reaches new ground or loses
+it. Following the content was rejected for `Layout` and is right for `Sketch`; that is not a
+contradiction, and do not "fix" either to match the other. That is
 `fixedFrame` in `scenes.js`: a box reaching `REACH` = 6 cells around the start cell, from the
 ground up. `TrackViewer` applies it once at mount and nothing touches it again — the framing
 effect deliberately reads neither `pieces` nor `camera` for a tumble, so a shape change
