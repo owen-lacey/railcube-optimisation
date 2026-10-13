@@ -157,6 +157,7 @@
 		<div class="stage" bind:this={stage}>
 			<div
 				class="box"
+				class:footless={footed.target === 0}
 				style:--footer-height="{FOOTER}rem"
 				bind:clientWidth={width}
 				bind:clientHeight={height}
@@ -286,6 +287,13 @@
 		height: var(--footer-height);
 		box-sizing: border-box;
 		align-content: center;
+	}
+
+	/* Full screen the viewer is laid out above the footer rather than over it, so a
+	   step whose figure has none would show an empty bar. It stays mounted, hidden:
+	   the figure in it is what says what to draw. */
+	.box.footless :global(dialog:modal .footer) {
+		display: none;
 	}
 
 	/* A paragraph being read sits clear of the fade, and fades only once it moves
