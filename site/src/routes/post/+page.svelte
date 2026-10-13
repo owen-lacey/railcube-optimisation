@@ -10,9 +10,11 @@
 	import Optimising from "./Optimising.svelte";
 	import AuthorNotes from "./AuthorNotes.svelte";
 	import { tick } from "svelte";
+	import { dev } from "$app/environment";
+	import { page } from "$app/state";
 
-	// Whether the reader has gone through the splash.
-	let passed = $state(false);
+	// Whether the reader has gone through the splash. `?nosplash` skips it, in dev only.
+	let passed = $state(dev && page.url.searchParams.has("nosplash"));
 	let scrolly = $state();
 	// The O's box on screen while the title zooms, and the zoom.
 	let zoomFrom = $state(null);
