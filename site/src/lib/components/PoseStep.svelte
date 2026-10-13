@@ -1,38 +1,38 @@
 <script>
-  // What a piece does to the train from any pose: the train in its cell, standing
-  // the way the pose control says, the piece it would ride next, and the cell and
-  // pose it ends up in. Each cell is labelled with where it is — the start written
-  // as (x, y, z), the end as the change from it — and the pose the train has there.
+  // What a piece does to the train from any pose: the train standing the way the
+  // pose control says, the piece it would ride next, and the pose it ends up in.
+  // Each end is outlined and labelled on the track — the piece's own cube, which is
+  // the origin, and the cube the next piece would go in — with the pose the train
+  // has there. The train itself is not drawn.
   // A press picks a piece or a pose; it never carries the train on.
   import { Tabs } from 'bits-ui';
   import TrackViewer from './TrackViewer.svelte';
   import LayoutCard from './LayoutCard.svelte';
   import OrientationStepper from './OrientationStepper.svelte';
-  import { PIECES, describePose, poseLabel, readerFrame } from '$lib/catalogue.js';
+  import { PIECES, describePose, poseLabel, readerFrame, trackCell } from '$lib/catalogue.js';
   import { pieceMove } from '$lib/scenes.js';
 
   let { initial = 'DF', initialPiece = 'straight', aspect = '3 / 2' } = $props();
 
-  // The train's cell. The camera is framed on what is drawn, backed off from
-  // `pieceMove`'s tight frame by `ROOM` so there is a band above and below the
-  // drawing for the callouts.
-  const START = [0, 0, 0];
+  // The camera is framed on what is drawn, backed off from `pieceMove`'s tight
+  // frame by `ROOM` so there is a band above and below the drawing for the callouts.
   const ROOM = 0.6;
 
   let pose = $state(initial);
   let active = $state(initialPiece);
 
   const piece = $derived(PIECES.find(p => p.type === active));
-  const scene = $derived(pieceMove(active, { pose, cell: START }));
+  // Laid from the start, so the piece's cube is the origin whatever the pose.
+  const scene = $derived(pieceMove(active, { pose }));
   const camera = $derived({ ...scene.camera, zoom: scene.camera.zoom * ROOM });
-  const readout = (cell, p) => [
-    [{ text: `Position: (${readerFrame(cell).join(', ')})` }],
-    [{ text: `Pose: (${poseLabel(p)})` }],
+  const readout = head => [
+    [{ text: `Position: (${readerFrame(trackCell(head)).join(', ')})` }],
+    [{ text: `Pose: (${poseLabel(head.pose)})` }],
   ];
   const notes = $derived([
-    { key: 'before', cell: START, lines: readout(START, pose) },
-    { key: 'after', cell: scene.after.cell, lines: readout(scene.after.cell, scene.after.pose) },
-  ]);
+    ['before', { cell: scene.pieces[0].cell, pose }],
+    ['after', scene.after],
+  ].map(([key, head]) => ({ key, cell: trackCell(head), lines: readout(head) })));
 </script>
 
 <Tabs.Root bind:value={active} class="pose-step">
@@ -42,7 +42,7 @@
         pieces={scene.pieces}
         {camera}
         grid={scene.grid}
-        ghosts={scene.ghosts}
+        outlines={scene.outlines}
         {notes}
         {aspect}
         label="The {piece.name.toLowerCase()} entered {describePose(pose)}, leaving the train {describePose(scene.after.pose)}"

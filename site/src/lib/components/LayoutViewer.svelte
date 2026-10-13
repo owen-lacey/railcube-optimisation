@@ -15,8 +15,8 @@
     aspect = '16 / 10',
     // Letters → scene. `layoutScene` frames the cubes; `cellScene` draws them in
     // their lattice; `axesScene` adds the origin's axes, `lengthsScene` the
-    // lattice's side lengths; `apartScene` and `joinedScene` outline cells and
-    // stand after ghosts with callouts. All in scenes.js.
+    // lattice's side lengths; `apartScene` and `joinedScene` outline each group's
+    // ends, with callouts. All in scenes.js.
     scene = layoutScene,
     // What a shape change looks like — see `transition` in TrackViewer. A redraw
     // is framed tight on each layout; a tumble on a fixed box, so it never moves.

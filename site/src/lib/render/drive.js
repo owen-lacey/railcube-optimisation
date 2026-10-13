@@ -11,12 +11,13 @@
 // wreckage. Which it did.
 
 import { trackPath } from './rail.js';
+import { cubeOf } from '../../../../src/track.js';
 import { SPEED, BODY_Z, TRAIN_H } from './dimensions.js';
 import { cross, add, sub, len, unit, toCell } from './vec.js';
 
 // The height of the body's centre above the rail — the point whose motion the
 // eye reads as the train's speed. Matches where `trainBody` puts the shell.
-export const BODY_REF = BODY_Z + TRAIN_H / 2;
+const BODY_REF = BODY_Z + TRAIN_H / 2;
 
 /**
  * The rail `f` of the way from sample `a` to sample `b`, as a sample.
@@ -24,7 +25,7 @@ export const BODY_REF = BODY_Z + TRAIN_H / 2;
  * Both the heading and the up direction are blended and squared back up, so a
  * train leans into the corners instead of snapping between facets.
  */
-export function railPoint(a, b, f) {
+function railPoint(a, b, f) {
   const blend = (p, q) => p.map((v, i) => v + (q[i] - v) * f);
   const fwd = unit(blend(a.fwd, b.fwd));
   const raw = blend(a.up, b.up);
@@ -34,10 +35,10 @@ export function railPoint(a, b, f) {
 }
 
 /** A train's basis standing on a rail sample, `[right, fwd, up]`. */
-export const frameOf = ({ fwd, up }) => [cross(fwd, up), fwd, up];
+const frameOf = ({ fwd, up }) => [cross(fwd, up), fwd, up];
 
 /** Where a train's body is, standing on a rail sample. */
-export const bodyOf = ({ pos, up }) => add(pos, up.map(v => v * BODY_REF));
+const bodyOf = ({ pos, up }) => add(pos, up.map(v => v * BODY_REF));
 
 // The train's polygons are authored facing forwards, and it is mounted turned by
 // nothing. Its colours carry the lighting of that authored pose (see `carriedShade`
@@ -47,14 +48,15 @@ const UNTURNED = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
 /**
  * Bind a train to a live stage. It has no mesh until it has a route. `byPiece`
- * marks the cell a piece is entered from for the whole of that piece, so the mark
- * moves only once a piece is finished, rather than following the body through it.
+ * marks the cube of the piece it is on for the whole of that piece, so the mark
+ * moves only once a piece is finished, rather than the cell the body is in
+ * following it through the piece.
  */
 export function createDriver(stage, { byPiece = false } = {}) {
   let mesh = null;
   let path = [], gaps = [], lap = 0;
   let entries = [];          // how far along the lap each piece begins, in route order
-  let cells = [];            // the cell the train is in as it enters each piece
+  let cubes = [];            // each piece's cube, where it is on the track
   let poses = [];            // and its pose then
   let per = 0;               // rail samples per piece
   let k = 0, travelled = 0;  // travelled = distance to the start of sample k
@@ -82,7 +84,7 @@ export function createDriver(stage, { byPiece = false } = {}) {
     // included, so piece i begins at sample i × per and a crossed cross begins twice.
     per = path.length / pieces.length;
     entries = pieces.map((_, i) => gaps.slice(0, i * per).reduce((a, b) => a + b, 0));
-    cells = pieces.map(piece => piece.cell);
+    cubes = pieces.map(piece => cubeOf(piece.cell, piece.pose));
     poses = pieces.map(piece => piece.pose);
     k = 0; travelled = 0; // the cursor indexed the old path; it means nothing now
   }
@@ -100,23 +102,21 @@ export function createDriver(stage, { byPiece = false } = {}) {
     const piece = Math.floor(k / per);
     // The lattice cell is the one the body is in, not the wheels: the body is what
     // is seen, and it rides clear of the cube, in the cell the model books as train.
-    stage.markTrainCell(byPiece ? cells[piece] : toCell(body));
+    if (byPiece) stage.markTrainPiece(cubes[piece]);
+    else stage.markTrainCell(toCell(body));
     stage.markTrainPose(poses[piece]);
     return piece;
   }
 
   /**
-   * Put the train where it enters piece `i`. One past the last piece is a whole
-   * lap on, which on a closed loop is exactly where the first one is.
-   *
-   * The cell marked is the piece's own, the model's head as the piece begins,
-   * rather than read off the body: at a piece's entry the body is exactly on the
-   * face between two cells, and rounding it picks whichever floating point says.
+   * Put the train where it enters piece `i`, and mark that piece's cube. One past
+   * the last piece is a whole lap on, which on a closed loop is exactly where the
+   * first one is.
    */
   function toPiece(i) {
     if (!lap) return;
     place(entries[i % entries.length]);
-    stage.markTrainCell(cells[i % cells.length]);
+    stage.markTrainPiece(cubes[i % cubes.length]);
     stage.markTrainPose(poses[i % poses.length]);
   }
 
@@ -135,7 +135,8 @@ export function createDriver(stage, { byPiece = false } = {}) {
   }
 
   function dispose() {
-    stage.markTrainCell(null);
+    if (byPiece) stage.markTrainPiece(null);
+    else stage.markTrainCell(null);
     stage.markTrainPose(null);
     mesh?.dispose();
     stage.invalidate();

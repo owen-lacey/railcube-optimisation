@@ -9,11 +9,10 @@ html {
      text colours must be too. */
   color-scheme: dark;
 
-  /* The ghost trains' tints, here rather than in the viewer because a legend
-     outside the viewer has to name them in the same colours. */
-  --ghost-before: #b4bfcd;
-  --ghost-after: #6b7a90;
-  --ghost-opacity: 0.6;
+  /* A step's start cube's outline: a deeper blue than its end cube's, which is the
+     lattice's own. Here rather than in the viewer because a legend outside the
+     viewer has to name it in the same colour. */
+  --outline-before: #4f75b8;
 
   /* The lattice's colour, here for the same reason: the train-cell caption sits
      outside the viewer and is written in it. */

@@ -36,35 +36,31 @@ import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js
 import { createLoop } from './loop.js';
 import { createCamera, viewBetween, adjusted, offscreen, REFERENCE_WIDTH, REFERENCE_HEIGHT } from './camera.js';
 import { sharedRenderer } from './renderer.js';
-import { cellBox, cellFace } from './grid.js';
+import { cellBox, cellFace, cellEdges } from './grid.js';
 import { backdropOf } from './blueprint.js';
 import { PROJ } from '../../../../src/track.js';
 import { originCell, axisArrows, axisAnchor, labelSpots } from './axes.js';
-import { TRAIN_CELL_INSET, LIGHT, ALARM_SWELL, ALARM_OPACITY } from './dimensions.js';
-import { toWorld, add } from './vec.js';
-import { BODY_REF } from './drive.js';
+import { TRAIN_CELL_INSET, LIGHT, ALARM_SWELL, ALARM_OPACITY, STEP_W } from './dimensions.js';
+import { toWorld } from './vec.js';
 import { trainAt } from './rail.js';
 import { trainBody } from './train.js';
 
-/**
- * The names the overlays' meshes carry, so a test can find them in the scene. A
- * ghost's tint follows its name, `ghost-before` or `ghost-after`.
- */
-export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 'train-cell', ghost: 'ghost', rider: 'rider' };
+/** The names the overlays' meshes carry, so a test can find them in the scene. */
+export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 'train-cell', piece: 'piece-cube', ghost: 'ghost' };
 
 // The overlays draw after the solids, and in this order among themselves. With
 // depth writes off that is what PolyCSS's painter's order came to, measured to the
 // pixel in the fidelity spike.
 //
-// Between the ghosts and the fill, the lattice is drawn again into the depth buffer
+// Between the lattice and the fill, the lattice is drawn again into the depth buffer
 // alone (`gridDepth`), pulled `GRID_DEPTH_SLACK` towards the camera, so a fill or a
 // floor patch is hidden wherever a line is in front of it *or just behind it*. A
 // patch's edges run alongside the lattice lines of its own cell face, some nearer
 // than the patch and some farther depending on the view, and either way two layers
 // of one see-through blue read as a darker band. The slack is a line's width or so,
 // far short of a cell, so lines across the cell still show through a patch, and the
-// lattice and ghosts are drawn exactly as before.
-const ORDER = { grid: 1, ghost: 2, gridDepth: 3, fill: 4 };
+// lattice is drawn exactly as before.
+const ORDER = { grid: 1, gridDepth: 2, fill: 3 };
 const GRID_DEPTH_SLACK = 4;   // world units; a line is GRID_W thick, a cell CUBE
 
 // Made on first use and shared by every stage on the page: the train as it is lit
@@ -145,7 +141,7 @@ function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {})
  * `theme` is the overlay paint (see `readTheme` in renderer.js); `renderer` is what
  * draws — the page's shared one, or a stand-in for the tests.
  */
-export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPose, onCamera, onRider, onOverlay } = {}) {
+export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPiece, onTrainPose, onCamera, onOverlay } = {}) {
   const scene = new Scene();
   scene.add(new AmbientLight(0xffffff, LIGHT.ambient));
   const sun = new DirectionalLight(0xffffff, LIGHT.directional);
@@ -168,20 +164,21 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     // The origin's arrows are the lattice's blue at full strength, so they read as
     // solid marks and not as more lattice.
     origin: new MeshBasicMaterial({ color: theme.grid }),
-    before: overlay(theme.ghostBefore, theme.ghostOpacity, once),
-    after: overlay(theme.ghostAfter, theme.ghostOpacity, once),
+    // A cell outlined as where a step starts: solid like the origin's, in a deeper
+    // blue, so the end, outlined in the origin's paint, stands out over it.
+    outlineBefore: new MeshBasicMaterial({ color: theme.outlineBefore }),
   };
+  const OUTLINE = { before: paint.outlineBefore, after: paint.origin };
   const cellGeometry = soupGeometry(cellBox(TRAIN_CELL_INSET));
 
   // How strongly every overlay is drawn, 0 to 1: the see-through paints at that
-  // share of their theme's opacity, and the origin's solid one see-through below 1.
-  // They are shared, so the lattice, ghosts, rider, fills and axes go together.
+  // share of their theme's opacity, and the solid ones see-through below 1.
+  // They are shared, so the lattice, fills, outlines and axes go together.
+  const SOLID = ['origin', 'outlineBefore'];
   const SEE_THROUGH = {
     grid: theme.gridOpacity,
     fill: theme.gridOpacity,
     trainCell: theme.trainCellOpacity,
-    before: theme.ghostOpacity,
-    after: theme.ghostOpacity,
   };
   let overlayShare = 1;
 
@@ -190,11 +187,13 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     overlayShare = share;
     for (const [name, opacity] of Object.entries(SEE_THROUGH)) paint[name].opacity = opacity * share;
     const transparent = share < 1;
-    if (paint.origin.transparent !== transparent) {
-      paint.origin.transparent = transparent;
-      paint.origin.needsUpdate = true;
+    for (const material of SOLID.map(name => paint[name])) {
+      if (material.transparent !== transparent) {
+        material.transparent = transparent;
+        material.needsUpdate = true;
+      }
+      material.opacity = share;
     }
-    paint.origin.opacity = share;
     invalidate();
     onOverlay?.(share);
   }
@@ -528,7 +527,6 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     pan = null;
     for (const item of [...cubes.values()]) item.dispose();
     cubes.clear();
-    rider?.dispose();
     invalidate();
   }
 
@@ -569,6 +567,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
       scene.add(grid);
     }
     showTrainCell();
+    showTrainPiece();
     invalidate();
   }
 
@@ -673,6 +672,42 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     onTrainCell?.(cell);
   }
 
+  // ---- The cube of the piece a held train is on --------------------------
+  //
+  // A train read out a piece at a time is placed by the track, not by the cell it
+  // is in: the cube of the piece it is on is outlined as a step's end is (`setOutlines`
+  // with 'after'). Part of the lattice like the train's cell, and like it one mesh,
+  // moved by its matrix.
+
+  let trainPiece = null;   // the cube last reported, or null when there is no train
+  let pieceMark = null;
+
+  function showTrainPiece() {
+    if (!grid || !trainPiece) {
+      if (pieceMark) remove([pieceMark]);
+      pieceMark = null;
+      return;
+    }
+    if (pieceMark) {
+      pieceMark.matrix.makeTranslation(...toWorld(trainPiece));
+      pieceMark.matrixWorldNeedsUpdate = true;
+    } else {
+      pieceMark = fixedMesh(soupGeometry(cellEdges(STEP_W.after)), OUTLINE.after, {
+        name: OVERLAY.piece, at: toWorld(trainPiece),
+      });
+      scene.add(pieceMark);
+    }
+    invalidate();
+  }
+
+  /** The cube of the piece the train is on, or `null` when it has gone. */
+  function markTrainPiece(cube) {
+    if (String(cube) === String(trainPiece)) return;
+    trainPiece = cube;
+    showTrainPiece();
+    onTrainPiece?.(cube);
+  }
+
   let trainPose = null;   // the pose last reported, or null when there is no train
 
   /**
@@ -687,78 +722,36 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
 
   // ---- Ghost trains -------------------------------------------------------
   //
-  // Trains that stand still, to show where a train *would* be: before a piece and
-  // after it. Not cubes and not a phase's: a phase that finishes is disposed on the
-  // next frame, and one that never finishes keeps the loop running for a picture
-  // that does not move. So they are an overlay like the lattice — `clear()` leaves
-  // them, and whoever set them takes them down with `setGhosts([])`. A tinted ghost
-  // is flat and see-through in its tint; one with no tint is the train itself, lit.
-  // Either way the face it stands on is marked, in its tint or the lattice's paint.
+  // Trains that stand still, to show how a train stands in a cell. Not cubes and
+  // not a phase's: a phase that finishes is disposed on the next frame, and one
+  // that never finishes keeps the loop running for a picture that does not move. So
+  // they are an overlay like the lattice — `clear()` leaves them, and whoever set
+  // them takes them down with `setGhosts([])`. A ghost is the train itself, lit, and
+  // the face it stands on is marked in the lattice's paint.
 
   let ghosts = [];
   let floors = [];   // the patch of floor under each ghost, one geometry apiece
 
   /**
-   * Replace the ghost trains with these, `{ type, cell, pose, tint?, floor? }` each: a
-   * train standing on a piece of that type placed there — see `trainAt`. The piece need
-   * not be drawn. The face it stands on is marked unless `floor` is `false`.
+   * Replace the ghost trains with these, `{ type, cell, pose }` each: a train
+   * standing on a piece of that type placed there — see `trainAt`. The piece need
+   * not be drawn.
    */
   function setGhosts(list) {
     remove(ghosts, { owned: false });
     remove(floors);
-    floors = list.filter(({ floor = true }) => floor).map(({ cell, pose, tint }) => fixedMesh(
-      soupGeometry(cellFace(PROJ[pose[0]], TRAIN_CELL_INSET)), tint ? paint[tint] : paint.fill,
-      { name: `${OVERLAY.ghost}-floor-${tint ?? 'solid'}`, order: ORDER.fill, at: toWorld(cell) },
+    floors = list.map(({ cell, pose }) => fixedMesh(
+      soupGeometry(cellFace(PROJ[pose[0]], TRAIN_CELL_INSET)), paint.fill,
+      { name: `${OVERLAY.ghost}-floor`, order: ORDER.fill, at: toWorld(cell) },
     ));
     for (const mesh of floors) scene.add(mesh);
-    ghosts = list.map(({ type, cell, pose, tint }) => {
+    ghosts = list.map(({ type, cell, pose }) => {
       const { basis, position } = trainAt(type, cell, pose);
-      const { mesh } = movingMesh(scene, standingTrain(), tint ? paint[tint] : paint.solid, basis, position);
-      mesh.name = tint ? `${OVERLAY.ghost}-${tint}` : OVERLAY.ghost;
-      if (tint) mesh.renderOrder = ORDER.ghost;
+      const { mesh } = movingMesh(scene, standingTrain(), paint.solid, basis, position);
+      mesh.name = OVERLAY.ghost;
       return mesh;
     });
     invalidate();
-  }
-
-  // ---- The rider ------------------------------------------------------------
-  //
-  // A ghost train that rides a growing track, a piece at a time (see ride.js). The
-  // stage's rather than a phase's, like a cube, because a growing track replaces its
-  // phase on every letter and the train carries on from wherever it has got to. So
-  // it keeps the route it is on and how far along that it is, `x` pieces. `clear()`
-  // takes it, and so does `dropRider()`.
-
-  let rider = null;
-  const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-
-  /** The rider, mounted in `tint` if there is none yet. Whoever mounts it places it. */
-  function riderOf(tint) {
-    if (rider) return rider;
-    const { mesh, place } = movingMesh(scene, standingTrain(), paint[tint], IDENTITY, [0, 0, 0]);
-    mesh.name = OVERLAY.rider;
-    mesh.renderOrder = ORDER.ghost;
-    const made = {
-      route: null,
-      x: 0,
-      // Where its body is, which is what a callout on it points at.
-      spot: null,
-      place(basis, position) {
-        place(basis, position);
-        made.spot = add(position, basis[2].map(v => v * BODY_REF));
-        invalidate();
-        onRider?.();
-      },
-      dispose() {
-        mesh.removeFromParent();
-        if (rider === made) rider = null;
-        invalidate();
-        onRider?.();
-      },
-      mesh,
-    };
-    rider = made;
-    return made;
   }
 
   // ---- Filled cells ---------------------------------------------------------
@@ -782,14 +775,18 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   // ---- Outlined cells -------------------------------------------------------
   //
   // The origin cell's outline, round other cells as well: each start of a set of
-  // groups, say. No arrows. An overlay like the fills.
+  // groups, say, or the two ends of one piece. No arrows. An overlay like the fills.
 
   let outlines = [];
 
-  /** Outline these cells, `[x, y, z]` each, replacing any outlined before. */
-  function setOutlines(cells) {
+  /**
+   * Outline these cells, `{ cell, tint? }` each, replacing any outlined before: as
+   * the origin is, or with `tint` thinner — 'after' in the origin's paint, 'before'
+   * in a deeper blue and thinner still.
+   */
+  function setOutlines(list) {
     remove(outlines);
-    outlines = cells.map(cell => fixedMesh(soupGeometry(originCell()), paint.origin, {
+    outlines = list.map(({ cell, tint }) => fixedMesh(soupGeometry(tint ? cellEdges(STEP_W[tint]) : originCell()), tint ? OUTLINE[tint] : paint.origin, {
       name: OVERLAY.origin, at: toWorld(cell),
     }));
     for (const mesh of outlines) scene.add(mesh);
@@ -827,14 +824,12 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     project,
     outline,
     setGhosts,
-    rider: riderOf,
-    dropRider: () => rider?.dispose(),
-    riderSpot: () => rider?.spot ?? null,
     setFill,
     setOutlines,
     setOverlayOpacity,
     overlayOpacity: () => overlayShare,
     markTrainCell,
+    markTrainPiece,
     markTrainPose,
     invalidate,
   };

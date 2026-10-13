@@ -7,7 +7,7 @@
 import { COLORS } from './render/dimensions.js';
 
 /** The colour properties on `:root` in app.css, without their dashes. */
-const THEME = ['grid-color', 'ghost-before', 'ghost-after', 'card-border', 'card-footer'];
+const THEME = ['grid-color', 'outline-before', 'card-border', 'card-footer'];
 
 /** Every name `colourOf` accepts. */
 export const COLOUR_TOKENS = [...THEME, ...Object.keys(COLORS)];

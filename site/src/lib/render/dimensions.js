@@ -54,6 +54,7 @@ export const AXIS_HEAD_W = 0.15;  // half the head's width at its base
 export const AXIS_LABEL = 0.4;    // how far past the tip the letter's label sits, in cells
 export const AXIS_GAP = 2;        // how far outside the lattice box's corner the arrows start, in cells: at 1 the z label climbs into the box on screen
 export const ORIGIN_W = 2;        // the origin cell's outline, bolder than an arrow's shaft so the outline reads as bolder than the lattice
+export const STEP_W = { before: 1, after: 1.2 };   // a step's start and end cubes' outlines (`setOutlines` with a tint): bolder than the lattice, lighter than the origin's, as a figure of one piece is drawn close up; the end bolder than the start
 
 // How far a lattice side's length label sits out from the middle of its edge, in
 // CSS pixels, away from the box's middle on screen (render/lengths.js).

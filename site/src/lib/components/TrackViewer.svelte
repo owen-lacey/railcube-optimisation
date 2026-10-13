@@ -57,8 +57,8 @@
     // new one shows the layout again.
     //   at()       who holds it: a piece index to hold it there, null to let it drive.
     //   onAt(i)    told the piece it has driven onto. Both redraw only — see `trackPhase`.
-    //   onCell(c)  told the cell it is in, `[x, y, z]`, each time it enters a new one,
-    //              and null when it goes.
+    //   onPiece(c) told the cube of the piece it is on, `[x, y, z]`, each time it
+    //              moves onto a new one, and null when it goes. A held train only.
     //   onPose(p)  told the pose of the piece it last entered, `'DF'` say, each time it
     //              changes, and null when it goes.
     train = null,
@@ -78,28 +78,23 @@
     // A box of cells, `{ lo, hi }`, whose three side lengths are written beside its
     // edges; null writes none. See `render/lengths.js`.
     lengths = null,
-    // Trains that stand still, `{ type, cell, pose, tint }` each, tinted by the stylesheet
-    // below. See `setGhosts` in stage.js.
+    // Trains that stand still, `{ type, cell, pose }` each. See `setGhosts` in stage.js.
     ghosts = [],
     // Cells, `[x, y, z]` each, filled see-through in the train cell's paint whether
     // or not a train is driving. See `setFill` in stage.js.
     fill = [],
-    // Cells, `[x, y, z]` each, outlined the way `origin` outlines the origin cell,
-    // without its arrows. See `setOutlines` in stage.js.
+    // Cells, `{ cell, tint? }` each, outlined the way `origin` outlines the origin
+    // cell, without its arrows — or, tinted 'before' or 'after', as a step's start or
+    // end. See `setOutlines` in stage.js.
     outlines = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
     // Callouts on cells, `{ key, lines, cell, side, flash }` each: set outside what
     // is drawn with a leader line to the middle of `cell`, and kept there as the
-    // camera moves. `rider: true` in place of `cell` points it at the rider instead,
-    // and it follows the train. A line is an array of parts, `{ text, changed }`, and
+    // camera moves. A line is an array of parts, `{ text, changed }`, and
     // a changed part is picked out each time `flash` changes. `side` pins it 'left',
     // 'above' or 'below'; unset, it is chosen. See `calloutsFor`.
     notes = [],
-    // A ghost train riding the track as it grows, `{ tint, onArrive }`, or null for
-    // none: a grow only. `onArrive(head)` is told each `{ cell, pose, index }` it
-    // comes to rest at, and null when it goes. See `growPhase` in build.js.
-    rider = null,
     // The ID of a cube the model has rejected, `5L` say, or null. It is drawn where
     // it was asked to go and pulses there, whatever the transition — see `alarmFor`
     // in build.js. Read when a layout is shown.
@@ -264,7 +259,7 @@
     const leaving = [];
     for (let i = prefix; i < before.length; i++) {
       const cube = ids[i] && stage.detach(ids[i]);
-      if (cube) leaving.push({ cube, piece: before[i], index: i });
+      if (cube) leaving.push({ cube, piece: before[i] });
     }
 
     // A change while a turn was still under way puts back what the turn was holding.
@@ -286,7 +281,7 @@
   const grown = () => {
     const { pace, speed, arrival } = settings();
     return {
-      arrival, ride: rider, pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(),
+      arrival, pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(),
     };
   };
 
@@ -299,9 +294,9 @@
   /**
    * The same track from a new start: turned about the origin cube, with only the
    * track to be seen while it turns. Every overlay — the lattice, the axes, the
-   * ghosts, the rider and the callouts — fades out where it stands, the cubes turn
+   * outlines, the ghosts and the callouts — fades out where it stands, the cubes turn
    * as the camera pans to the new frame, and the overlays fade back in where they
-   * now belong, the rider at the track's new end.
+   * now belong.
    *
    * The overlays' own effects stand aside from the moment the start changes until
    * the old ones are out of sight, and then this puts up the new ones.
@@ -318,8 +313,7 @@
       }),
       deferred(() => together(
         overlayFadePhase(stage, { to: 1, speed }),
-        // Every cube is home, so this touches none: it rests the rider at the new
-        // end, telling `onArrive`, and keeps a rejected piece pulsing.
+        // Every cube is home, so this touches none: it keeps a rejected piece pulsing.
         growPhase(stage, next, { ...grown(), instant: true }),
       )),
     ]);
@@ -330,6 +324,7 @@
     turning = false;
     showGrid();
     showOrigin();
+    showOutlines();
     showGhosts();
     showNotes();
     scheduleLabels();
@@ -473,15 +468,12 @@
         if (!live) return;
         stage = createStage(canvas, {
           theme: readTheme(host),
-          onTrainCell: cell => train?.onCell?.(cell),
+          onTrainPiece: cube => train?.onPiece?.(cube),
           onTrainPose: pose => train?.onPose?.(pose),
           onCamera: () => {
             touched = stage?.touched() ?? false;
             if (origin || lengths || notes.length) scheduleLabels();
             if (blueprint) placeSheet();
-          },
-          onRider: () => {
-            if (notes.some(n => n.rider)) scheduleLabels();
           },
           onOverlay: share => { overlayShare = share; },
         });
@@ -629,13 +621,12 @@
 
   function calloutsFor(local, { width, height }) {
     const bounds = stage.outline();
-    // A note on the rider waits for there to be one.
-    const shown = notesUp.filter(n => !n.rider || stage.riderSpot());
+    const shown = notesUp;
     if (!bounds || !shown.length) return [];
     const within = (v, size, room) => Math.min(Math.max(v, size + CALLOUT_GAP), room - CALLOUT_GAP);
     const { x: left, y: top } = local({ x: bounds.left, y: bounds.top });
     const bottom = local({ x: bounds.left, y: bounds.bottom }).y;
-    const spots = stage.project(shown.map(n => (n.rider ? stage.riderSpot() : toWorld(n.cell)))).map(local);
+    const spots = stage.project(shown.map(n => toWorld(n.cell))).map(local);
     const order = shown.map((_, i) => i).filter(i => !shown[i].side).sort((a, b) => spots[a].y - spots[b].y);
     const above = new Set(order.slice(0, Math.ceil(order.length / 2)));
     // Where each side puts a note `w` by `h` for the cell at `to`: the point on its
@@ -701,7 +692,7 @@
   // `notesUp` is the ones placed, which a landing move may hold some of back.
   let notesKey = null;
   let notesUp = [];
-  const noteKey = n => `${n.key}${n.rider ? 'rider' : n.cell}${n.flash}${JSON.stringify(n.lines)}`;
+  const noteKey = n => `${n.key}${n.cell}${n.flash}${JSON.stringify(n.lines)}`;
   function showNotes() {
     const next = arriving(notesUp, notes, noteKey);
     const key = next.map(noteKey).join('|');
@@ -719,7 +710,7 @@
   // The ghost trains, keyed on what they are for the same reason as the lattice.
   let ghostKey = null;
   let ghostsUp = [];
-  const ghostKeyOf = g => `${g.type}${g.cell}${g.pose}${g.tint}`;
+  const ghostKeyOf = g => `${g.type}${g.cell}${g.pose}`;
   function showGhosts() {
     const next = arriving(ghostsUp, ghosts, ghostKeyOf);
     const key = next.map(ghostKeyOf).join('|');
@@ -744,11 +735,12 @@
   });
 
   // The outlined cells, keyed the same way.
+  const outlineKey = ({ cell, tint }) => `${cell}:${tint}`;
   let outlinesKey = null;
   let outlinesUp = [];
   function showOutlines() {
-    const next = arriving(outlinesUp, outlines, String);
-    const key = next.join('|');
+    const next = arriving(outlinesUp, outlines, outlineKey);
+    const key = next.map(outlineKey).join('|');
     if (key === outlinesKey) return;
     stage.setOutlines(next);
     outlinesKey = key;
@@ -756,7 +748,7 @@
   }
   $effect(() => {
     void outlines;
-    if (!ready || !stage) return;
+    if (!ready || !stage || held()) return;
     showOutlines();
   });
 

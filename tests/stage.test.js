@@ -20,7 +20,7 @@ import test from 'node:test';
 import { Vector3 } from 'three';
 import assert from 'node:assert/strict';
 
-import { chainTrack } from '../src/track.js';
+import { chainTrack, cubeOf } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
 import { createStage, together, deferred, OVERLAY } from '../site/src/lib/render/stage.js';
 import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js';
@@ -28,19 +28,19 @@ import { fadeInPhase, fadeOutPhase, overlayFadePhase, FADE_IN, FADE_OUT } from '
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene } from '../site/src/lib/scenes.js';
-import { poseReadout } from '../site/src/lib/catalogue.js';
+import { poseReadout, trackCell } from '../site/src/lib/catalogue.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
 import { axisArrows, axisAnchor, labelSpots } from '../site/src/lib/render/axes.js';
 import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/render/vec.js';
 import { screenAxes, CAMERA } from '../site/src/lib/render/camera.js';
-import { trackPath, trainAt } from '../site/src/lib/render/rail.js';
+import { trackPath } from '../site/src/lib/render/rail.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
 import { orbit, slid, zoomed } from '../site/src/lib/render/controls.js';
 
 // ---- The watched stage -----------------------------------------------------
 
-const THEME = { grid: '#4f75b8', gridOpacity: 0.22, trainCellOpacity: 0.4, ghostBefore: '#b4bfcd', ghostAfter: '#6b7a90', ghostOpacity: 0.6 };
+const THEME = { grid: '#4f75b8', gridOpacity: 0.22, trainCellOpacity: 0.4, outlineBefore: '#2b4a80' };
 
 /** What a matrix says: where the mesh is, and the images of its local axes. */
 const transformOf = ({ elements: e }) => ({
@@ -568,24 +568,50 @@ test('a held train stands where it enters its piece, and one past the last is th
   assert.equal(train.transforms.length, before, 'a whole lap on is the start, so nothing moves');
 });
 
-test('a held train marks the cell it is in as it enters its piece', () => {
-  // At a piece's entry the body is exactly on the face between two cells, so
-  // reading the cell off it rounds either way. The model says which it is: the
-  // piece's own cell, the head as the piece begins.
+test('a held train marks the cube of the piece it is on, and never the cell it is in', () => {
+  // Read off the model, not the body: the piece's own cube, where it is drawn.
   const clock = fakeClock();
   const marked = [];
-  const { stage } = staged({ onTrainCell: cell => marked.push(cell) });
+  const cells = [];
+  const { stage } = staged({ onTrainPiece: cube => marked.push(cube), onTrainCell: cell => cells.push(cell) });
   for (const shape of [SET, 'XSLLLSXSRRRS']) {
     const pieces = piecesOf(shape);
     let held = 0;
     stage.run([trackPhase(stage, pieces, { trainAt: () => held })]);
     stage.start();
-    for (const [i, { cell }] of pieces.entries()) {
+    for (const [i, { cell, pose }] of pieces.entries()) {
       held = i;
       clock.run(0.05);
-      assert.deepEqual(marked.at(-1), cell, `${shape} piece ${i}`);
+      assert.deepEqual(marked.at(-1), cubeOf(cell, pose), `${shape} piece ${i}`);
     }
   }
+  assert.deepEqual(cells, [], 'a held train marked the cell it is in');
+});
+
+test('a held train\'s cube is outlined on the lattice, one mesh moved, and goes with the train', () => {
+  const clock = fakeClock();
+  const { handles, stage } = staged();
+  const pieces = piecesOf(SET);
+  const marks = () => handles.filter(h => h.name === OVERLAY.piece && !h.disposed);
+  let held = 0;
+
+  stage.run([trackPhase(stage, pieces, { trainAt: () => held })]);
+  stage.start();
+  clock.run(0.05);
+  assert.equal(marks().length, 0, 'a cube was outlined with no lattice to outline it on');
+
+  stage.setGrid(gridLines(extentOf(pieces)));
+  assert.equal(marks().length, 1);
+  for (const [i, { cell, pose }] of pieces.entries()) {
+    held = i;
+    clock.run(0.05);
+    assert.equal(marks().length, 1, 'the outline was remounted rather than moved');
+    assert.ok(near(marks()[0].transforms.at(-1).position, toWorld(cubeOf(cell, pose))), `piece ${i}`);
+  }
+
+  const [mark] = marks();
+  stage.run([tumblePhase(stage, pieces, { drop: 1, limit: 1 })]);
+  assert.equal(mark.disposed, true, 'the outline outlived its train');
 });
 
 test('a held train reports the pose it enters its piece in', () => {
@@ -649,17 +675,20 @@ test('a handed-over train drives along the rail like an unheld one, reporting ea
   assert.deepEqual(runs.slice(0, pieces.length + 1), [...order, 0], 'piece by piece, and round');
 });
 
-test('a handed-over train marks the cell it entered its piece from until it finishes the piece', () => {
+test('a handed-over train marks the cube of the piece it is on until it finishes the piece', () => {
   const clock = fakeClock();
   const marked = [];
-  const { stage } = staged({ onTrainCell: cell => marked.push(cell) });
+  const { stage } = staged({ onTrainPiece: cube => marked.push(cube) });
   const pieces = piecesOf(SET);
   stage.run([trackPhase(stage, pieces, { trainAt: () => null })]);
   stage.start();
   clock.run(30);
 
   const laps = Math.ceil(marked.length / pieces.length) + 1;
-  const route = Array.from({ length: laps * pieces.length }, (_, i) => pieces[i % pieces.length].cell);
+  const route = Array.from({ length: laps * pieces.length }, (_, i) => {
+    const { cell, pose } = pieces[i % pieces.length];
+    return cubeOf(cell, pose);
+  });
   assert.ok(marked.length > pieces.length, 'not even a lap was marked');
   assert.deepEqual(marked, route.slice(0, marked.length), 'one cell a piece, in route order');
 });
@@ -790,7 +819,7 @@ test('a pick-up carries a cube by its centre of mass, not by a corner', () => {
 // exactly what watching the meshes can settle.
 
 /** Type a shape onto a stage, one growth at a time, and run each out. */
-function typing({ pace = 0.1, arrival = 'flip', ride = null } = {}) {
+function typing({ pace = 0.1, arrival = 'flip' } = {}) {
   const clock = fakeClock();
   const { handles, stage } = staged();
   let shown = [];
@@ -807,11 +836,11 @@ function typing({ pace = 0.1, arrival = 'flip', ride = null } = {}) {
     const leaving = [];
     for (let i = prefix; i < shown.length; i++) {
       const cube = ids[i] && stage.detach(ids[i]);
-      if (cube) leaving.push({ cube, piece: shown[i], index: i });
+      if (cube) leaving.push({ cube, piece: shown[i] });
     }
 
     stage.run([growPhase(stage, view.pieces, {
-      pace, leaving, arrival, ride, drive: view.closed, alarm: view.offender && { id: view.offender.id, pulse: true },
+      pace, leaving, arrival, drive: view.closed, alarm: view.offender && { id: view.offender.id, pulse: true },
     })]);
     stage.start();
     shown = view.pieces;
@@ -965,100 +994,6 @@ test('there is no train until the loop closes, and then there is one', () => {
   assert.equal(closed.closed, true);
   clock.run(4);
   assert.equal(alive(), 5, 'four cubes and exactly one train');
-});
-
-// ---- The rider --------------------------------------------------------------
-
-/** A typing stage with a rider, and every head it comes to rest at. */
-function ridden(options = {}) {
-  const arrivals = [];
-  const typed = typing({ ...options, ride: { tint: 'after', onArrive: head => arrivals.push(head) } });
-  const rider = () => typed.handles.find(h => h.name === OVERLAY.rider && !h.disposed);
-  return { ...typed, arrivals, rider };
-}
-
-/** Where a train at rest at `head` stands, as the 'after' ghost always has. */
-const stance = head => trainAt('straight', head.cell, head.pose);
-
-test('the rider rides a new piece once it has landed, and comes to rest at its end', () => {
-  const { stage, clock, type, arrivals, rider } = ridden({ arrival: 'fade' });
-  const [piece] = openScene('L').pieces;
-
-  type('L');
-  assert.deepEqual(arrivals.map(a => a.index), [0], 'it did not stand at the start at once');
-  const start = rider().transforms.at(-1);
-  assert.ok(near(start.position, stance(piece).position), 'it did not stand where the train starts');
-
-  let movedWhileFlying = false;
-  clock.run(4, () => {
-    const cube = stage.cubes.get('1L');
-    const down = cube && cube.opacity === 1;
-    if (!down && !near(rider().transforms.at(-1).position, start.position)) movedWhileFlying = true;
-  });
-  assert.equal(movedWhileFlying, false, 'it set off before the piece was down');
-  assert.deepEqual(arrivals.map(a => a.index), [0, 1]);
-  assert.deepEqual(arrivals[1].cell, openScene('L').head.cell);
-  assert.equal(arrivals[1].pose, openScene('L').head.pose);
-  const end = rider().transforms.at(-1);
-  assert.ok(near(end.position, stance(arrivals[1]).position), 'it did not come to rest where the train stands');
-  assert.ok(gap(end.basis, stance(arrivals[1]).basis) < 1e-6, 'it came to rest turned');
-});
-
-test('the rider rides on smoothly, curves included', () => {
-  const { clock, type, rider } = ridden();
-  type('LIRO');
-  const spots = [];
-  clock.run(8, () => spots.push(rider().transforms.at(-1)));
-  const jumps = spots.slice(1).map((s, i) => Math.hypot(...s.position.map((v, k) => v - spots[i].position[k])));
-  const turns = spots.slice(1).map((s, i) => gap(s.basis, spots[i].basis));
-  // Two cubes a second is under a unit a frame; the bound leaves room for a curve's lean.
-  assert.ok(Math.max(...jumps) < 2, `it jumped ${Math.max(...jumps).toFixed(2)} units in a frame`);
-  assert.ok(Math.max(...turns) < 0.2, `it snapped round by ${Math.max(...turns).toFixed(2)} in a frame`);
-});
-
-test('pieces added faster than they can be ridden are ridden in turn', () => {
-  const { clock, type, arrivals } = ridden();
-  type('S');
-  clock.run(0.05);
-  type('SL');
-  clock.run(0.05);
-  type('SLS');
-  clock.run(8);
-  assert.deepEqual(arrivals.map(a => a.index), [0, 1, 2, 3]);
-  assert.deepEqual(arrivals.at(-1).cell, openScene('SLS').head.cell);
-});
-
-test('a piece taken off is ridden back off, and leaves only once the train is clear of it', () => {
-  const { stage, clock, type, arrivals, rider } = ridden();
-  type('SL');
-  clock.run(8);
-  const leaving = handleOf(stage.cubes.get('1L'));
-  const before = rider().transforms.length;
-
-  type('S');
-  let goneBeforeClear = false;
-  clock.run(8, () => {
-    if (leaving.disposed && arrivals.at(-1).index !== 1) goneBeforeClear = true;
-  });
-  assert.ok(rider().transforms.length - before > 10, 'it jumped back rather than riding');
-  assert.equal(goneBeforeClear, false, 'the piece went from under the train');
-  assert.equal(leaving.disposed, true, 'the piece never went');
-  assert.deepEqual(arrivals.map(a => a.index), [0, 1, 2, 1]);
-  assert.ok(near(rider().transforms.at(-1).position, stance(arrivals.at(-1)).position));
-});
-
-test('a new start puts the rider there, and an empty track takes it off and says so', () => {
-  const { clock, type, arrivals, rider } = ridden();
-  type('S');
-  clock.run(8);
-  type('S', 'LF');
-  clock.run(8);
-  assert.deepEqual(arrivals.map(a => [a.index, a.pose]), [[0, 'DF'], [1, 'DF'], [0, 'DF'], [0, 'LF'], [1, 'LF']],
-    'it did not ride back to the old start, move to the new one and ride on from there');
-
-  type('');
-  assert.equal(rider(), undefined, 'the rider outlived its track');
-  assert.equal(arrivals.at(-1), null);
 });
 
 test('a piece with nowhere to go is drawn there, and pulses', () => {
@@ -1463,17 +1398,19 @@ test('the overlays fade out together and back in to their own strengths', () => 
   const pieces = piecesOf(RING);
   stage.setGrid(gridLines(extentOf(pieces)));
   stage.setOrigin({ ...extentOf(pieces), cell: false });
-  stage.setGhosts([{ type: 'straight', cell: [0, 1, 0], pose: 'DF', tint: 'before' }]);
-  const opacityOf = name => handles.find(h => h.name === name && !h.disposed).mesh.material.opacity;
-  const named = [OVERLAY.grid, OVERLAY.origin, `${OVERLAY.ghost}-before`];
-  const strengths = named.map(opacityOf);
+  stage.setOutlines([{ cell: [0, 0, 0], tint: 'before' }]);
+  // The lattice, the axes, and the outline — which carries the axes' name, after them.
+  const live = name => handles.filter(h => h.name === name && !h.disposed);
+  const opacities = () => [live(OVERLAY.grid)[0], ...live(OVERLAY.origin)].map(h => h.mesh.material.opacity);
+  const strengths = opacities();
+  assert.equal(strengths.length, 3);
 
   stage.run([overlayFadePhase(stage, { to: 0 })]);
   stage.start();
   clock.run(FADE_OUT / 2);
-  assert.ok(named.every((name, i) => opacityOf(name) > 0 && opacityOf(name) < strengths[i]), 'not every overlay was fading');
+  assert.ok(opacities().every((o, i) => o > 0 && o < strengths[i]), 'not every overlay was fading');
   clock.run(FADE_OUT);
-  assert.deepEqual(named.map(opacityOf), [0, 0, 0]);
+  assert.deepEqual(opacities(), [0, 0, 0]);
   assert.equal(stage.overlayOpacity(), 0);
 
   const origin = handles.find(h => h.name === OVERLAY.origin).mesh.material;
@@ -1481,7 +1418,7 @@ test('the overlays fade out together and back in to their own strengths', () => 
   stage.run([overlayFadePhase(stage, { to: 1 })]);
   stage.start();
   clock.run(FADE_IN + 0.1);
-  assert.deepEqual(named.map(opacityOf), strengths);
+  assert.deepEqual(opacities(), strengths);
   assert.equal(origin.transparent, false, 'the axes were left see-through');
 });
 
@@ -1598,22 +1535,18 @@ test('the lattice is one mesh, which clearing the cubes leaves standing', () => 
   assert.ok(depth.renderOrder > first.mesh.renderOrder);
 });
 
-test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', () => {
+test('ghost trains are one mesh each, mark their face, and outlive clearing the cubes', () => {
   const { handles, stage } = staged();
-  const ghosts = () => handles.filter(h => h.name.startsWith(OVERLAY.ghost) && !h.name.includes('-floor-'));
-  const floors = () => handles.filter(h => h.name.includes(`${OVERLAY.ghost}-floor-`));
+  const ghosts = () => handles.filter(h => h.name === OVERLAY.ghost);
+  const floors = () => handles.filter(h => h.name === `${OVERLAY.ghost}-floor`);
 
   stage.setGhosts([
-    { type: 'straight', cell: [0, 1, 0], pose: 'DF', tint: 'before' },
-    { type: 'straight', cell: [0, -1, 1], pose: 'BD', tint: 'after' },
+    { type: 'straight', cell: [0, 1, 0], pose: 'DF' },
+    { type: 'straight', cell: [0, -1, 1], pose: 'BD' },
   ]);
   const first = ghosts();
   assert.equal(first.length, 2);
-  assert.equal(first[0].name, `${OVERLAY.ghost}-before`);
-  assert.equal(first[1].name, `${OVERLAY.ghost}-after`);
   assert.equal(floors().length, 2, 'each ghost marks the face it stands on');
-  assert.notEqual(first[0].mesh.material.color.getHex(), first[1].mesh.material.color.getHex(),
-    'the two tints are one colour');
   // Half a cube along a straight is its middle: the body is in its train cell.
   const [x, y, z] = first[0].transforms.at(-1).position;
   [x, y, z].forEach((v, k) => assert.ok(Math.abs(v - [0, 0, RAIL][k]) < 1e-9, `${[x, y, z]}`));
@@ -1622,10 +1555,8 @@ test('ghost trains are one mesh each, tinted, and outlive clearing the cubes', (
   stage.clear();
   assert.ok(first.every(h => !h.disposed), 'clearing the cubes took the ghosts');
 
-  stage.setGhosts([{ type: 'straight', cell: [0, 1, 1], pose: 'DF', tint: 'after' }]);
+  stage.setGhosts([{ type: 'straight', cell: [0, 1, 1], pose: 'DF' }]);
   assert.ok(first.every(h => h.disposed), 'replaced ghosts were left behind');
-  stage.setGhosts([{ type: 'straight', cell: [0, 0, 0], pose: 'DF' }]);
-  assert.equal(floors().filter(h => !h.disposed).length, 1, 'an untinted train marks its face too');
   stage.setGhosts([]);
   assert.ok(ghosts().every(h => h.disposed));
   assert.ok(floors().every(h => h.disposed), 'floor patches were left behind');
@@ -1731,26 +1662,30 @@ test('the origin\'s outline and arrows are overlays that clear() leaves and setO
   assert.ok(axes().every(h => h.disposed));
 });
 
-test('a sum outlines each group\'s start and stands an after ghost at each end, then one of each joined', () => {
+test('a sum outlines each group\'s two ends, then the joined route\'s', () => {
   const [a, b] = ['SL', 'SLR'];
   const apart = apartScene(a.length)(a + b);
   const joined = joinedScene(a.length)(a + b);
   const [first, second, whole] = [a, b, a + b].map(letters => openScene(letters).head);
-  // The second group is drawn slid: its start cube's slide is its outline, and the
-  // same slide takes its own end to where its ghost stands.
+  // The second group is drawn slid: its start cube's slide is its start outline,
+  // and the same slide takes its own end to where its end is outlined.
   const [moved] = apart.pieces.filter(p => p.group === 1);
   const slid = openScene(b).pieces[0];
   const by = moved.cell.map((v, k) => v - slid.cell[k]);
+  const plus = c => c.map((v, k) => v + by[k]);
 
-  assert.deepEqual(apart.outlines, [[0, 0, 0], by]);
-  assert.deepEqual(apart.ghosts.map(g => [g.cell, g.pose]), [
-    [first.cell, first.pose], [second.cell.map((v, k) => v + by[k]), second.pose],
+  assert.deepEqual(apart.outlines, [
+    { cell: [0, 0, 0], tint: 'before' }, { cell: trackCell(first), tint: 'after' },
+    { cell: by, tint: 'before' }, { cell: plus(trackCell(second)), tint: 'after' },
   ]);
-  // Each callout reads its group's own end, not where it is drawn.
+  // Each callout reads its group's own end, not where it is drawn, and points at
+  // the cube the next piece would go in, where it is drawn.
   assert.deepEqual(apart.notes.map(n => n.lines), [first, second].map(h => poseReadout(h)));
-  assert.deepEqual(joined.outlines, [[0, 0, 0]]);
-  assert.deepEqual(joined.ghosts.map(g => [g.cell, g.pose]), [[whole.cell, whole.pose]]);
+  assert.deepEqual(apart.notes.map(n => n.cell), [trackCell(first), plus(trackCell(second))]);
+  assert.deepEqual(joined.outlines, [{ cell: [0, 0, 0], tint: 'before' }, { cell: trackCell(whole), tint: 'after' }]);
+  assert.equal(joined.ghosts, undefined, 'no train is drawn');
   assert.deepEqual(joined.notes.map(n => n.lines), [poseReadout(whole)]);
+  assert.deepEqual(joined.notes.map(n => n.cell), [trackCell(whole)]);
 });
 
 test('setOutlines outlines each cell where it is, without arrows, and clear() leaves them', () => {
@@ -1758,17 +1693,38 @@ test('setOutlines outlines each cell where it is, without arrows, and clear() le
   const outlines = () => handles.filter(h => h.name === OVERLAY.origin && !h.disposed);
   const cells = [[0, 0, 0], [3, 0, 3]];
 
-  stage.setOutlines(cells);
+  stage.setOutlines(cells.map(cell => ({ cell })));
   assert.deepEqual(
     outlines().map(h => String(new Vector3().setFromMatrixPosition(h.mesh.matrix).toArray())),
     cells.map(c => String(toWorld(c))),
   );
   stage.clear();
   assert.equal(outlines().length, 2, 'clear() took the outlines down');
-  stage.setOutlines([[0, 0, 0]]);
+  stage.setOutlines([{ cell: [0, 0, 0] }]);
   assert.equal(outlines().length, 1);
   stage.setOutlines([]);
   assert.equal(outlines().length, 0);
+});
+
+test('a step\'s end is outlined in the origin\'s paint and its start in a deeper blue, thinner, both fading with the overlays', () => {
+  const { handles, stage } = staged();
+  const shown = () => handles.filter(h => h.name === OVERLAY.origin && !h.disposed).map(h => h.mesh);
+  const reach = mesh => {
+    mesh.geometry.computeBoundingBox();
+    return mesh.geometry.boundingBox.max.x;
+  };
+
+  stage.setOutlines([{ cell: [0, 0, 0] }, { cell: [1, 0, 0], tint: 'before' }, { cell: [2, 0, 0], tint: 'after' }]);
+  const [origin, before, after] = shown();
+  assert.equal(after.material, origin.material, 'the end is in the origin\'s paint');
+  assert.equal(`#${before.material.color.getHexString()}`, THEME.outlineBefore);
+  assert.ok(reach(before) < reach(after) && reach(after) < reach(origin), 'start thinner than end, end thinner than origin');
+
+  stage.setOverlayOpacity(0.5);
+  for (const mesh of [before, after]) {
+    assert.equal(mesh.material.opacity, 0.5);
+    assert.equal(mesh.material.transparent, true);
+  }
 });
 
 test('each axis label is projected to where its spot lands on the canvas', () => {

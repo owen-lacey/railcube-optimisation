@@ -1,21 +1,22 @@
 <script>
 	// Where the train is, as the post's coordinates: a layout in its cell lattice,
-	// a caption reading out the cell the train is entering, and a slider for which
-	// piece it is on. A figure — see `$lib/figure.js`.
+	// outlined as `PieceMoves` outlines one piece — the start cube where it begins,
+	// and the cube of the piece the train is on where it has got to, with a callout
+	// there — and a slider for which piece it is on. A figure — see `$lib/figure.js`.
 	import Frame from "./Frame.svelte";
 	import TrainScrubber from "./TrainScrubber.svelte";
 	import { axesScene } from "$lib/scenes.js";
-	import { readerFrame, poseLabel } from "$lib/catalogue.js";
+	import { cubeReadout } from "$lib/catalogue.js";
 
 	let {
 		shape,
-		// What the caption reads out: 'position', the cell the train is in, `(x, y, z)`
-		// from the start cube; or 'position-pose', that and the pose of the piece it
-		// last entered.
+		// What the callout reads out: 'position', the cube of the piece the train is
+		// on, `(x, y, z)` from the start cube; or 'position-pose', that and the pose
+		// it entered the piece in.
 		readout = "position",
 		// Letters → scene: `axesScene` draws the origin's axes beside the lattice,
 		// `cellScene` the lattice alone. Both in scenes.js.
-		scene = axesScene,
+		scene: drawing = axesScene,
 		aspect = undefined
 	} = $props();
 
@@ -23,32 +24,39 @@
 	// slider starts with it, so the train waits at the start until played.
 	let at = $state(0);
 	let held = $state(true);
-	// The cell the train is in, the model's `[right, up, forwards]` from the start
-	// cube (docs/coordinates.md), and the pose of the piece it last entered, `'DF'`
-	// say; each null while there is no train.
-	let cell = $state(null);
+	// The cube of the piece the train is on, the model's `[right, up, forwards]`
+	// from the start cube (docs/coordinates.md), and the pose it entered that piece
+	// in, `'DF'` say; each null while there is no train.
+	let cube = $state(null);
 	let pose = $state(null);
+
+	// The start cube is outlined as a step's start, in place of the origin's own
+	// outline; the stage outlines the train's piece as its end, and the callout
+	// follows it there.
+	const scene = $derived((letters) => {
+		const drawn = drawing(letters);
+		return {
+			...drawn,
+			origin: drawn.origin && { ...drawn.origin, cell: false },
+			outlines: [{ cell: [0, 0, 0], tint: "before" }],
+			notes: cube
+				? [{ key: "train", cell: cube, lines: cubeReadout(cube, readout === "position-pose" ? pose : null) }]
+				: []
+		};
+	});
 
 	const train = {
 		at: () => (held ? at : null),
 		onAt: (i) => {
 			if (!held) at = i;
 		},
-		onCell: (c) => (cell = c),
+		onPiece: (c) => (cube = c),
 		onPose: (p) => (pose = p)
 	};
 </script>
 
 <Frame view={{ shape, scene, train }} {aspect}>
 	{#snippet footer(drawn)}
-		<p class="caption">
-			Position: {cell ? `(${readerFrame(cell).join(", ")})` : "—"}
-		</p>
-		{#if readout === "position-pose"}
-			<p class="caption">
-				Orientation: {pose ? `(${poseLabel(pose)})` : "—"}
-			</p>
-		{/if}
 		{#if drawn}
 			<TrainScrubber pieces={drawn.pieces} bind:at bind:held />
 		{/if}

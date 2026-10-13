@@ -706,13 +706,16 @@ and `threejs-fidelity-spike` hold the measurements.
   included, which PolyCSS could not do.
 - **The driven train's lighting is carried** — Owen's call, to keep the picture. Its colours
   are pre-shaded at its authored orientation by `carriedShade` (the same formula, in JS) and it is
-  drawn with an unlit `MeshBasicMaterial`, so it never re-lights on a bank or a wall. An
-  untinted ghost train is lit live, since it stands still.
-- **Overlays** (lattice prisms, train-cell fill, filled cells, tinted ghosts, origin axes)
+  drawn with an unlit `MeshBasicMaterial`, so it never re-lights on a bank or a wall. A
+  ghost train (`PoseCycle`'s) is lit live, since it stands still.
+- **No ghost trains mark a step's ends** — Owen's call. A step's start and end are outlined
+  cubes (`setOutlines` with `tint` 'before'/'after'), in `PieceMoves`, `PoseStep`,
+  `PoseBuilder`, `TrackSum` and `TrainCoordinates` (start cube, and the held train's piece).
+- **Overlays** (lattice prisms, train-cell fill, filled cells, outlines, origin axes)
   are flat `MeshBasicMaterial`s whose colours `readTheme` reads off the viewer's computed
-  style (`--grid-color`, `--grid-opacity`, `--ghost-before/after`, `--ghost-opacity`), so the
+  style (`--grid-color`, `--grid-opacity`, `--outline-before`), so the
   theme stays in CSS. The see-through ones are `transparent`, `depthWrite: false`, drawn after
-  the solids in the order lattice → ghosts → fill by `renderOrder`; that matched PolyCSS to
+  the solids in the order lattice → fill by `renderOrder`; that matched PolyCSS to
   the pixel. The lattice stays prisms (`gridLines`), not `LineSegments`, which are one pixel
   wide at any zoom. Overlay meshes carry `OVERLAY` names so tests can find them.
 - **The blueprint** (`blueprint` prop: on by default in `LayoutViewer`, off in
@@ -1013,11 +1016,11 @@ given.
 the origin, so the same letters from another orientation are the same track turned about the
 origin cube's centre (world `[0, 0, 0]`). `PoseBuilder` passes its orientation as the grow
 transition's `start`, and a new one is `showTurned` in `TrackViewer`: every overlay — lattice,
-axes and their labels, start ghost, rider, callouts — fades out together (`overlayFadePhase`
+axes and their labels, outlines, callouts — fades out together (`overlayFadePhase`
 over `stage.setOverlayOpacity`, one share on the shared overlay paints), the cubes turn as one
 along the shortest arc while the camera pans to the new frame (`turnPhase` in `move.js`, which
-throws if the new layout is not a rigid turn of what stands), then the new overlays fade in with
-the rider at the new end. The overlays' effects stand aside until the old ones are out of sight.
+throws if the new layout is not a rigid turn of what stands), then the new overlays fade in at
+the new ends. The overlays' effects stand aside until the old ones are out of sight.
 Owen's calls: everything but the track fades, and the pan runs during the turn. Under reduced
 motion it is the instant grow it always was.
 

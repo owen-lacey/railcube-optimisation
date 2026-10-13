@@ -4,17 +4,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { POSES, isValidPose, startCell, step } from "../src/track.js";
-import { describeDelta, describeMove, describePose } from "../site/src/lib/catalogue.js";
+import { describeDelta, describeMove, describePose, trackCell } from "../site/src/lib/catalogue.js";
 import { pieceMove, poseCycle, poseGhost } from "../site/src/lib/scenes.js";
 
-// Owen's wording, with his convention of digits and upwards/downwards.
+// Where the next piece goes, with Owen's convention of digits and upwards/downwards.
 const CAPTIONS = {
-	straight: "Train moves 1 forwards",
-	cross: "Train moves 1 forwards",
-	leftCurve: "Train moves 1 forwards and 2 left, turning left",
-	rightCurve: "Train moves 1 forwards and 2 right, turning right",
-	insideCurve: "Train moves 1 up, turning upwards",
-	outsideCurve: "Train moves 1 forwards and 2 down, turning downwards"
+	straight: "Next piece goes 1 forwards",
+	cross: "Next piece goes 1 forwards",
+	leftCurve: "Next piece goes 1 forwards and 2 left, facing left",
+	rightCurve: "Next piece goes 1 forwards and 2 right, facing right",
+	insideCurve: "Next piece goes 1 forwards and 2 up, facing upwards",
+	outsideCurve: "Next piece goes 1 down, facing downwards"
 };
 
 test("every piece's caption is read off the model in the post's words", () => {
@@ -22,32 +22,14 @@ test("every piece's caption is read off the model in the post's words", () => {
 		assert.equal(describeMove(type), caption);
 });
 
-test("the ghosts stand on the piece and on the head it hands on", () => {
+test("the piece's cube and the cube it hands on are outlined, before and after", () => {
 	for (const type of Object.keys(CAPTIONS)) {
-		const [before, after] = pieceMove(type).ghosts;
-		assert.deepEqual(
-			{ cell: before.cell, pose: before.pose },
-			{ cell: startCell("DF"), pose: "DF" }
-		);
-		assert.deepEqual(
-			{ cell: after.cell, pose: after.pose },
-			step(startCell("DF"), "DF", type)
-		);
-		assert.deepEqual([before.tint, after.tint], ["before", "after"]);
-		// Before rides the piece itself; after, the straight that would click in next.
-		assert.deepEqual([before.type, after.type], [type, "straight"]);
-	}
-});
-
-test("the lattice holds the piece and both ghosts' train cells", () => {
-	for (const type of Object.keys(CAPTIONS)) {
-		const { pieces, ghosts, grid } = pieceMove(type);
-		const cells = [...pieces[0].material, ...ghosts.map((g) => g.cell)];
-		for (const cell of cells) {
-			cell.forEach((v, a) =>
-				assert.ok(v >= grid.lo[a] && v <= grid.hi[a], `${type}: ${cell}`)
-			);
-		}
+		const { outlines, after } = pieceMove(type);
+		assert.deepEqual(after, step(startCell("DF"), "DF", type));
+		assert.deepEqual(outlines, [
+			{ cell: trackCell({ cell: startCell("DF"), pose: "DF" }), tint: "before" },
+			{ cell: trackCell(after), tint: "after" }
+		]);
 	}
 });
 
@@ -84,17 +66,16 @@ test("a move is written as the change from (x, y, z), in the reader's frame", ()
 	assert.equal(describeDelta(start, after("outsideCurve")), "(x, y + 1, z − 2)");
 });
 
-test("from every pose, the lattice holds the piece and both train cells, and the move is the model's", () => {
+test("from every pose, the lattice is exactly the piece and the cube it hands on, and the move is the model's", () => {
 	const origin = [0, 0, 0];
 	for (const pose of POSES) {
 		for (const type of Object.keys(CAPTIONS)) {
-			const { pieces, ghosts, grid, after } = pieceMove(type, { pose, cell: origin });
+			const { pieces, grid, after, ghosts } = pieceMove(type, { pose, cell: origin });
 			assert.deepEqual(after, step(origin, pose, type));
-			for (const cell of [...pieces[0].material, ...ghosts.map((g) => g.cell)]) {
-				cell.forEach((v, a) =>
-					assert.ok(v >= grid.lo[a] && v <= grid.hi[a], `${pose} ${type}: ${cell}`)
-				);
-			}
+			assert.equal(ghosts, undefined, `${pose} ${type}: no train is drawn`);
+			const cells = [...pieces[0].material, trackCell(after)];
+			const bound = (pick) => [0, 1, 2].map((a) => pick(...cells.map((c) => c[a])));
+			assert.deepEqual(grid, { lo: bound(Math.min), hi: bound(Math.max) }, `${pose} ${type}`);
 		}
 	}
 });

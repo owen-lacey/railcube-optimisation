@@ -11,6 +11,7 @@
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import { lengthsScene } from "$lib/scenes.js";
 	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
+	import PieceTag from "$lib/components/PieceTag.svelte";
 </script>
 
 <Chapter id="optimising">
@@ -40,8 +41,13 @@
 	<p>
 		It would also be underwhelming if the train stayed largely face up. One of
 		the selling points of the Rail Cube is that it can ride on walls and go
-		upside down, we must please the creators and cover as many of the 24 orientations
-		as we can. The below track covers 20.
+		upside down, we must please the creators and cover as many of the 24
+		orientations as we can. You can only change orientation with curved pieces
+		i.e <PieceTag letter="L" />, <PieceTag letter="R" />, <PieceTag
+			letter="I"
+		/>, or <PieceTag letter="O" />. Since our inventory only contains 20 of
+		those pieces making 20 the maximum achievable orientation count. The below
+		track does just that, omitting the entire +z face.
 	</p>
 	<PoseTracker shape="IRSISSRIIROXSSLSSOORISLISSILSSSOLXSI" />
 	<!-- TODO: anim the repeated section. -->
@@ -102,8 +108,8 @@
 			track piece. More is better.
 		</li>
 		<li>
-			<b>Orientation count:</b> The number of distinct orientations the train assumes along the
-			track. More is better.
+			<b>Orientation count:</b> The number of distinct orientations the train assumes
+			along the track. More is better.
 		</li>
 		<li>
 			<b>Repeats:</b> The number of times the train repeats a track piece more than

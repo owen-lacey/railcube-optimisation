@@ -11,7 +11,7 @@ const stylesheet = readFileSync(new URL("../site/src/app.css", import.meta.url),
 const theme = COLOUR_TOKENS.filter(t => !Object.hasOwn(COLORS, t));
 
 test("every theme token is a property the stylesheet declares", () => {
-	assert.equal(theme.length, 5);
+	assert.equal(theme.length, 4);
 	for (const token of theme) {
 		assert.equal(colourOf(token), `var(--${token})`);
 		assert.ok(stylesheet.includes(`--${token}:`), `app.css declares --${token}`);

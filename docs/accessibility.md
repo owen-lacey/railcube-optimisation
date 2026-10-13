@@ -44,8 +44,6 @@ Other colours, for the same audit:
 |---|---|---|---|
 | `--grid-color` | `#4f75b8` | 4.60 | passes as text and as lines |
 | `--muted` | `#6b7382` | 4.77 | passes on white, 4.03 on `--card-footer` (fails as text there) |
-| `--ghost-after` | `#6b7a90` | 4.36 | fails as normal text, passes as graphics |
-| `--ghost-before` | `#b4bfcd` | 1.86 | fails as graphics |
 | `--card-border`, `--rule` | `#aab2bf` | 2.14 | a decorative border is exempt; an outline someone needs in order to see a boundary is not |
 | `TRAIN_COLOR` | `#f8fafc` | 1.05 | the train is almost white on white wherever it is not over track |
 
@@ -55,7 +53,7 @@ Decisions needed before anything changes (Owen's call):
    colours, outlines on pieces, a darker page or card background). Or move the palette
    itself away from the real set.
 2. Whether the title stays pictures of text, or is also shown as visible text.
-3. Which of the graphics-only colours (ghosts, borders, the train) are needed to
+3. Which of the graphics-only colours (outlines, borders, the train) are needed to
    understand the content, and so are held to 3:1.
 
 Once it is decided, the ratios belong under test (a check over the colour tokens, like

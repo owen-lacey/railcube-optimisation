@@ -13,5 +13,5 @@ export default {
 
 export const Default = {};
 
-/** Opened on the outside curve, whose after-train hangs off the front face. */
+/** Opened on the outside curve, whose end cube is the one under it. */
 export const OutsideCurve = { args: { initial: 'outsideCurve' } };

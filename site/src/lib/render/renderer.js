@@ -62,7 +62,7 @@ export const sharedRenderer = { draw };
 
 /**
  * The overlay paint, read off the viewer's stylesheet so the theme stays in CSS:
- * the lattice's colour and strength, and the ghost trains' two tints.
+ * the lattice's colour and strength, and the outline of a step's start.
  */
 export function readTheme(el) {
   const style = getComputedStyle(el);
@@ -71,8 +71,6 @@ export function readTheme(el) {
     grid: value('--grid-color'),
     gridOpacity: Number(value('--grid-opacity')),
     trainCellOpacity: Number(value('--train-cell-opacity')),
-    ghostBefore: value('--ghost-before'),
-    ghostAfter: value('--ghost-after'),
-    ghostOpacity: Number(value('--ghost-opacity')),
+    outlineBefore: value('--outline-before'),
   };
 }

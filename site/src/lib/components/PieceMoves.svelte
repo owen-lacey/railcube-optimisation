@@ -1,7 +1,7 @@
 <script>
-  // What each piece does to the train: a piece on its own, with a ghost train
-  // where the train rides before it and another where it rides after, and a
-  // button per piece type under it. Nothing moves — it is a picture of one step.
+  // What each piece does to the train: a piece on its own, its cube outlined where
+  // the step starts and the cube the next piece would go in outlined where it ends,
+  // and a button per piece type under it. Nothing moves — it is a picture of one step.
   import { Tabs } from 'bits-ui';
   import TrackViewer from './TrackViewer.svelte';
   import LayoutCard from './LayoutCard.svelte';
@@ -25,9 +25,9 @@
         pieces={scene.pieces}
         camera={scene.camera}
         grid={scene.grid}
-        ghosts={scene.ghosts}
+        outlines={scene.outlines}
         {aspect}
-        label="The {piece.name.toLowerCase()}, with the train before and after it"
+        label="The {piece.name.toLowerCase()}, with the cubes it starts and ends at outlined"
       />
     </Tabs.Content>
   </LayoutCard>
@@ -91,21 +91,22 @@
     font-size: 0.85rem;
   }
 
+  /* Hollow, like the outlines they name: the start deeper, the end bold. */
   .swatch {
     display: inline-block;
+    box-sizing: border-box;
     width: 0.75em;
     height: 0.75em;
     margin: 0 0.3em 0 0.8em;
-    border-radius: 0.2em;
+    border: 2px solid var(--grid-color);
     vertical-align: -0.05em;
-    opacity: var(--ghost-opacity);
   }
 
   .swatch.before {
-    background: var(--ghost-before);
+    border-color: var(--outline-before);
   }
 
   .swatch.after {
-    background: var(--ghost-after);
+    border-width: 3px;
   }
 </style>

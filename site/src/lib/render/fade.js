@@ -65,7 +65,7 @@ export function fadeInPhase(stage, pieces, { speed = 1 } = {}) {
 }
 
 /**
- * Fade every overlay — the lattice, the axes, the ghosts and the rider — from
+ * Fade every overlay — the lattice, the axes, the outlines and the ghosts — from
  * however strongly it is drawn now to `to`: out over `FADE_OUT`, in over `FADE_IN`.
  * See `setOverlayOpacity` in stage.js.
  *
