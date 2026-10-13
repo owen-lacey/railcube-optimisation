@@ -81,8 +81,13 @@ export function cubeIds(placed) {
   return placed.map(piece => (piece.revisit ? null : ids[k++]));
 }
 
-export function openScene(letters) {
-  const { placed, closed, faults } = chainOpen(routeOf(letters));
+/**
+ * A track as far as it has been built, from `startPose`: its pieces, the `head`
+ * the last one leaves the train in, whether it has closed, and the piece the model
+ * rejected (`offender`), drawn where it was asked to go.
+ */
+export function openScene(letters, startPose = 'DF') {
+  const { placed, head, closed, faults } = chainOpen(routeOf(letters), startPose);
   const fault = faults[0] ?? null;
   const kept = fault ? placed.slice(0, fault.index + 1) : placed;
   // Which *step* is at fault is not always which *cube* is: the third traversal of
@@ -104,6 +109,7 @@ export function openScene(letters) {
   const pieces = paint(kept).map((piece, i) => (i === blamed ? { ...piece, color: ALARM } : piece));
   return {
     pieces,
+    head,
     closed: closed && !fault,
     offender: fault && { ...fault, id: cubeIds(kept)[blamed] },
   };
@@ -159,7 +165,7 @@ export function joinedScene(at) {
 }
 
 function groupsOf(letters, at) {
-  const [first, second] = [letters.slice(0, at), letters.slice(at)].map(openScene);
+  const [first, second] = [letters.slice(0, at), letters.slice(at)].map(group => openScene(group));
   for (const [group, scene] of [[letters.slice(0, at), first], [letters.slice(at), second]]) {
     if (scene.offender) throw new Error(`the group ${group} is not legal: ${scene.offender.message}`);
   }

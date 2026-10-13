@@ -15,14 +15,12 @@
   // d-pad (forwards is a straight, left and right the two flat curves), and
   // Backspace. They go to whichever builder is mostly on screen — see `keys.js`.
   import { onMount } from 'svelte';
-  import Delete from '@lucide/svelte/icons/delete';
   import TrackViewer from './TrackViewer.svelte';
+  import PieceKeys from './PieceKeys.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
-  import { PIECES } from '$lib/catalogue.js';
   import { claimKeys } from '$lib/keys.js';
-  import { chainOpen } from '../../../../src/track.js';
-  import { routeOf } from '../../../../src/layouts.js';
+  import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
 
   let {
     shape = '',
@@ -32,27 +30,6 @@
     pace = 0.1,
     speed = 1.2,
   } = $props();
-
-  // Sketch's limit, for the same reason: past anything the toy can build.
-  const LIMIT = 40;
-  const LETTERS = PIECES.map(p => p.letter).join('');
-  // The d-pad: forwards, left and right as the train sees them, since that is the
-  // way the curves turn.
-  const ARROWS = { ArrowUp: 'S', ArrowLeft: 'L', ArrowRight: 'R' };
-
-  /**
-   * A starting shape as the builder will hold it: only the six letters, and
-   * stopped at the first piece the model rejects — which is kept, because it is
-   * the one being complained about. Nothing after it could be built either.
-   */
-  function seed(text) {
-    const letters = [...String(text).toUpperCase()]
-      .filter(l => LETTERS.includes(l))
-      .slice(0, LIMIT)
-      .join('');
-    const fault = letters && openScene(letters).offender;
-    return fault ? letters.slice(0, fault.index + 1) : letters;
-  }
 
   let letters = $state(seed(shape));
 
@@ -82,35 +59,17 @@
   let builder = $state(null);
   onMount(() => claimKeys(builder, onKeydown));
 
-  /**
-   * Does the head sit on a cross already laid, so that a cross now is the train
-   * coming back over it? That pass places nothing, and there is only one piece it
-   * could be, so the builder puts it down rather than asking for it.
-   */
-  const meetsCross = text => {
-    const { placed, faults } = chainOpen(routeOf(text + 'X'));
-    return faults.length === 0 && placed.at(-1).revisit;
-  };
-
   const add = letter => {
-    if (done) return;
-    letters += letter;
-    if (letters.length < LIMIT && meetsCross(letters)) letters += 'X';
+    if (!done) letters = added(letters, letter);
   };
-  // A cross that was put down for you goes with the piece that led into it,
-  // otherwise Backspace would leave the head stranded on a cross with no way on.
-  const removeLast = () => {
-    const last = view.pieces.length && chainOpen(routeOf(letters)).placed.at(-1).revisit;
-    letters = letters.slice(0, last && letters.length > 1 ? -2 : -1);
-  };
+  const removeLast = () => { letters = removed(letters); };
 
   /** The keyboard: a letter or an arrow adds a piece, Backspace takes one off. */
   function onKeydown(event) {
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-    const letter = ARROWS[event.key] ?? event.key.toUpperCase();
-    if (event.key === 'Backspace') removeLast();
-    else if (letter.length === 1 && LETTERS.includes(letter)) add(letter);
-    else return;
+    const action = keyAction(event);
+    if (!action) return;
+    if (action.remove) removeLast();
+    else add(action.add);
     event.preventDefault();
   }
 </script>
@@ -131,76 +90,13 @@
     label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
   />
 
-  <div class="keys">
-    {#each PIECES as piece (piece.type)}
-      <button
-        type="button"
-        class="piece"
-        style:--piece={piece.hex}
-        disabled={done}
-        onclick={() => add(piece.letter)}
-        aria-label={`Add piece: ${piece.name}`}
-        title={piece.name}
-      >{piece.letter}</button>
-    {/each}
-    <button
-      type="button"
-      class="remove"
-      disabled={!letters}
-      onclick={removeLast}
-      aria-label="Remove the last piece"
-      title="Remove the last piece"
-    ><Delete fill="currentColor" aria-hidden="true" /></button>
+  <div class="below">
+    <PieceKeys disabled={done} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
   </div>
 </div>
 
 <style>
-  .keys {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.5rem;
+  .below {
     margin-top: 0.75rem;
-  }
-
-  button {
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    border-radius: 0.5rem;
-    font: inherit;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-
-  .piece {
-    border: none;
-    background: var(--piece);
-    color: var(--page);
-    font-family: ui-monospace, monospace;
-    font-size: 1.25rem;
-    font-weight: 700;
-  }
-
-  /* Set apart from the pieces: outlined rather than filled, and a little further
-     off, so it reads as an action on the track rather than one more piece. */
-  .remove {
-    width: 56px;
-    margin-left: 0.5rem;
-    border: 2px solid var(--card-border);
-    background: transparent;
-    color: inherit;
-  }
-
-  /* The icon's body is filled, so the × inside it has to be cut out in the page
-     colour or it vanishes into the fill. The body is the icon's first path. */
-  .remove :global(svg path:not(:first-of-type)) {
-    stroke: var(--wash, #fff);
   }
 </style>

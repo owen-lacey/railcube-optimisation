@@ -5,13 +5,11 @@
   // as (x, y, z), the end as the change from it — and the pose the train has there.
   // A press picks a piece or a pose; it never carries the train on.
   import { Tabs } from 'bits-ui';
-  import ChevronLeft from '@lucide/svelte/icons/chevron-left';
-  import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import TrackViewer from './TrackViewer.svelte';
   import LayoutCard from './LayoutCard.svelte';
+  import OrientationStepper from './OrientationStepper.svelte';
   import { PIECES, describePose, poseLabel, readerFrame } from '$lib/catalogue.js';
   import { pieceMove } from '$lib/scenes.js';
-  import { POSES } from '../../../../src/track.js';
 
   let { initial = 'DF', initialPiece = 'straight', aspect = '3 / 2' } = $props();
 
@@ -31,10 +29,6 @@
     { key: 'before', cell: START, lines: [`Position: (${readerFrame(START).join(', ')})`, `Pose: (${poseLabel(pose)})`] },
     { key: 'after', cell: scene.after.cell, lines: [`Position: (${readerFrame(scene.after.cell).join(', ')})`, `Pose: (${poseLabel(scene.after.pose)})`] },
   ]);
-
-  const turn = by => {
-    pose = POSES[(POSES.indexOf(pose) + by + POSES.length) % POSES.length];
-  };
 </script>
 
 <Tabs.Root bind:value={active} class="pose-step">
@@ -54,11 +48,7 @@
 </Tabs.Root>
 
 {#snippet keys()}
-  <div class="poses" role="group" aria-label="Start orientation">
-    <button class="turn" aria-label="Previous orientation" onclick={() => turn(-1)}><ChevronLeft /></button>
-    <p class="caption">{describePose(pose)}</p>
-    <button class="turn" aria-label="Next orientation" onclick={() => turn(1)}><ChevronRight /></button>
-  </div>
+  <OrientationStepper bind:pose />
   <Tabs.List class="keys" aria-label="Track pieces">
     {#each PIECES as { type, name, letter, hex } (type)}
       <Tabs.Trigger value={type} class="key" style="--piece: {hex}" aria-label={name} title={name}>
@@ -71,33 +61,6 @@
 <style>
   :global(.pose-step) {
     margin: 0 0 1.25rem;
-  }
-
-  .poses {
-    display: flex;
-    flex-basis: 100%;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-  }
-
-  .poses .caption {
-    min-width: 16ch;
-    margin: 0;
-    text-align: center;
-  }
-
-  .turn {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border: 2px solid var(--card-border);
-    border-radius: 0.5rem;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
   }
 
   /* The builder's keys: a square per piece in its colour, filled when selected.
