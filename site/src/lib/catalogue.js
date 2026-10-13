@@ -199,11 +199,12 @@ export const poseReadout = (head, was = null) => [
 
 /**
  * A cube as a callout's lines, for `notes` in TrackViewer: its position, and the
- * orientation `pose` under it if one is given.
+ * orientation `pose` under it if one is given — with whatever differs from `was`,
+ * `{ cube, pose }` each null where there was none, marked as changed.
  */
-export const cubeReadout = (cube, pose = null) => [
-	calloutLine("Position", readerFrame(cube).map(String), null, ", "),
-	...(pose ? [calloutLine("Orientation", poseAxes(pose), null, " ")] : [])
+export const cubeReadout = (cube, pose = null, was = { cube: null, pose: null }) => [
+	calloutLine("Position", readerFrame(cube).map(String), was.cube && readerFrame(was.cube).map(String), ", "),
+	...(pose ? [calloutLine("Orientation", poseAxes(pose), was.pose && poseAxes(was.pose), " ")] : [])
 ];
 
 /**

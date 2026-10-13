@@ -29,20 +29,28 @@
 	// in, `'DF'` say; each null while there is no train.
 	let cube = $state(null);
 	let pose = $state(null);
+	// What each was before it last changed, so the callout can pick out what moved.
+	// Each is reported on its own, so each keeps its own.
+	let was = $state({ cube: null, pose: null });
 
 	// The start cube is outlined as a step's start, in place of the origin's own
 	// outline; the stage outlines the train's piece as its end, and the callout
-	// follows it there.
+	// follows it there, flashing whatever changed on each new piece.
 	const scene = $derived((letters) => {
 		const drawn = drawing(letters);
 		return {
 			...drawn,
 			origin: drawn.origin && { ...drawn.origin, cell: false },
 			outlines: [{ cell: [0, 0, 0], tint: "before" }],
-			notes: cube
-				? [{ key: "train", cell: cube, lines: cubeReadout(cube, readout === "position-pose" ? pose : null) }]
-				: []
+			notes: cube ? [note(cube, readout === "position-pose" ? pose : null)] : []
 		};
+	});
+
+	const note = (cube, pose) => ({
+		key: "train",
+		cell: cube,
+		flash: `${cube}${pose}`,
+		lines: cubeReadout(cube, pose, was)
 	});
 
 	const train = {
@@ -50,8 +58,14 @@
 		onAt: (i) => {
 			if (!held) at = i;
 		},
-		onPiece: (c) => (cube = c),
-		onPose: (p) => (pose = p)
+		onPiece: (c) => {
+			was = { ...was, cube: c && cube };
+			cube = c;
+		},
+		onPose: (p) => {
+			was = { ...was, pose: p && pose };
+			pose = p;
+		}
 	};
 </script>
 
