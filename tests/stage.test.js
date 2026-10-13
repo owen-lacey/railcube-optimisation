@@ -23,8 +23,8 @@ import assert from 'node:assert/strict';
 import { chainTrack } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
 import { createStage, together, deferred, OVERLAY } from '../site/src/lib/render/stage.js';
-import { movePhase, MOVE } from '../site/src/lib/render/move.js';
-import { fadeInPhase, fadeOutPhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
+import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js';
+import { fadeInPhase, fadeOutPhase, overlayFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, layoutScene } from '../site/src/lib/scenes.js';
@@ -1395,6 +1395,94 @@ test('a stretch moved whole keeps its shape, and goes straight to its place', ()
 });
 
 // ---- A new step fading in -----------------------------------------------------
+
+/** A track standing finished in `pose`, and turned to start in `to`. */
+function turned(shape, pose, to) {
+  const clock = fakeClock();
+  const { handles, stage } = staged();
+  stage.run([trackPhase(stage, openScene(shape, pose).pieces, { drive: false })]);
+  stage.start();
+  clock.run(0.1);
+  const before = new Map(stage.cubes);
+  const next = openScene(shape, to).pieces;
+  stage.run([turnPhase(stage, next)]);
+  stage.start();
+  return { stage, handles, clock, before, next };
+}
+
+test('a new start turns the same cubes about the origin cube, and lands them in their slots', () => {
+  const { stage, handles, clock, before, next } = turned(SET, 'DF', 'LU');
+  const reach = new Map([...before].map(([id, cube]) => [id, Math.hypot(...cube.position)]));
+  const [from, to] = [before.get('1L').basis, poseRotation(next[0].pose)];
+  let midway = false;
+  clock.run(TURN + 0.1, () => {
+    for (const [id, cube] of stage.cubes) {
+      assert.ok(Math.abs(Math.hypot(...cube.position) - reach.get(id)) < 1e-9, `${id} left its sphere about the origin`);
+    }
+    const { basis } = stage.cubes.get('1L');
+    if (gap(basis, from) > 0.1 && gap(basis, to) > 0.1) midway = true;
+  });
+  assert.ok(midway, 'nothing had turned half-way through');
+  assert.equal(handles.length, before.size, 'a cube was minted for the same track');
+  const ids = identify(next);
+  next.filter(p => !p.revisit).forEach((piece, i) => {
+    const cube = stage.cubes.get(ids[i]);
+    assert.equal(cube, before.get(ids[i]), `${ids[i]} is not the cube it was`);
+    assert.equal(handleOf(cube).disposed, false, `${ids[i]} was taken away`);
+    assert.deepEqual(cube.position, restingPlace(piece), `${ids[i]} landed off its cell`);
+    assert.ok(gap(cube.basis, poseRotation(piece.pose)) < 1e-12, `${ids[i]} landed turned`);
+  });
+});
+
+test('a turn caught part-way turns on from where it got to', () => {
+  const { stage, clock, next } = turned(SET, 'DF', 'LU');
+  clock.run(TURN / 3);
+  const again = openScene(SET, 'BR').pieces;
+  stage.run([turnPhase(stage, again)]);
+  clock.run(TURN + 0.1);
+  const ids = identify(again);
+  again.filter(p => !p.revisit).forEach((piece, i) => {
+    assert.deepEqual(stage.cubes.get(ids[i]).position, restingPlace(piece), `${ids[i]} landed off its cell`);
+  });
+  assert.notDeepEqual(next, again);
+});
+
+test('a new layout that is not the same track turned is refused', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  stage.run([trackPhase(stage, piecesOf(SET), { drive: false })]);
+  stage.start();
+  clock.run(0.1);
+  assert.throws(() => turnPhase(stage, piecesOf(OTHER)), /not turned about the origin/);
+});
+
+test('the overlays fade out together and back in to their own strengths', () => {
+  const clock = fakeClock();
+  const { stage, handles } = staged();
+  const pieces = piecesOf(RING);
+  stage.setGrid(gridLines(extentOf(pieces)));
+  stage.setOrigin({ ...extentOf(pieces), cell: false });
+  stage.setGhosts([{ type: 'straight', cell: [0, 1, 0], pose: 'DF', tint: 'before' }]);
+  const opacityOf = name => handles.find(h => h.name === name && !h.disposed).mesh.material.opacity;
+  const named = [OVERLAY.grid, OVERLAY.origin, `${OVERLAY.ghost}-before`];
+  const strengths = named.map(opacityOf);
+
+  stage.run([overlayFadePhase(stage, { to: 0 })]);
+  stage.start();
+  clock.run(FADE_OUT / 2);
+  assert.ok(named.every((name, i) => opacityOf(name) > 0 && opacityOf(name) < strengths[i]), 'not every overlay was fading');
+  clock.run(FADE_OUT);
+  assert.deepEqual(named.map(opacityOf), [0, 0, 0]);
+  assert.equal(stage.overlayOpacity(), 0);
+
+  const origin = handles.find(h => h.name === OVERLAY.origin).mesh.material;
+  assert.equal(origin.transparent, true, 'the faded axes were not drawn see-through');
+  stage.run([overlayFadePhase(stage, { to: 1 })]);
+  stage.start();
+  clock.run(FADE_IN + 0.1);
+  assert.deepEqual(named.map(opacityOf), strengths);
+  assert.equal(origin.transparent, false, 'the axes were left see-through');
+});
 
 test('a new step fades the old layout out, then the new one in left group first, standing still', () => {
   const clock = fakeClock();

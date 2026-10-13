@@ -4,8 +4,8 @@
   import { createStage, together, deferred } from '../render/stage.js';
   import { readTheme } from '../render/renderer.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
-  import { movePhase } from '../render/move.js';
-  import { fadeInPhase, fadeOutPhase } from '../render/fade.js';
+  import { movePhase, turnPhase, TURN } from '../render/move.js';
+  import { fadeInPhase, fadeOutPhase, overlayFadePhase } from '../render/fade.js';
   import { gridLines } from '../render/grid.js';
   import { edgeLengths } from '../render/lengths.js';
   import { fixedFrame, sketchBox, withAxes, frameTight, cubeIds } from '$lib/scenes.js';
@@ -33,8 +33,10 @@
     //           `{ pace, speed, handover, drop, reach }`.
     //   grow    the layout *extends* the one that is there: whatever the two have in
     //           common is left standing and only the rest arrives. The one kind whose
-    //           camera moves — see `showGrown`. `{ pace, speed, from, arrival }`,
-    //           `arrival` a name in build.js's `ARRIVALS`.
+    //           camera moves — see `showGrown`. `{ pace, speed, from, arrival, start }`,
+    //           `arrival` a name in build.js's `ARRIVALS`, `start` the orientation
+    //           the track starts in: a new one is the same track turned about the
+    //           origin cube, and is shown as that — see `showTurned`.
     //   move    every cube the two layouts share is carried over to its new slot, a
     //           cube with no slot fades out where it stands, and one with no cube
     //           comes in from beyond the edge of the picture. Framed on `camera`, as
@@ -124,6 +126,8 @@
   // is something for the reset button to undo.
   let touched = $state(false);
   let failed = $state('');
+  // How strongly the overlays are drawn, which the HTML over the scene follows.
+  let overlayShare = $state(1);
   let reduced = false;
   // Loaded on mount, and only for a tumble: `tumble.js` reaches cannon-es,
   // which is a chunk worth keeping off a page whose viewers are static piece cards.
@@ -138,6 +142,10 @@
   // The `step` of a steps transition last shown, which is what makes the next one
   // an entrance or a move. Not `$state`, for the same reason as `shown`.
   let shownStep = undefined;
+  // The `start` of a grow last shown, and whether a turn to a new one has yet to
+  // put the overlays it is holding back up. Not `$state`, for the same reason.
+  let shownStart = undefined;
+  let turning = false;
   let handle = null;
   // This viewer's entry in `CHANGES`, fixed at mount.
   let change = null;
@@ -234,6 +242,11 @@
    * The frame grows and shrinks with it: see `sketchBox`.
    */
   function showGrown(next) {
+    const { start } = settings();
+    const turned = start !== shownStart;
+    shownStart = start;
+    if (turned && shown?.length && next.length && !reduced) return showTurned(next);
+
     const before = shown ?? [];
     let prefix = 0;
     while (prefix < before.length && prefix < next.length
@@ -248,26 +261,80 @@
       if (cube) leaving.push({ cube, piece: before[i], index: i });
     }
 
-    const { pace, speed, from, arrival } = settings();
-    stage.run([growPhase(stage, next, {
-      leaving,
-      arrival,
-      ride: rider,
-      pace: Number(pace),
-      speed: Number(speed),
-      drive: Boolean(train),
-      alarm: flagged(),
-      instant: reduced,
-    })]);
+    // A change while a turn was still under way puts back what the turn was holding.
+    const unveil = turning || stage.overlayOpacity() < 1;
+    if (turning) showOverlays();
+    stage.run([together(
+      growPhase(stage, next, { ...grown(), leaving, instant: reduced }),
+      unveil && overlayFadePhase(stage, { to: 1, speed: Number(settings().speed) }),
+    )]);
 
     // The track's bounds, never smaller than `from` — see `sketchBox` — so a piece
     // inside the box moves nothing, and one taken off shrinks the frame back. A
     // reader who has asked for reduced motion gets the same box, arrived at instantly.
-    const box = sketchBox(next, from);
-    const shot = frameTight(origin ? withAxes(box, origin) : box);
-    if (reduced) stage.frameTo(shot);
-    else stage.panTo(shot);
+    if (reduced) stage.frameTo(grownShot(next));
+    else stage.panTo(grownShot(next));
   }
+
+  /** What `growPhase` is told, bar what is leaving and whether it is instant. */
+  const grown = () => {
+    const { pace, speed, arrival } = settings();
+    return {
+      arrival, ride: rider, pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(),
+    };
+  };
+
+  /** A grow's frame: the track's bounds, never smaller than `from` — see `sketchBox`. */
+  const grownShot = next => {
+    const box = sketchBox(next, settings().from);
+    return frameTight(origin ? withAxes(box, origin) : box);
+  };
+
+  /**
+   * The same track from a new start: turned about the origin cube, with only the
+   * track to be seen while it turns. Every overlay — the lattice, the axes, the
+   * ghosts, the rider and the callouts — fades out where it stands, the cubes turn
+   * as the camera pans to the new frame, and the overlays fade back in where they
+   * now belong, the rider at the track's new end.
+   *
+   * The overlays' own effects stand aside from the moment the start changes until
+   * the old ones are out of sight, and then this puts up the new ones.
+   */
+  function showTurned(next) {
+    turning = true;
+    const speed = Number(settings().speed);
+    stage.run([
+      overlayFadePhase(stage, { to: 0, speed }),
+      deferred(() => {
+        showOverlays();
+        stage.panTo(grownShot(next), TURN / speed);
+        return turnPhase(stage, next, { speed });
+      }),
+      deferred(() => together(
+        overlayFadePhase(stage, { to: 1, speed }),
+        // Every cube is home, so this touches none: it rests the rider at the new
+        // end, telling `onArrive`, and keeps a rejected piece pulsing.
+        growPhase(stage, next, { ...grown(), instant: true }),
+      )),
+    ]);
+  }
+
+  /** Put up the overlays a turn held back: the ones asked for now. */
+  function showOverlays() {
+    turning = false;
+    showGrid();
+    showOrigin();
+    showGhosts();
+    scheduleLabels();
+  }
+
+  /**
+   * Is a turn holding the overlays back? From the moment a new start is asked for
+   * — which the overlays' effects may see before `show` does — until `showTurned`
+   * puts them back up.
+   */
+  const held = () => turning
+    || (change === CHANGES.grow && Boolean(shown?.length) && !reduced && settings().start !== shownStart);
 
   /** Draw it finished and drive it, off an emptied stage. */
   function showStatic(next) {
@@ -380,6 +447,7 @@
           onRider: () => {
             if (notes.some(n => n.rider)) scheduleLabels();
           },
+          onOverlay: share => { overlayShare = share; },
         });
         stage.setPaused(paused);
         ready = true;
@@ -475,11 +543,16 @@
   // The lattice. Keyed on the box's corners, not the object: an equal box handed
   // over new would otherwise remount a thousand polygons for nothing.
   let gridKey = null;
-  $effect(() => {
+  function showGrid() {
     const key = grid ? `${grid.lo}|${grid.hi}` : null;
-    if (!ready || !stage || key === gridKey) return;
+    if (key === gridKey) return;
     stage.setGrid(grid ? gridLines(grid) : null);
     gridKey = key;
+  }
+  $effect(() => {
+    void grid;
+    if (!ready || !stage || held()) return;
+    showGrid();
   });
 
   // The blueprint's sheet: where the stage says its dots sit, re-read on every
@@ -566,12 +639,17 @@
   }
 
   let originKey = null;
-  $effect(() => {
+  function showOrigin() {
     const key = origin ? `${origin.lo}|${origin.hi}|${origin.cell}|${origin.size}|${origin.gap}` : null;
-    if (!ready || !stage || key === originKey) return;
+    if (key === originKey) return;
     stage.setOrigin(origin);
     originKey = key;
     scheduleLabels();
+  }
+  $effect(() => {
+    void origin;
+    if (!ready || !stage || held()) return;
+    showOrigin();
   });
 
   // The side lengths, keyed on the box's corners for the same reason as the lattice.
@@ -587,18 +665,23 @@
   let notesKey = null;
   $effect(() => {
     const key = notes.map(n => `${n.key}${n.rider ? 'rider' : n.cell}${n.flash}${JSON.stringify(n.lines)}`).join('|');
-    if (!ready || !stage || key === notesKey) return;
+    if (!ready || !stage || held() || key === notesKey) return;
     notesKey = key;
     scheduleLabels();
   });
 
   // The ghost trains, keyed on what they are for the same reason as the lattice.
   let ghostKey = null;
-  $effect(() => {
+  function showGhosts() {
     const key = ghosts.map(g => `${g.type}${g.cell}${g.pose}${g.tint}`).join('|');
-    if (!ready || !stage || key === ghostKey) return;
+    if (key === ghostKey) return;
     stage.setGhosts(ghosts);
     ghostKey = key;
+  }
+  $effect(() => {
+    void ghosts;
+    if (!ready || !stage || held()) return;
+    showGhosts();
   });
 
   // The filled cells, keyed the same way.
@@ -637,6 +720,7 @@
   style:--dot-s={sheet && `${sheet.spacing}px`}
   style:--dot-x={sheet && `${sheet.x}px`}
   style:--dot-y={sheet && `${sheet.y}px`}
+  style:--overlay={overlayShare}
   bind:this={host}
   style:aspect-ratio={aspect}
   role={label ? 'img' : undefined}
@@ -741,6 +825,11 @@
   }
 
   /* The axis letters are text, so they never turn with the camera or read backwards. */
+  /* The HTML over the scene fades with the overlays it labels. */
+  .axis-label, .leaders, .note {
+    opacity: var(--overlay, 1);
+  }
+
   .axis-label {
     position: absolute;
     transform: translate(-50%, -50%);

@@ -14,12 +14,13 @@
 // straight to where they go.
 
 import { CUBE } from './dimensions.js';
-import { cubePosition, poseRotation, compose, transpose, through, add, sub } from './vec.js';
+import { cubePosition, poseRotation, compose, transpose, through, turnToward, add, sub } from './vec.js';
 import { comAt } from '../shapes.js';
 import { identify } from '../../../../src/layouts.js';
 import { carryTo, claim, restsAt } from './build.js';
 
 export const MOVE = 0.7;   // seconds every flight and every fade takes, at speed 1
+export const TURN = MOVE;  // seconds a whole track takes to turn about its origin cube, at speed 1
 // How far clear of the picture's edge an arrival sets off, in world units: a cube
 // and its neighbour, so no part of a piece is on screen at the start.
 const CLEAR = 2 * CUBE;
@@ -103,6 +104,50 @@ export function movePhase(stage, pieces, { leaving = [], frame, speed = 1 } = {}
     dispose() {
       for (const cube of fading) cube.dispose();
       fading = [];
+    },
+  };
+}
+
+const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const SLACK = 1e-6;
+
+/**
+ * Turn the track standing on the stage into `pieces`, about the origin cube.
+ *
+ * For the same track entered in another orientation: the start cube is always the
+ * origin, so the new layout is the old one turned about that cube's centre, world
+ * `[0, 0, 0]`. Every cube is on the stage already and they all turn as one, along
+ * the shortest arc — a cube caught part-way through an earlier turn included,
+ * since that is a turn about the origin too. Anything else is not a turn, and
+ * throws.
+ */
+export function turnPhase(stage, pieces, { speed = 1 } = {}) {
+  const seconds = TURN / speed;
+  const ids = identify(pieces);
+  const turning = pieces.filter(p => !p.revisit).map((piece, i) => {
+    const cube = stage.cubes.get(ids[i]);
+    if (!cube) throw new Error(`turnPhase: ${ids[i]} is not on the stage`);
+    return { cube, basis: cube.basis, position: cube.position, slot: { basis: poseRotation(piece.pose), position: cubePosition(piece) } };
+  });
+  const turn = turning.length ? compose(turning[0].slot.basis, transpose(turning[0].basis)) : IDENTITY;
+  for (const { cube, basis, position, slot } of turning) {
+    const off = [
+      ...compose(turn, basis).flatMap((col, c) => col.map((v, r) => v - slot.basis[c][r])),
+      ...sub(through(turn, position), slot.position),
+    ];
+    if (off.some(v => Math.abs(v) > SLACK)) throw new Error(`turnPhase: ${cube.id} is not turned about the origin with the rest`);
+  }
+
+  return {
+    advance(_, elapsed) {
+      const s = elapsed / seconds;
+      if (s >= 1) {
+        for (const { cube, slot } of turning) cube.place(slot.basis, slot.position);   // home, exactly
+        return false;
+      }
+      const now = turnToward(IDENTITY, turn, smooth(s));
+      for (const { cube, basis, position } of turning) cube.place(compose(now, basis), through(now, position));
+      return undefined;
     },
   };
 }

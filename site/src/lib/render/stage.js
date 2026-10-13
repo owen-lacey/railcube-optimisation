@@ -145,7 +145,7 @@ function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {})
  * `theme` is the overlay paint (see `readTheme` in renderer.js); `renderer` is what
  * draws — the page's shared one, or a stand-in for the tests.
  */
-export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPose, onCamera, onRider } = {}) {
+export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPose, onCamera, onRider, onOverlay } = {}) {
   const scene = new Scene();
   scene.add(new AmbientLight(0xffffff, LIGHT.ambient));
   const sun = new DirectionalLight(0xffffff, LIGHT.directional);
@@ -172,6 +172,32 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     after: overlay(theme.ghostAfter, theme.ghostOpacity, once),
   };
   const cellGeometry = soupGeometry(cellBox(TRAIN_CELL_INSET));
+
+  // How strongly every overlay is drawn, 0 to 1: the see-through paints at that
+  // share of their theme's opacity, and the origin's solid one see-through below 1.
+  // They are shared, so the lattice, ghosts, rider, fills and axes go together.
+  const SEE_THROUGH = {
+    grid: theme.gridOpacity,
+    fill: theme.gridOpacity,
+    trainCell: theme.trainCellOpacity,
+    before: theme.ghostOpacity,
+    after: theme.ghostOpacity,
+  };
+  let overlayShare = 1;
+
+  /** Draw every overlay at `share` of its strength, and say so. */
+  function setOverlayOpacity(share) {
+    overlayShare = share;
+    for (const [name, opacity] of Object.entries(SEE_THROUGH)) paint[name].opacity = opacity * share;
+    const transparent = share < 1;
+    if (paint.origin.transparent !== transparent) {
+      paint.origin.transparent = transparent;
+      paint.origin.needsUpdate = true;
+    }
+    paint.origin.opacity = share;
+    invalidate();
+    onOverlay?.(share);
+  }
 
   // ---- Drawing ------------------------------------------------------------
 
@@ -788,6 +814,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     dropRider: () => rider?.dispose(),
     riderSpot: () => rider?.spot ?? null,
     setFill,
+    setOverlayOpacity,
+    overlayOpacity: () => overlayShare,
     markTrainCell,
     markTrainPose,
     invalidate,

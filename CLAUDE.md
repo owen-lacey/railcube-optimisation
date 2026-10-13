@@ -1009,6 +1009,18 @@ starts wide (`BUILD_FLOOR`, passed as `from`, is `sketchBox`'s floor in place of
 sketch's tight one). `PoseBuilder` keeps the sketch's tight floor. Square on a phone, 16/10 otherwise, unless `aspect` is
 given.
 
+**A new start orientation turns the track; it does not rebuild it.** The start cube is always
+the origin, so the same letters from another orientation are the same track turned about the
+origin cube's centre (world `[0, 0, 0]`). `PoseBuilder` passes its orientation as the grow
+transition's `start`, and a new one is `showTurned` in `TrackViewer`: every overlay — lattice,
+axes and their labels, start ghost, rider, callouts — fades out together (`overlayFadePhase`
+over `stage.setOverlayOpacity`, one share on the shared overlay paints), the cubes turn as one
+along the shortest arc while the camera pans to the new frame (`turnPhase` in `move.js`, which
+throws if the new layout is not a rigid turn of what stands), then the new overlays fade in with
+the rider at the new end. The overlays' effects stand aside until the old ones are out of sight.
+Owen's calls: everything but the track fades, and the pan runs during the turn. Under reduced
+motion it is the instant grow it always was.
+
 ### Handling a viewer: `render/controls.js`
 
 `controls={attachControls}` means `attachControls(host, stage)`, on `@use-gesture/vanilla`: one-pointer
