@@ -11,11 +11,15 @@
   // than tight, and the viewer can be handled — turned, zoomed and slid about, by
   // mouse or by touch — without the next piece putting the camera back.
   //
-  // The keyboard works too, with no click needed: the six letters, the arrows as a
-  // d-pad (forwards is a straight, left and right the two flat curves), and
-  // Backspace. They go to whichever builder is mostly on screen — see `keys.js`.
+  // The keyboard works too: the six letters, the arrows as a d-pad (forwards is a
+  // straight, left and right the two flat curves), and Backspace.
+  //
+  // In the page it cannot be handled, so a drag over it scrolls the page: turning,
+  // zooming and panning are full screen's, behind `ExpandingCard`'s button. The
+  // buttons and the keys work either way.
   import { onMount } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
+  import ExpandingCard from './ExpandingCard.svelte';
   import PieceKeys from './PieceKeys.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
@@ -56,6 +60,11 @@
   });
   const shapeOfViewer = $derived(aspect ?? (narrow ? '1 / 1' : '16 / 10'));
 
+  let expanded = $state(false);
+  let handled = $state(false);
+
+  // In the page the keys go to whichever builder is mostly on screen (`keys.js`);
+  // full screen, the card hands them over itself.
   let builder = $state(null);
   onMount(() => claimKeys(builder, onKeydown));
 
@@ -74,29 +83,30 @@
   }
 </script>
 
-<div
-  class="builder"
-  role="group"
-  aria-label="Track builder: type S L R I O X or use the arrow keys to add a piece, Backspace to remove one"
-  bind:this={builder}
->
-  <TrackViewer
-    pieces={view.pieces}
-    transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR }}
-    alarm={view.offender?.id ?? null}
-    train={view.closed ? {} : null}
-    controls={attachControls}
-    aspect={shapeOfViewer}
-    label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
-  />
-
-  <div class="below">
-    <PieceKeys disabled={done} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
-  </div>
+<div bind:this={builder}>
+  <ExpandingCard
+    footer={keys}
+    label="Track builder: type S L R I O X or use the arrow keys to add a piece, Backspace to remove one"
+    onkeydown={onKeydown}
+    bind:expanded
+    bind:handled
+  >
+    {#snippet children(toggle)}
+      {@render toggle()}
+      <TrackViewer
+        pieces={view.pieces}
+        transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR }}
+        alarm={view.offender?.id ?? null}
+        train={view.closed ? {} : null}
+        controls={handled ? attachControls : null}
+        aspect={expanded ? 'auto' : shapeOfViewer}
+        blueprint
+        label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
+      />
+    {/snippet}
+  </ExpandingCard>
 </div>
 
-<style>
-  .below {
-    margin-top: 0.75rem;
-  }
-</style>
+{#snippet keys()}
+  <PieceKeys disabled={done} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
+{/snippet}

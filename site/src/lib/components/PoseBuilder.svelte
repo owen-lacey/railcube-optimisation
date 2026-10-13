@@ -3,9 +3,13 @@
   // one piece. The track is clicked together as in `TrackBuilder`, from whichever
   // orientation the stepper says, and only its two ends are read out — the pose the
   // train starts in and the pose the last piece leaves it in.
+  //
+  // In the page it cannot be handled, so a drag over it scrolls the page: turning,
+  // zooming and panning are full screen's, behind `ExpandingCard`'s button. The
+  // buttons and the keys work either way.
   import { onMount } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
-  import LayoutCard from './LayoutCard.svelte';
+  import ExpandingCard from './ExpandingCard.svelte';
   import OrientationStepper from './OrientationStepper.svelte';
   import PieceKeys from './PieceKeys.svelte';
   import { attachControls } from '../render/controls.js';
@@ -49,6 +53,11 @@
   // A closed loop, or no track at all, ends where it starts, so one callout says both.
   const notes = $derived(view.closed ? [note('before', start)] : [note('before', start), note('after', end)]);
 
+  let expanded = $state(false);
+  let handled = $state(false);
+
+  // In the page the keys go to whichever builder is mostly on screen (`keys.js`);
+  // full screen, the card hands them over itself.
   let builder = $state(null);
   onMount(() => claimKeys(builder, onKeydown));
 
@@ -76,25 +85,30 @@
   };
 </script>
 
-<div
-  class="pose-builder"
-  role="group"
-  aria-label="Pose builder: type S L R I O X or use the arrow keys to add a piece, Backspace to remove one"
-  bind:this={builder}
->
-  <LayoutCard footer={keys}>
-    <TrackViewer
-      pieces={view.pieces}
-      transition={{ kind: 'grow', from: BUILD_FLOOR }}
-      alarm={view.offender?.id ?? null}
-      controls={attachControls}
-      {grid}
-      {ghosts}
-      {notes}
-      {aspect}
-      label="The track {letters || 'with no pieces'}, entered {describePose(start.pose)}, leaving the train {describePose(end.pose)}"
-    />
-  </LayoutCard>
+<div bind:this={builder}>
+  <ExpandingCard
+    footer={keys}
+    label="Pose builder: type S L R I O X or use the arrow keys to add a piece, Backspace to remove one"
+    onkeydown={onKeydown}
+    bind:expanded
+    bind:handled
+  >
+    {#snippet children(toggle)}
+      {@render toggle()}
+      <TrackViewer
+        pieces={view.pieces}
+        transition={{ kind: 'grow', from: BUILD_FLOOR }}
+        alarm={view.offender?.id ?? null}
+        controls={handled ? attachControls : null}
+        aspect={expanded ? 'auto' : aspect}
+        blueprint
+        {grid}
+        {ghosts}
+        {notes}
+        label="The track {letters || 'with no pieces'}, entered {describePose(start.pose)}, leaving the train {describePose(end.pose)}"
+      />
+    {/snippet}
+  </ExpandingCard>
 </div>
 
 {#snippet keys()}

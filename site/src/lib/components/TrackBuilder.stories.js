@@ -1,5 +1,5 @@
-// Build a track by clicking pieces onto it — or, with the builder focused, typing
-// the letters or using the arrow keys as a d-pad. Each piece slides onto the end
+// Build a track by clicking pieces onto it — or typing the letters, or using the
+// arrow keys as a d-pad. Each piece slides onto the end
 // of the track; backspace slides the last one back off.
 //
 // Everything the builder shows is `TrackViewer`'s grow mode — see `Sketch`, which
@@ -7,7 +7,7 @@
 // pieces already down never move, a piece with nowhere to go is drawn where it was
 // asked to go and pulses red, and the train appears when the loop closes.
 //
-// What is new is that the viewer can be handled: drag to turn it, pinch or scroll
+// What is new is that, full screen, the viewer can be handled: drag to turn it, pinch or scroll
 // to zoom, and two fingers (or a right- or shift-drag) to slide it about. The frame
 // starts wide and only grows, and a hand-moved view survives every piece added.
 

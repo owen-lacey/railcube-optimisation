@@ -987,18 +987,25 @@ on the stage but not exactly at its slot now finishes from where it got to.
 ### Clicking a track together: `TrackBuilder`
 
 `Sketch` with buttons for a keyboard: six letter buttons in the pieces' colours and a
-backspace (Lucide's `delete` icon, from `@lucide/svelte`), over `TrackViewer` with a grow
-transition and `attachControls`, and no caption. It also takes the six letters, the arrows as a d-pad
-(↑ straight, ← left curve, → right curve) and Backspace, with no click needed: `keys.js`
-gives the page's keys to whichever registered builder has the largest share of itself in
-view, if that is more than half — otherwise nobody has them and the arrows scroll the page.
-Keys typed into an input, textarea or select are left alone. Adding goes dead while the track is stuck, since nothing
-after a rejected piece could be built, and once the loop closes, since a finished track
-takes no more. What it does differently is the
-camera: it starts wide (`BUILD_FLOOR`, passed as `from`, seeds `growBox` in place of the
-sketch's tight floor, and still only grows), and it can be handled. Square on a phone,
-16/10 otherwise, unless `aspect` is given. It is in Storybook only; where it goes in the
-post is Owen's call.
+backspace (Lucide's `delete` icon, from `@lucide/svelte`) in the footer of a card, over
+`TrackViewer` with a grow transition and the blueprint. It also takes the six letters, the
+arrows as a d-pad (↑ straight, ← left curve, → right curve) and Backspace. `PoseBuilder` is
+the same with an orientation stepper and only the track's two ends read out.
+
+**Neither can be handled in the page** — Owen's call, because turning and zooming
+mid-read interrupts it. They sit in `ExpandingCard`, which is `LayoutViewer`'s full-screen
+card pulled out for all three, and only full screen do they take `attachControls`. The
+footer's buttons work either way, and so do the keys: in the page through `keys.js`, which
+gives them to whichever registered builder has the largest share of itself in view if that
+is more than half; full screen through the dialog's `keydown` — focus cannot leave a modal
+dialog, and the dialog is `tabindex="-1"` so a click on the canvas lands focus on it. A key
+a builder uses is `preventDefault`-ed there, so `keys.js` (and a `Gate` behind the dialog)
+never sees it. Adding goes dead while the
+track is stuck, since nothing after a rejected piece could be built, and once the loop
+closes, since a finished track takes no more. What it does differently is the camera: it
+starts wide (`BUILD_FLOOR`, passed as `from`, seeds `growBox` in place of the sketch's
+tight floor, and still only grows). Square on a phone, 16/10 otherwise, unless `aspect` is
+given.
 
 ### Handling a viewer: `render/controls.js`
 
