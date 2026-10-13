@@ -1,41 +1,28 @@
 <script>
-	// The rules a track must keep. Three broken tracks, told over one viewer, and
-	// then the rules they break, which push the viewer away. Then generating tracks:
-	// groups of pieces added together, each pair drawn apart until they are joined.
+	// The rules a track must keep. Three broken tracks, and then the rules they
+	// break.
 	//
 	// The prose is a straight transcription of notes.md — the wording is Owen's
 	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
 	import PieceTag from "$lib/components/PieceTag.svelte";
-	import ScrollySection from "$lib/components/ScrollySection.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import TrackSum from "$lib/components/TrackSum.svelte";
-
-	const steps = [
-		{ body: incomplete, figure: TrackFigure, props: { shape: "SLLSSLL" } },
-		{ body: fatalities, figure: TrackFigure, props: { shape: "SSLLLSS" } },
-		{ body: andThis, figure: TrackFigure, props: { shape: "SSISLILISS" } }
-	];
 </script>
 
-{#snippet incomplete()}
+<Chapter id="track-building">
 	<p>
 		Now that we can now express a Rail Cube in terms of generic poses, we need
 		to add some rules. Firstly, we need a complete track, so this would be
 		invalid.
 	</p>
-{/snippet}
+	<TrackFigure shape="SLLSSLL" />
 
-{#snippet fatalities()}
 	<p>A track like this would also cause some fatalities.</p>
-{/snippet}
+	<TrackFigure shape="SSLLLSS" />
 
-{#snippet andThis()}
 	<p>And this.</p>
-{/snippet}
-
-<Chapter id="track-building">
-	<ScrollySection {steps} />
+	<TrackFigure shape="SSISLILISS" />
 
 	<p>
 		Albeit intuitive, we need to express these rules in our coordinate system so

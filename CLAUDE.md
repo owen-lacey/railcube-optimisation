@@ -821,7 +821,7 @@ reason, which is exactly what the first render did until it was caught in a brow
 
 ### Scrollytelling: `ScrollySection`
 
-The post opens on a `ScrollySection` (scrollama), and Track building is another: one viewer in a box stuck to the top of the
+The post opens on a `ScrollySection` (scrollama), its only one: one viewer in a box stuck to the top of the
 screen, and the prose running through a fixed band below it, each paragraph changing what the
 box shows as it arrives. A step is `{ body, figure, props }` — a snippet of prose, and a figure
 component with its own props.
@@ -857,29 +857,20 @@ the section and renders only its footer.
   scope from the file it is written in, so no one file's `<style>` can reach every chapter's
   prose.
 
-### The post is chapters, and gates: `site/src/routes/post/`
+### The post is chapters: `site/src/routes/post/`
 
 `+page.svelte` is only the sequence: the splash, `Opening` (the first section; it hands the
 page its `ScrollySection` through a bindable `scrolly`, for the zoom), `TitleZoom`, then one
 file per chapter (`Coordinates`, `TrackBuilding`, `Optimising`, `AuthorNotes`), each a
 `Chapter` — a `<section>` with an id, carrying the post's prose typography. The prose in them
-is Owen's notes.md, word for word.
+is Owen's notes.md, word for word. Every chapter is rendered, under the splash too.
 
-**A gate is a point the reader cannot scroll past until they choose to go on** — Owen's call.
-`Gate` (`$lib/components/`) is the post's ">": pressed, or sent the right arrow while it is
-mostly in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, fades
-(`FADE`, 0.4 s) and then `onopen` — at once under reduced motion. The splash ends on one, and
-so do Coordinates and Track building. The page counts gates `passed`.
-
-- **Nothing past a closed gate is rendered** — Owen's call, over hiding it. Nothing hidden
-  is mis-measured (scrollama, a viewer's aspect), fewer viewers are mounted on load, and the
-  page simply ends at the gate plus `main`'s bottom padding. The price is that the
-  prerendered HTML stops there too.
-- **The opening is the exception**: it is mounted under the splash, clipped by the layout,
-  because the title zooms into its viewer and the zoom needs it laid out.
-- **Through a chapter gate, the page smooth-scrolls to the next chapter's heading** (instant
-  under reduced motion). The heading is above its section, so the section measuring itself
-  once mounted shifts only what is below the target.
+**The splash is the post's only gate, and the opening its only scrolly section** — Owen's
+call: chapter gates and later scrolly sections were removed as bad UX, so past the opening
+the post is plain prose and standalone figures. `Gate` (`$lib/components/`) is the splash's
+">": pressed, or sent the right arrow while it is mostly in view (`claimKeys`, so it never
+fights a builder's keys), it calls `onleave`, fades (`FADE`, 0.4 s) and then `onopen` — at
+once under reduced motion. The page tracks only whether the splash is `passed`.
 
 ### The title: `Splash`
 

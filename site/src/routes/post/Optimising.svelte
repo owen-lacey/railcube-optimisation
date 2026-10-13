@@ -1,43 +1,24 @@
 <script>
 	// What makes a layout good, and how a model is told so. A good set and a bad
-	// set, told over one viewer, and then the question of which is preferred, which
-	// pushes the viewer away.
+	// set, and then the question of which is preferred.
 	//
 	// The prose is a straight transcription of notes.md — the wording is Owen's
 	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
 	import PoseTracker from "$lib/components/PoseTracker.svelte";
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
-	import ScrollySection from "$lib/components/ScrollySection.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import { lengthsScene } from "$lib/scenes.js";
 	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
-
-	const steps = [
-		{
-			body: subjectivity,
-			figure: RankedTracks,
-			props: { end: "best" }
-		},
-		{
-			body: nowThese,
-			figure: RankedTracks,
-			props: { end: "worst" }
-		}
-	];
 </script>
 
-{#snippet subjectivity()}
-	<p>Enter subjectivity. Consider this set of layouts.</p>
-{/snippet}
-
-{#snippet nowThese()}
-	<p>Now these.</p>
-{/snippet}
-
 <Chapter id="optimising">
-	<ScrollySection {steps} />
+	<p>Enter subjectivity. Consider this set of layouts.</p>
+	<RankedTracks end="best" />
+
+	<p>Now these.</p>
+	<RankedTracks end="worst" />
 
 	<p>
 		What do you prefer, the first set or the second? The first set, right? If

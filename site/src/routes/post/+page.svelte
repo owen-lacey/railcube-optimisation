@@ -1,11 +1,9 @@
 <script>
-	// The post, chapter by chapter, with a gate wherever the reader is held until
-	// they choose to go on. Nothing past a closed gate is rendered, so the page ends
-	// there. The splash is the first gate; the opening stays mounted under it,
-	// because the title zooms into its viewer.
+	// The post, chapter by chapter. The splash is a gate: the reader is held on it
+	// until they choose to go on. The opening stays mounted under it, because the
+	// title zooms into its viewer.
 	import Splash from "$lib/components/Splash.svelte";
 	import TitleZoom from "$lib/components/TitleZoom.svelte";
-	import Gate from "$lib/components/Gate.svelte";
 	import Opening from "./Opening.svelte";
 	import Coordinates from "./Coordinates.svelte";
 	import TrackBuilding from "./TrackBuilding.svelte";
@@ -13,19 +11,8 @@
 	import AuthorNotes from "./AuthorNotes.svelte";
 	import { tick } from "svelte";
 
-	// The chapters between one gate and the next. The gate before a stretch scrolls
-	// to its id, the first chapter's heading.
-	const stretches = [
-		{ id: "coordinates", chapters: [Coordinates] },
-		{ id: "track-building", chapters: [TrackBuilding] },
-		{ id: "optimising", chapters: [Optimising, AuthorNotes] },
-	];
-
-	// How many gates the reader has gone through: 0 on the splash, then one more
-	// per gate. Coordinates is there under the splash too, so at least one stretch
-	// is shown.
-	let passed = $state(0);
-	const shown = $derived(Math.max(passed, 1));
+	// Whether the reader has gone through the splash.
+	let passed = $state(false);
 	let scrolly = $state();
 	// The O's box on screen while the title zooms, and the zoom.
 	let zoomFrom = $state(null);
@@ -34,7 +21,7 @@
 	const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 	async function gone() {
-		passed = 1;
+		passed = true;
 		await tick();
 		window.scrollTo(0, 0);
 	}
@@ -52,22 +39,13 @@
 		scrolly.land();
 		zoomFrom = null;
 	}
-
-	// The next chapter is put in, and the page goes to its heading.
-	async function reach(id) {
-		passed += 1;
-		await tick();
-		document
-			.getElementById(id)
-			.scrollIntoView({ behavior: reduced() ? "instant" : "smooth" });
-	}
 </script>
 
 <svelte:head>
 	<title>Optimising the Rail Cube</title>
 </svelte:head>
 
-{#if passed === 0}
+{#if !passed}
 	<Splash onnext={open} />
 {/if}
 
@@ -79,25 +57,7 @@
 	<TitleZoom bind:this={zoom} from={zoomFrom} onready={zoomIn} />
 {/if}
 
-{#each stretches.slice(0, shown) as stretch (stretch.id)}
-	{#each stretch.chapters as Section}
-		<Section />
-	{/each}
-{/each}
-
-<!-- Keyed, because a gate fades and opens once: the next needs a fresh one. -->
-{#if shown < stretches.length}
-	{#key shown}
-		<div class="gate">
-			<Gate label="Keep reading" onopen={() => reach(stretches[shown].id)} />
-		</div>
-	{/key}
-{/if}
-
-<style>
-	.gate {
-		display: grid;
-		place-items: center;
-		margin: 3.5rem 0 0;
-	}
-</style>
+<Coordinates />
+<TrackBuilding />
+<Optimising />
+<AuthorNotes />
