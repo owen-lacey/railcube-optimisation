@@ -6,8 +6,8 @@
   //
   // The two ends are outlined as `PieceMoves` outlines one piece's: the origin cube
   // where the train starts, and the cube the next piece would go in where the last
-  // piece leaves it. Each end's callout is on its cube, and the end's picks out
-  // whatever the last piece changed.
+  // piece leaves it. Only the end has a callout, on its cube, picking out whatever
+  // the last piece changed.
   //
   // In the page it cannot be handled, so a drag over it scrolls the page: turning,
   // zooming and panning are full screen's, behind `ExpandingCard`'s button. The
@@ -57,11 +57,10 @@
     { cell: trackCell(end), tint: 'after' },
   ]);
 
-  // The start's callout stands to the left, clear of the axis arrows below. The
-  // end's reads what the last piece changed — the head it was entered at — and
+  // Only the end has a callout: the start is the stepper's orientation, read out
+  // there. It reads what the last piece changed — the head it was entered at — and
   // flashes it on every new track or orientation.
   const notes = $derived([
-    { key: 'before', cell: trackCell(start), side: 'left', lines: poseReadout(start) },
     {
       key: 'after',
       cell: trackCell(end),
