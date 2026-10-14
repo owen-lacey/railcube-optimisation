@@ -137,9 +137,9 @@ function onItsCubes(scene) {
 // cube's diagonal: the unit a step right or forwards moves a cube across the screen.
 const GAP = 1;
 
-// What a sum figure switches between, unless it says otherwise: the groups apart,
-// the second in DF, turned to carry on from the first, and joined.
-const SUM = ['apart', 'turned', 'joined'];
+// The apart pictures a sum figure switches between, unless it says otherwise: the
+// second group in DF, and turned to carry on from the first.
+const SUM = ['apart', 'turned'];
 
 /**
  * A route as two groups, before they are added together: the letters before `at`
@@ -162,10 +162,11 @@ const SUM = ['apart', 'turned', 'joined'];
  * group's callout reads its own pose, from its own start: the position it is slid
  * to is only where it is drawn.
  *
- * `states` is every picture the figure switches between — `'apart'` (the second
- * group in DF), `'turned'` and `'joined'` — and it must hold this one. The slide is
- * set by the second group in every apart picture, and the shot frames them all, so
- * going from one to another moves the second group and nothing else.
+ * `states` is every apart picture the figure switches between — `'apart'` (the
+ * second group in DF) and `'turned'` — and it must hold this one. The slide is set
+ * by the second group in every one of them, and the shot frames them all, so going
+ * from one to another moves the second group and nothing else. Joined, the track
+ * has its own shot (`joinedScene`).
  */
 export function apartScene(at, { turned = false, states = SUM } = {}) {
   return letters => {
@@ -188,20 +189,21 @@ export function apartScene(at, { turned = false, states = SUM } = {}) {
 }
 
 /**
- * The two groups of `apartScene` joined: the whole route, in the same shot, with
- * only the route's two ends outlined.
+ * The two groups of `apartScene` joined: the whole route, with only its two ends
+ * outlined, in a tight shot of its own.
  */
-export function joinedScene(at, { states = SUM } = {}) {
-  return letters => {
-    const scene = openScene(letters);
-    return {
-      ...scene,
-      outlines: stepOutlines([0, 0, 0], trackCell(scene.head)),
-      notes: [endNote('joined', scene.head)],
-      camera: groupsOf(letters, at, states).camera,
-    };
+export function joinedScene(letters) {
+  const scene = openScene(letters);
+  return {
+    ...scene,
+    outlines: stepOutlines([0, 0, 0], trackCell(scene.head)),
+    notes: [endNote('joined', scene.head)],
+    camera: fitCells([...scene.pieces.flatMap(p => p.material), trackCell(scene.head)]),
   };
 }
+
+/** A shot fitted to the outline of `cells`. */
+const fitCells = cells => frameFit(cells.flatMap(c => cornersOf({ lo: c, hi: c })));
 
 /** A step's two ends outlined, as `pieceMove` outlines them: the cube it starts at and the one it ends at. */
 const stepOutlines = (from, to) => [{ cell: from, tint: 'before' }, { cell: to, tint: 'after' }];
@@ -245,19 +247,11 @@ function groupsOf(letters, at, states) {
     ends: [first.head, scene.head],
     outlined: [trackCell(first.head), slide(trackCell(scene.head))],
   }]));
-  if (states.includes('joined')) {
-    const joined = openScene(letters);
-    pictures.joined = { pieces: joined.pieces, ends: [joined.head], outlined: [trackCell(joined.head)] };
-  }
   // Fitted to the cubes' outline rather than aimed at their centre of gravity, which
-  // two groups and a join pull well off the middle of what is drawn. The cubes the
-  // ends are outlined at too, in every picture, since an end can be over empty space.
+  // two groups pull well off the middle of what is drawn. The cubes the ends are
+  // outlined at too, in every picture, since an end can be over empty space.
   const cells = Object.values(pictures).flatMap(({ pieces, outlined }) => [...pieces.flatMap(p => p.material), ...outlined]);
-  return {
-    pictures,
-    slide,
-    camera: frameFit(cells.flatMap(c => cornersOf({ lo: c, hi: c }))),
-  };
+  return { pictures, slide, camera: fitCells(cells) };
 }
 
 /**

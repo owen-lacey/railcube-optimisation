@@ -27,7 +27,7 @@ import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js
 import { fadeInPhase, fadeOutPhase, overlayFadePhase, changingFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene } from '../site/src/lib/scenes.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene, frameFit, cornersOf } from '../site/src/lib/scenes.js';
 import { poseReadout, trackCell } from '../site/src/lib/catalogue.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
@@ -1719,7 +1719,7 @@ test('the origin\'s outline and arrows are overlays that clear() leaves and setO
 test('a sum outlines each group\'s two ends, then the joined route\'s', () => {
   const [a, b] = ['SL', 'SLR'];
   const apart = apartScene(a.length)(a + b);
-  const joined = joinedScene(a.length)(a + b);
+  const joined = joinedScene(a + b);
   const [first, second, whole] = [a, b, a + b].map(letters => openScene(letters).head);
   // The second group is drawn slid: its start cube's slide is its start outline,
   // and the same slide takes its own end to where its end is outlined.
@@ -1766,17 +1766,18 @@ test('a turned sum lays the second group from where the first ends, turning or j
   assert.notDeepEqual(second(turned).map(p => p.pose), second(plain).map(p => p.pose));
 
   // Joined from turned, every second-group cube keeps its orientation: a slide only.
-  const joining = ['turned', 'joined'];
-  const apart = apartScene(a.length, { turned: true, states: joining })(a + b);
-  const joined = joinedScene(a.length, { states: joining })(a + b);
+  const apart = apartScene(a.length, { turned: true, states: ['turned'] })(a + b);
+  const joined = joinedScene(a + b);
   assert.deepEqual(second(apart).map(p => p.pose), joined.pieces.slice(a.length).map(p => p.pose));
-  assert.deepEqual(apart.camera, joined.camera);
 
-  // A sum steps through all three on one shot: apart, turned, joined.
-  const steps = [apartScene(a.length), apartScene(a.length, { turned: true }), joinedScene(a.length)].map(s => s(a + b));
-  for (const s of steps) assert.deepEqual(s.camera, steps[0].camera);
+  // A sum turns on one shot, then joins on a tight one of the joined track's own.
+  const [apartShot, turnedShot] = [false, true].map(t => apartScene(a.length, { turned: t })(a + b).camera);
+  assert.deepEqual(turnedShot, apartShot);
+  assert.deepEqual(joined.camera, frameFit([...joined.pieces.flatMap(p => p.material), trackCell(joined.head)]
+    .flatMap(c => cornersOf({ lo: c, hi: c }))));
+  assert.ok(joined.camera.zoom > apartShot.zoom, 'the joined track was not drawn closer than the two groups');
 
-  assert.throws(() => apartScene(a.length, { states: joining })(a + b), /do not hold the one drawn/);
+  assert.throws(() => apartScene(a.length, { states: ['turned'] })(a + b), /do not hold the one drawn/);
 });
 
 test('setOutlines outlines each cell where it is, without arrows, and clear() leaves them', () => {

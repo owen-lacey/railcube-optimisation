@@ -2,7 +2,7 @@
   // Two groups of pieces added together, in two steps at the press of a button:
   // drawn apart, each from the start in DF, then the second turned to carry on from
   // the first (`TrackRotate`), then its cubes carried over to the end of the first
-  // (`TrackJoin`). A figure — see `$lib/figure.js`.
+  // (`TrackJoin`), the camera closing in on the joined track. A figure — see `$lib/figure.js`.
   import Frame from './Frame.svelte';
   import { apartScene, joinedScene } from '$lib/scenes.js';
 
@@ -19,14 +19,15 @@
   let at = $state(0);
   const step = $derived(STEPS[at]);
 
-  // Every picture framed on the one shot, so each step moves the second group and
-  // nothing else.
+  // Apart and turned share one shot, so turning moves the second group and nothing
+  // else. Joined, the track has a tight shot of its own, and the camera pans to it
+  // on the join and back out on the reset.
   const scene = $derived(step.state === 'joined'
-    ? joinedScene(a.length)
+    ? joinedScene
     : apartScene(a.length, { turned: step.state === 'turned' }));
 </script>
 
-<Frame view={{ shape: a + b, scene, transition: { kind: 'move' } }} {aspect}>
+<Frame view={{ shape: a + b, scene, transition: { kind: 'move', pan: 0.6 } }} {aspect}>
   {#snippet footer()}
     <button type="button" class="step" onclick={() => (at = (at + 1) % STEPS.length)}>
       {step.label}

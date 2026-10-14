@@ -10,14 +10,12 @@
 
   let joined = $state(false);
 
-  // Both framed on the one shot, so joining moves the second group and nothing else.
-  const states = ['turned', 'joined'];
-  const scene = $derived(joined
-    ? joinedScene(a.length, { states })
-    : apartScene(a.length, { turned: true, states }));
+  // Joined, the track has a tight shot of its own, and the camera pans to it as the
+  // second group slides over, and back out as it slides away.
+  const scene = $derived(joined ? joinedScene : apartScene(a.length, { turned: true, states: ['turned'] }));
 </script>
 
-<Frame view={{ shape: a + b, scene, transition: { kind: 'move' } }} {aspect}>
+<Frame view={{ shape: a + b, scene, transition: { kind: 'move', pan: 0.6 } }} {aspect}>
   {#snippet footer()}
     <button type="button" class="join" onclick={() => (joined = !joined)}>
       {joined ? 'Split' : 'Join'}

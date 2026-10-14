@@ -12,7 +12,7 @@
   let turned = $state(false);
 
   // Both framed on the one shot, so turning moves the second group and nothing else.
-  const scene = $derived(apartScene(a.length, { turned, states: ['apart', 'turned'] }));
+  const scene = $derived(apartScene(a.length, { turned }));
 </script>
 
 <Frame view={{ shape: a + b, scene, transition: { kind: 'move' } }} {aspect}>
