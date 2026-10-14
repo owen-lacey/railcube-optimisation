@@ -1688,6 +1688,39 @@ test('a sum outlines each group\'s two ends, then the joined route\'s', () => {
   assert.deepEqual(joined.notes.map(n => n.cell), [trackCell(whole)]);
 });
 
+test('a turned sum lays the second group from where the first ends, turning or joining it in place', () => {
+  const [a, b] = ['IROSIRR', 'SIL'];
+  const end = openScene(a).head.pose;
+  assert.notEqual(end, 'DF', 'the first group must end turned for this to test anything');
+  const second = scene => scene.pieces.filter(p => p.group === 1);
+  const offset = scene => second(scene)[0].cell.map((v, k) => v - laid.pieces[0].cell[k]);
+  const laid = openScene(b, end);
+
+  // Turned, the second group is the one laid from the first's end, slid, and its
+  // callout reads its own end from there.
+  const rotating = ['apart', 'turned'];
+  const [plain, turned] = [false, true].map(t => apartScene(a.length, { turned: t, states: rotating })(a + b));
+  const by = offset(turned);
+  assert.deepEqual(second(turned).map(p => ({ ...p, group: undefined })), laid.pieces.map(p => ({
+    ...p, group: undefined, cell: p.cell.map((v, k) => v + by[k]),
+    material: p.material.map(c => c.map((v, k) => v + by[k])), train: p.train.map(c => c.map((v, k) => v + by[k])),
+  })));
+  assert.deepEqual(turned.notes[1].lines, poseReadout(laid.head));
+  // Turning keeps its start cube where it was, and the shot with it.
+  assert.deepEqual(turned.outlines[2], plain.outlines[2]);
+  assert.deepEqual(turned.camera, plain.camera);
+  assert.notDeepEqual(second(turned).map(p => p.pose), second(plain).map(p => p.pose));
+
+  // Joined from turned, every second-group cube keeps its orientation: a slide only.
+  const joining = ['turned', 'joined'];
+  const apart = apartScene(a.length, { turned: true, states: joining })(a + b);
+  const joined = joinedScene(a.length, { states: joining })(a + b);
+  assert.deepEqual(second(apart).map(p => p.pose), joined.pieces.slice(a.length).map(p => p.pose));
+  assert.deepEqual(apart.camera, joined.camera);
+
+  assert.throws(() => apartScene(a.length, { turned: true })(a + b), /do not hold the one drawn/);
+});
+
 test('setOutlines outlines each cell where it is, without arrows, and clear() leaves them', () => {
   const { handles, stage } = staged();
   const outlines = () => handles.filter(h => h.name === OVERLAY.origin && !h.disposed);

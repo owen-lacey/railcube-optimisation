@@ -14,6 +14,8 @@
 	import TrainCoordinates from "$lib/components/TrainCoordinates.svelte";
 	import { cellScene } from "$lib/scenes.js";
 	import TrackSum from "$lib/components/TrackSum.svelte";
+	import TrackRotate from "$lib/components/TrackRotate.svelte";
+	import TrackJoin from "$lib/components/TrackJoin.svelte";
 </script>
 
 <Chapter id="coordinates">
@@ -84,7 +86,8 @@
 		Now we can do some Rail Cube maths<sup>TM</sup>: given one group of track
 		pieces, we can add another group of track pieces to it to get a new pose.
 	</p>
-	<TrackSum a="IROSIRR" b="SIL" />
+	<TrackRotate a="IROSIRR" b="SIL" />
+	<TrackJoin a="IROSIRR" b="SIL" />
 
 	<p>
 		The act of making a complete track can be thought of as adding two groups of

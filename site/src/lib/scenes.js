@@ -137,12 +137,19 @@ function onItsCubes(scene) {
 // cube's diagonal: the unit a step right or forwards moves a cube across the screen.
 const GAP = 1;
 
+// What a sum figure switches between, unless it says otherwise: the groups apart,
+// the second in DF, and joined.
+const SUM = ['apart', 'joined'];
+
 /**
  * A route as two groups, before they are added together: the letters before `at`
- * and the letters from it, each laid from the start in DF, and the second set
- * beside the first on screen, `GAP` clear of it. The pieces are listed in route
- * order, so their IDs (`identify`) are the joined route's: shown after this, the
- * joined layout carries the second group's cubes over to the end of the first.
+ * and the letters from it, each laid with its start cube at the origin, and the
+ * second set beside the first on screen, `GAP` clear of it. The first is entered in
+ * DF; the second in DF too, or, `turned`, in the orientation the first ends in —
+ * which is the second group turned to carry on from the first. The pieces are
+ * listed in route order, so their IDs (`identify`) are the joined route's: shown
+ * after this, the joined layout carries the second group's cubes over to the end
+ * of the first.
  *
  * Beside on screen is from the default turn (`CAMERA`, rot-y −45°), where a step
  * right and a step forwards each move a cube the same way across the screen and
@@ -155,15 +162,19 @@ const GAP = 1;
  * group's callout reads its own pose, from its own start: the position it is slid
  * to is only where it is drawn.
  *
- * Framed on the groups apart and joined together, the same shot as `joinedScene`,
- * so joining moves the second group and nothing else.
+ * `states` is every picture the figure switches between — `'apart'` (the second
+ * group in DF), `'turned'` and `'joined'` — and it must hold this one. The slide is
+ * set by the second group in every apart picture, and the shot frames them all, so
+ * going from one to another moves the second group and nothing else.
  */
-export function apartScene(at) {
+export function apartScene(at, { turned = false, states = SUM } = {}) {
   return letters => {
-    const { apart, slide, ends, camera } = groupsOf(letters, at);
-    const [first, second] = ends;
+    const drawn = turned ? 'turned' : 'apart';
+    if (!states.includes(drawn)) throw new Error(`the states ${states} do not hold the one drawn, ${drawn}`);
+    const { pictures, slide, camera } = groupsOf(letters, at, states);
+    const { pieces, ends: [first, second] } = pictures[drawn];
     return {
-      pieces: apart,
+      pieces,
       closed: false,
       offender: null,
       outlines: [
@@ -180,14 +191,14 @@ export function apartScene(at) {
  * The two groups of `apartScene` joined: the whole route, in the same shot, with
  * only the route's two ends outlined.
  */
-export function joinedScene(at) {
+export function joinedScene(at, { states = SUM } = {}) {
   return letters => {
     const scene = openScene(letters);
     return {
       ...scene,
       outlines: stepOutlines([0, 0, 0], trackCell(scene.head)),
       notes: [endNote('joined', scene.head)],
-      camera: groupsOf(letters, at).camera,
+      camera: groupsOf(letters, at, states).camera,
     };
   };
 }
@@ -198,35 +209,53 @@ const stepOutlines = (from, to) => [{ cell: from, tint: 'before' }, { cell: to, 
 /** A callout of `head`'s pose, on the cube the next piece would go in, as drawn. */
 const endNote = (key, head, cell = trackCell(head)) => ({ key, cell, lines: poseReadout(head) });
 
-function groupsOf(letters, at) {
-  const [first, second] = [letters.slice(0, at), letters.slice(at)].map(group => openScene(group));
-  for (const [group, scene] of [[letters.slice(0, at), first], [letters.slice(at), second]]) {
-    if (scene.offender) throw new Error(`the group ${group} is not legal: ${scene.offender.message}`);
-  }
+/** `openScene`, refusing a group the model will not lay. */
+function laidGroup(group, startPose) {
+  const scene = openScene(group, startPose);
+  if (scene.offender) throw new Error(`the group ${group} is not legal: ${scene.offender.message}`);
+  return scene;
+}
+
+/**
+ * Every picture in `states`, by name: its pieces and its ends — for an apart one,
+ * the first group's end and the second's own, unslid — with the one slide and the
+ * one shot they share.
+ */
+function groupsOf(letters, at, states) {
+  const first = laidGroup(letters.slice(0, at));
+  // The second group from each start it is drawn in.
+  const starts = { apart: 'DF', turned: first.head.pose };
+  const laid = Object.fromEntries(states.filter(s => s in starts).map(s => [s, laidGroup(letters.slice(at), starts[s])]));
+  const seconds = Object.values(laid).flatMap(scene => scene.pieces);
+
   const across = (pieces, pick) => pick(...pieces.flatMap(p => p.material).map(c => c[0] + c[2]));
-  const by = Math.ceil((across(first.pieces, Math.max) + 2 + GAP - across(second.pieces, Math.min)) / 2);
+  const by = Math.ceil((across(first.pieces, Math.max) + 2 + GAP - across(seconds, Math.min)) / 2);
   // And raised or lowered until its lowest cube is level with the first's, so the
   // two stand on one floor even when the second dips below where it starts.
   const lowest = pieces => Math.min(...pieces.flatMap(p => p.material).map(c => c[1]));
-  const rise = lowest(first.pieces) - lowest(second.pieces);
+  const rise = lowest(first.pieces) - lowest(seconds);
   const slide = c => [c[0] + by, c[1] + rise, c[2] + by];
-  // `group` is which side each piece is on, which is the order they fade in (fade.js).
-  const apart = [...first.pieces.map(p => ({ ...p, group: 0 })), ...second.pieces.map(p => ({
+  const slid = scene => scene.pieces.map(p => ({
     ...p, cell: slide(p.cell), material: p.material.map(slide), train: p.train.map(slide), group: 1,
-  }))];
+  }));
+  // `group` is which side each piece is on, which is the order they fade in (fade.js).
+  // `outlined` is the cubes the ends are outlined at, as drawn.
+  const pictures = Object.fromEntries(Object.entries(laid).map(([state, scene]) => [state, {
+    pieces: [...first.pieces.map(p => ({ ...p, group: 0 })), ...slid(scene)],
+    ends: [first.head, scene.head],
+    outlined: [trackCell(first.head), slide(trackCell(scene.head))],
+  }]));
+  if (states.includes('joined')) {
+    const joined = openScene(letters);
+    pictures.joined = { pieces: joined.pieces, ends: [joined.head], outlined: [trackCell(joined.head)] };
+  }
   // Fitted to the cubes' outline rather than aimed at their centre of gravity, which
   // two groups and a join pull well off the middle of what is drawn. The cubes the
-  // ends are outlined at too, apart and joined, since an end can be over empty space.
-  const joined = openScene(letters);
-  const ends = [first.head, { ...second.head, cell: slide(second.head.cell) }, joined.head];
-  const cells = [
-    ...[...apart, ...joined.pieces].flatMap(p => p.material),
-    ...ends.map(trackCell),
-  ];
+  // ends are outlined at too, in every picture, since an end can be over empty space.
+  const cells = Object.values(pictures).flatMap(({ pieces, outlined }) => [...pieces.flatMap(p => p.material), ...outlined]);
   return {
-    apart,
+    pictures,
     slide,
-    ends: [first.head, second.head],
     camera: frameFit(cells.flatMap(c => cornersOf({ lo: c, hi: c }))),
   };
 }
