@@ -5,7 +5,7 @@
   import { readTheme } from '../render/renderer.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
   import { movePhase, turnPhase, TURN } from '../render/move.js';
-  import { fadeInPhase, fadeOutPhase, overlayFadePhase } from '../render/fade.js';
+  import { fadeInPhase, fadeOutPhase, overlayFadePhase, changingFadePhase } from '../render/fade.js';
   import { gridLines } from '../render/grid.js';
   import { edgeLengths } from '../render/lengths.js';
   import { fixedFrame, sketchBox, withAxes, frameTight, cubeIds } from '$lib/scenes.js';
@@ -39,8 +39,10 @@
     //           origin cube, and is shown as that — see `showTurned`.
     //   move    every cube the two layouts share is carried over to its new slot, a
     //           cube with no slot fades out where it stands, and one with no cube
-    //           comes in from beyond the edge of the picture. Framed on `camera`, as
-    //           a static track is. `{ speed, pan }`.
+    //           comes in from beyond the edge of the picture. An outline or callout
+    //           the new layout lacks fades out as they go, and one it brings fades
+    //           in once they land. Framed on `camera`, as a static track is.
+    //           `{ speed, pan }`.
     //   steps   a layout for a new `step` is a fresh picture: the one there fades out
     //           where it stands, the camera cuts, and the new one fades in a group at
     //           a time (`piece.group`, see `render/fade.js`). A layout for the same
@@ -124,8 +126,10 @@
   // is something for the reset button to undo.
   let touched = $state(false);
   let failed = $state('');
-  // How strongly the overlays are drawn, which the HTML over the scene follows.
+  // How strongly the overlays are drawn, which the HTML over the scene follows; and
+  // the changing ones a move drops or brings, on top of that.
   let overlayShare = $state(1);
+  let changingShare = $state(1);
   let reduced = false;
   // Loaded on mount, and only for a tumble: `tumble.js` reaches cannon-es,
   // which is a chunk worth keeping off a page whose viewers are static piece cards.
@@ -144,9 +148,11 @@
   // put the overlays it is holding back up. Not `$state`, for the same reason.
   let shownStart = undefined;
   let turning = false;
-  // Whether a move has yet to land, and so to put up the overlays it brings. Not
-  // `$state`, for the same reason as `shown`.
+  // Whether a move has yet to land, and so to put up the overlays it brings; and
+  // whether those are being put up, to fade in. Not `$state`, for the same reason
+  // as `shown`.
   let moving = false;
+  let bringing = false;
   let handle = null;
   // This viewer's entry in `CHANGES`, fixed at mount.
   let change = null;
@@ -357,13 +363,16 @@
   function showMoved(next) {
     const keep = new Set(identify(next));
     const leaving = [...stage.cubes.keys()].filter(id => !keep.has(id)).map(id => stage.detach(id));
-    const { speed } = settings();
+    const speed = Number(settings().speed);
     moving = true;
     stage.run([
-      movePhase(stage, next, { leaving, frame: camera, speed: Number(speed) }),
+      together(
+        movePhase(stage, next, { leaving, frame: camera, speed }),
+        changingFadePhase(stage, { to: 0, speed }),
+      ),
       deferred(() => {
         landed();
-        return finished(next);
+        return together(finished(next), changingFadePhase(stage, { to: 1, speed }));
       }),
     ]);
   }
@@ -371,26 +380,43 @@
   /**
    * Is a move holding new overlays back? From the moment new pieces are asked for
    * — which the overlays' effects may see before `show` does — until every cube has
-   * landed. Meanwhile only the overlays both layouts have stay up: an outline, ghost
-   * or callout the new layout lacks goes at once, and one it brings waits for its
-   * cubes, so nothing is drawn where they have yet to arrive.
+   * landed. Meanwhile the overlays both layouts have stay up, an outline or callout
+   * the new layout lacks fades out (a ghost goes at once), and one it brings waits
+   * for its cubes, so nothing is drawn where they have yet to arrive.
    */
   const landing = () => moving
     || (change === CHANGES.move && Boolean(shown) && !reduced && keyOf(pieces) !== shownKey);
 
-  /** Of `next`, the ones already `up` while a move is landing, matched by `key`; all of them otherwise. */
-  function arriving(up, next, key) {
-    if (!landing()) return next;
-    const kept = new Set(up.map(key));
-    return next.filter(item => kept.has(key(item)));
+  /**
+   * Of `next`, what to put up, matched with what is `up` by `key`. While a move is
+   * landing: the ones already up, and — if they `fade` — the ones it drops, marked
+   * `changing: 'out'`. As it lands: all of them, the ones it brings marked
+   * `changing: 'in'` if they `fade`. Otherwise: all of them, unmarked. A mark counts
+   * towards whether the list has changed (`markedKey`), so a list the same but for
+   * its marks is put up again.
+   */
+  function arriving(up, next, key, { fade = false } = {}) {
+    const kept = new Set(up.filter(item => item.changing !== 'out').map(key));
+    if (landing()) {
+      const wanted = new Set(next.map(key));
+      const going = fade ? up.filter(item => !wanted.has(key(item))).map(item => ({ ...item, changing: 'out' })) : [];
+      return [...next.filter(item => kept.has(key(item))), ...going];
+    }
+    if (bringing && fade) return next.map(item => (kept.has(key(item)) ? item : { ...item, changing: 'in' }));
+    return next;
   }
+
+  /** `key`, and whether the item is changing, which way. */
+  const markedKey = key => item => `${key(item)}${item.changing ?? ''}`;
 
   /** Put up the overlays a move held back: the ones asked for now. */
   function landed() {
     moving = false;
+    bringing = true;
     showOutlines();
     showGhosts();
     showNotes();
+    bringing = false;
   }
 
   /**
@@ -476,6 +502,7 @@
             if (blueprint) placeSheet();
           },
           onOverlay: share => { overlayShare = share; },
+          onChanging: share => { changingShare = share; },
         });
         stage.setPaused(paused);
         ready = true;
@@ -636,12 +663,12 @@
       above: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(top - CALLOUT_GAP, h, height) }),
       below: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(bottom + CALLOUT_GAP + h, h, height) - h }),
     };
-    return shown.map(({ key, lines, flash, side: pinned }, i) => {
+    return shown.map(({ key, lines, flash, changing, side: pinned }, i) => {
       const side = pinned ?? (above.has(i) ? 'above' : 'below');
       const w = noteEls[key]?.offsetWidth ?? 0;
       const h = noteEls[key]?.offsetHeight ?? 0;
       const { x, y } = PLACE[side](w, h, spots[i]);
-      return { key, lines, flash, side, x, y, to: spots[i], measured: Boolean(noteEls[key]) };
+      return { key, lines, flash, changing, side, x, y, to: spots[i], measured: Boolean(noteEls[key]) };
     });
   }
 
@@ -694,8 +721,8 @@
   let notesUp = [];
   const noteKey = n => `${n.key}${n.cell}${n.flash}${JSON.stringify(n.lines)}`;
   function showNotes() {
-    const next = arriving(notesUp, notes, noteKey);
-    const key = next.map(noteKey).join('|');
+    const next = arriving(notesUp, notes, noteKey, { fade: true });
+    const key = next.map(markedKey(noteKey)).join('|');
     if (key === notesKey) return;
     notesUp = next;
     notesKey = key;
@@ -739,8 +766,8 @@
   let outlinesKey = null;
   let outlinesUp = [];
   function showOutlines() {
-    const next = arriving(outlinesUp, outlines, outlineKey);
-    const key = next.map(outlineKey).join('|');
+    const next = arriving(outlinesUp, outlines, outlineKey, { fade: true });
+    const key = next.map(markedKey(outlineKey)).join('|');
     if (key === outlinesKey) return;
     stage.setOutlines(next);
     outlinesKey = key;
@@ -780,6 +807,7 @@
   style:--dot-x={sheet && `${sheet.x}px`}
   style:--dot-y={sheet && `${sheet.y}px`}
   style:--overlay={overlayShare}
+  style:--changing={changingShare}
   bind:this={host}
   style:aspect-ratio={aspect}
   role={label ? 'img' : undefined}
@@ -794,14 +822,16 @@
   {/each}
   {#if noteSpots.length}
     <svg class="leaders" aria-hidden="true">
-      {#each noteSpots as { key, x, y, to } (key)}
-        <line x1={x} y1={y} x2={to.x} y2={to.y} />
-        <circle cx={to.x} cy={to.y} r="3" />
+      {#each noteSpots as { key, x, y, to, changing } (key)}
+        <g class:changing>
+          <line x1={x} y1={y} x2={to.x} y2={to.y} />
+          <circle cx={to.x} cy={to.y} r="3" />
+        </g>
       {/each}
     </svg>
   {/if}
-  {#each noteSpots as { key, lines, flash, side, x, y } (key)}
-    <span class="note {side}" style:left="{x}px" style:top="{y}px" aria-hidden="true" bind:this={noteEls[key]}>
+  {#each noteSpots as { key, lines, flash, changing, side, x, y } (key)}
+    <span class="note {side}" class:changing style:left="{x}px" style:top="{y}px" aria-hidden="true" bind:this={noteEls[key]}>
       <!-- Remade on each flash, so a changed part's animation starts again. -->
       {#key flash}
         {#each lines as line, i (i)}
@@ -887,6 +917,15 @@
   /* The HTML over the scene fades with the overlays it labels. */
   .axis-label, .leaders, .note {
     opacity: var(--overlay, 1);
+  }
+
+  /* A callout a move drops or brings fades with the outlines it does. */
+  .note.changing {
+    opacity: calc(var(--overlay, 1) * var(--changing, 1));
+  }
+
+  .leaders .changing {
+    opacity: var(--changing, 1);
   }
 
   .axis-label {

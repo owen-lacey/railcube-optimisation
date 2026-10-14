@@ -794,9 +794,15 @@ standing, untouched, and only the rest arrives. `move`: the cubes are carried st
 over (`movePhase` in `render/move.js`) — matched by piece ID like a tumble, every flight at
 once on the pick-up's arc, no axial slide at the end (Owen's call, for `TrackSum`'s join
 too). Cubes sharing one turn and shift are a stretch moved whole (`carryTo`), keeping its
-shape. A cube with no slot fades
+shape — unless one of its cubes stays where it is, only turned: then the stretch turns in
+place about that cube (`spinTo`), which is how `TrackRotate` turns its second group about
+its start cube (Owen's call). A cube with no slot fades
 out where it stands, and a slot with no cube is filled from beyond the edge of the new
-frame nearest it (`stage.offscreen`). The train comes back once everything has landed. It
+frame nearest it (`stage.offscreen`). An outline or callout the new layout lacks fades out
+as the cubes go, and one it brings fades in once they land (Owen's call, for every move):
+marked `changing` in `TrackViewer`'s `arriving`, drawn on a paint of its own at
+`setChangingOpacity`'s share, which `--changing` carries to the callouts. Ghosts still go
+at once. The train comes back once everything has landed. It
 is what the scrolly section uses, with `pan`. `steps`: a layout for a new `step` is a new
 picture — the old fades out where it stands, the camera cuts, and the new fades in a
 `piece.group` at a time (`render/fade.js`); within a step it is a move. The track

@@ -83,3 +83,24 @@ export function overlayFadePhase(stage, { to, speed = 1 }) {
     },
   };
 }
+
+/**
+ * Fade the changing overlays — the outlines and callouts a move drops or brings —
+ * from however strongly they are drawn now to `to`: out over `FADE_OUT`, in over
+ * `FADE_IN`. Cut short, they are left at `to`. See `setChangingOpacity` in stage.js.
+ *
+ * @param {{ changingOpacity: () => number, setChangingOpacity: (share: number) => void }} stage
+ * @param {{ to: number, speed?: number }} options
+ */
+export function changingFadePhase(stage, { to, speed = 1 }) {
+  const from = stage.changingOpacity();
+  const seconds = (to < from ? FADE_OUT : FADE_IN) / speed;
+  return {
+    advance(_, elapsed) {
+      const s = elapsed / seconds;
+      stage.setChangingOpacity(from + (to - from) * smooth(s));
+      return s >= 1 ? false : undefined;
+    },
+    dispose() { stage.setChangingOpacity(to); },
+  };
+}

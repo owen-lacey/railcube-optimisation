@@ -141,7 +141,7 @@ function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {})
  * `theme` is the overlay paint (see `readTheme` in renderer.js); `renderer` is what
  * draws — the page's shared one, or a stand-in for the tests.
  */
-export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPiece, onTrainPose, onCamera, onOverlay } = {}) {
+export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPiece, onTrainPose, onCamera, onOverlay, onChanging } = {}) {
   const scene = new Scene();
   scene.add(new AmbientLight(0xffffff, LIGHT.ambient));
   const sun = new DirectionalLight(0xffffff, LIGHT.directional);
@@ -194,8 +194,27 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
       }
       material.opacity = share;
     }
+    paintChanging();
     invalidate();
     onOverlay?.(share);
+  }
+
+  // How strongly the changing overlays are drawn, 0 to 1, on top of the overlays'
+  // share: the outlines a move drops, while they fade out, or brings, while they
+  // fade in. Each has a paint of its own, so the rest stay as they are.
+  let changingShare = 1;
+  let changing = [];
+
+  /** Draw the changing overlays at `share`, and say so. */
+  function setChangingOpacity(share) {
+    changingShare = share;
+    paintChanging();
+    invalidate();
+    onChanging?.(share);
+  }
+
+  function paintChanging() {
+    for (const { material, opacity } of changing) material.opacity = opacity * overlayShare * changingShare;
   }
 
   // ---- Drawing ------------------------------------------------------------
@@ -780,15 +799,27 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   let outlines = [];
 
   /**
-   * Outline these cells, `{ cell, tint? }` each, replacing any outlined before: as
-   * the origin is, or with `tint` thinner — 'after' in the origin's paint, 'before'
-   * in a deeper blue and thinner still.
+   * Outline these cells, `{ cell, tint?, changing? }` each, replacing any outlined
+   * before: as the origin is, or with `tint` thinner — 'after' in the origin's
+   * paint, 'before' in a deeper blue and thinner still. A `changing` one is drawn at
+   * the changing overlays' share too (`setChangingOpacity`).
    */
   function setOutlines(list) {
     remove(outlines);
-    outlines = list.map(({ cell, tint }) => fixedMesh(soupGeometry(tint ? cellEdges(STEP_W[tint]) : originCell()), tint ? OUTLINE[tint] : paint.origin, {
-      name: OVERLAY.origin, at: toWorld(cell),
-    }));
+    for (const { material } of changing) material.dispose();
+    changing = [];
+    outlines = list.map(({ cell, tint, changing: fades }) => {
+      const base = tint ? OUTLINE[tint] : paint.origin;
+      const material = fades ? base.clone() : base;
+      if (fades) {
+        material.transparent = true;
+        changing.push({ material, opacity: 1 });
+      }
+      return fixedMesh(soupGeometry(tint ? cellEdges(STEP_W[tint]) : originCell()), material, {
+        name: OVERLAY.origin, at: toWorld(cell),
+      });
+    });
+    paintChanging();
     for (const mesh of outlines) scene.add(mesh);
     invalidate();
   }
@@ -828,6 +859,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     setOutlines,
     setOverlayOpacity,
     overlayOpacity: () => overlayShare,
+    setChangingOpacity,
+    changingOpacity: () => changingShare,
     markTrainCell,
     markTrainPiece,
     markTrainPose,

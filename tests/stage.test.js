@@ -24,7 +24,7 @@ import { chainTrack, cubeOf } from '../src/track.js';
 import { routeOf, identify, LAYOUTS } from '../src/layouts.js';
 import { createStage, together, deferred, OVERLAY } from '../site/src/lib/render/stage.js';
 import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js';
-import { fadeInPhase, fadeOutPhase, overlayFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
+import { fadeInPhase, fadeOutPhase, overlayFadePhase, changingFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
 import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene } from '../site/src/lib/scenes.js';
@@ -1328,6 +1328,60 @@ test('a stretch moved whole keeps its shape, and goes straight to its place', ()
   assert.ok(home !== null && home >= MOVE, `the stretch was home at ${home}s, before its flight was over`);
   second.forEach((cube, i) => assert.ok(near(cube.position, restingPlace(joined.pieces[2 + i])), `${ids[2 + i]} landed off its cell`));
   first.forEach((cube, i) => assert.equal(handleOf(cube).transforms.length, writes[i], `${ids[i]} was moved, and it was standing`));
+});
+
+test('a stretch with a cube that stays put turns in place about it', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  const [a, b] = ['IROSIRR', 'SIL'];
+  const states = ['apart', 'turned'];
+  const [plain, turned] = [false, true].map(t => apartScene(a.length, { turned: t, states })(a + b));
+  stage.frameTo(turned.camera);
+  stage.run([trackPhase(stage, plain.pieces, { drive: false })]);
+  clock.run(0.1);
+
+  const ids = identify(turned.pieces);
+  const second = ids.slice(a.length).map(id => stage.cubes.get(id));
+  const [pivot] = second;
+  const at = [...pivot.position];
+  const reach = () => second.map(cube => Math.hypot(...cube.position.map((v, k) => v - pivot.position[k])));
+  const shape = reach();
+
+  stage.run([movePhase(stage, turned.pieces, { frame: turned.camera })]);
+  stage.start();
+  let elapsed = 0;
+  clock.run(MOVE + 0.1, () => {
+    elapsed += 0.016;
+    assert.ok(near(pivot.position, at), `the start cube left its place at ${elapsed.toFixed(3)}s`);
+    reach().forEach((d, i) => assert.ok(Math.abs(d - shape[i]) < 1e-9, `the group bent at ${elapsed.toFixed(3)}s`));
+  });
+  second.forEach((cube, i) => assert.ok(near(cube.position, restingPlace(turned.pieces[a.length + i])), `${ids[a.length + i]} landed off its cell`));
+});
+
+test('a changing outline fades on a paint of its own, and the rest stay', () => {
+  const clock = fakeClock();
+  const { stage, handles } = staged();
+  stage.setOutlines([{ cell: [0, 0, 0], tint: 'after' }, { cell: [2, 0, 0], tint: 'after', changing: 'out' }]);
+  const [still, fading] = handles.filter(h => h.name === OVERLAY.origin && !h.disposed).map(h => h.mesh.material);
+  assert.notEqual(still, fading);
+
+  stage.setChangingOpacity(0.25);
+  assert.equal(fading.opacity, 0.25);
+  assert.equal(still.opacity, 1);
+  stage.setOverlayOpacity(0.5);
+  assert.equal(fading.opacity, 0.125, 'it is drawn at the overlays\' share too');
+
+  stage.setOverlayOpacity(1);
+  stage.run([changingFadePhase(stage, { to: 0 })]);
+  stage.start();
+  clock.run(FADE_OUT + 0.1);
+  assert.equal(stage.changingOpacity(), 0);
+  assert.equal(fading.opacity, 0);
+  assert.equal(still.opacity, 1);
+
+  const cut = changingFadePhase(stage, { to: 1 });
+  cut.dispose();
+  assert.equal(stage.changingOpacity(), 1, 'cut short, it is left where it was going');
 });
 
 // ---- A new step fading in -----------------------------------------------------

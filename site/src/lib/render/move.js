@@ -11,7 +11,9 @@
 //
 // Cubes that all go by the same turn and the same shift are a stretch of track
 // moved whole, and they are carried as one, keeping their shape the whole way,
-// straight to where they go.
+// straight to where they go. A stretch with a cube that stays where it is — only
+// turned — is turning about that cube, and turns in place about it rather than
+// being lifted.
 
 import { CUBE } from './dimensions.js';
 import { cubePosition, poseRotation, compose, transpose, through, turnToward, add, sub } from './vec.js';
@@ -24,6 +26,8 @@ export const TURN = MOVE;  // seconds a whole track takes to turn about its orig
 // How far clear of the picture's edge an arrival sets off, in world units: a cube
 // and its neighbour, so no part of a piece is on screen at the start.
 const CLEAR = 2 * CUBE;
+const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const SLACK = 1e-6;
 
 const clamp = t => Math.max(0, Math.min(1, t));
 const smooth = s => { const t = clamp(s); return t * t * (3 - 2 * t); };
@@ -45,17 +49,29 @@ function stretchesOf(flights) {
   return [...byMotion.values()];
 }
 
-/** A stretch, ready to carry about its pivot: the centre of its cubes' masses. */
+/**
+ * A stretch, ready to move about its pivot: a cube of it that stays where it is,
+ * which it turns about in place (`spin`), or else the centre of its cubes' masses,
+ * which it is carried about.
+ */
 function carried(flights) {
   const { turn, shift } = motionOf(flights[0]);
+  const still = flights.find(({ cube, slot }) => sub(cube.position, slot.position).every(v => Math.abs(v) < SLACK));
   const coms = flights.map(({ cube, slot }) => comAt(slot.type, cube.basis, cube.position));
-  const pivot = [0, 1, 2].map(k => coms.reduce((sum, c) => sum + c[k], 0) / coms.length);
+  const pivot = still?.cube.position ?? [0, 1, 2].map(k => coms.reduce((sum, c) => sum + c[k], 0) / coms.length);
   return {
     members: flights.map(({ cube, slot }) => ({ cube, slot, basis: cube.basis, offset: sub(cube.position, pivot) })),
     pivot,
     turn,
     to: add(through(turn, pivot), shift),
+    spin: Boolean(still),
   };
+}
+
+/** A stretch turned about its still cube, in place: `turnPhase`'s turn, about that cube. */
+function spinTo({ members, pivot, turn }, s) {
+  const now = turnToward(IDENTITY, turn, smooth(s));
+  for (const { cube, offset, basis } of members) cube.place(compose(now, basis), add(pivot, through(now, offset)));
 }
 
 /**
@@ -97,7 +113,7 @@ export function movePhase(stage, pieces, { leaving = [], frame, speed = 1 } = {}
         fading = [];
         return false;
       }
-      for (const stretch of stretches) carryTo(stretch, s);
+      for (const stretch of stretches) (stretch.spin ? spinTo : carryTo)(stretch, s);
       for (const cube of fading) cube.fade(1 - smooth(s));
       return undefined;
     },
@@ -107,9 +123,6 @@ export function movePhase(stage, pieces, { leaving = [], frame, speed = 1 } = {}
     },
   };
 }
-
-const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-const SLACK = 1e-6;
 
 /**
  * Turn the track standing on the stage into `pieces`, about the origin cube.
