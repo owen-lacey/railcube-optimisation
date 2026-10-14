@@ -1772,7 +1772,11 @@ test('a turned sum lays the second group from where the first ends, turning or j
   assert.deepEqual(second(apart).map(p => p.pose), joined.pieces.slice(a.length).map(p => p.pose));
   assert.deepEqual(apart.camera, joined.camera);
 
-  assert.throws(() => apartScene(a.length, { turned: true })(a + b), /do not hold the one drawn/);
+  // A sum steps through all three on one shot: apart, turned, joined.
+  const steps = [apartScene(a.length), apartScene(a.length, { turned: true }), joinedScene(a.length)].map(s => s(a + b));
+  for (const s of steps) assert.deepEqual(s.camera, steps[0].camera);
+
+  assert.throws(() => apartScene(a.length, { states: joining })(a + b), /do not hold the one drawn/);
 });
 
 test('setOutlines outlines each cell where it is, without arrows, and clear() leaves them', () => {

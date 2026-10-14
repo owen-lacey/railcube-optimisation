@@ -138,8 +138,8 @@ function onItsCubes(scene) {
 const GAP = 1;
 
 // What a sum figure switches between, unless it says otherwise: the groups apart,
-// the second in DF, and joined.
-const SUM = ['apart', 'joined'];
+// the second in DF, turned to carry on from the first, and joined.
+const SUM = ['apart', 'turned', 'joined'];
 
 /**
  * A route as two groups, before they are added together: the letters before `at`

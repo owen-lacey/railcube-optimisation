@@ -1,5 +1,5 @@
-// Two groups of pieces, drawn apart and joined by a button: the track generator's
-// sums, one story per step of its section.
+// Two groups of pieces, drawn apart, then turned, then joined by a button: the
+// track generator's sums, one story per step of its section.
 
 import TrackSum from './TrackSum.svelte';
 
