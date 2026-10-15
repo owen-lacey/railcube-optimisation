@@ -146,5 +146,11 @@
 
 	<TrackBuilder />
 
-	<p></p>
+	<p>
+		I'll leave you with my poor attempt of recreating RollerCoaster Tycoon. If
+		you've made it this far, <a
+			href="mailto:hello@owenlacey.dev?subject=friend%20request&body=let%27s%20be%20mates"
+			target="_blank">we should be mates</a
+		>. If you make a cool track, I'd love to see it. Happy optimising!
+	</p>
 </Chapter>
