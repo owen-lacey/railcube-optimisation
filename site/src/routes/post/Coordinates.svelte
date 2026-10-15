@@ -143,7 +143,7 @@
 	</ol>
 	<p>
 		This approach is fairly brute force and exhaustive. It only generates a
-		valid train track every ~50,0000 attempts. Fortunately, my laptop doesn't
+		valid train track every ~50,000 attempts. Fortunately, my laptop doesn't
 		have feelings and it happily chewed away at this, making me over 20 million
 		valid layouts.
 	</p>
