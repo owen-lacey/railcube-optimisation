@@ -31,6 +31,9 @@ html {
 
   /* Laid over a layout not yet picked, like a character not yet chosen. */
   --veil: rgb(255 255 255 / 0.3);
+
+  /* Under the title's words as they fall onto the page. */
+  --drop-shadow: rgb(0 0 0 / 0.45);
 }
 
 body {
