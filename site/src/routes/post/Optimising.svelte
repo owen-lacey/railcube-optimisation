@@ -29,7 +29,7 @@
 	<p>
 		What do you prefer, the first set or the second? The first set, right? If
 		you prefer the latter, I can't help you. From here on I'll assume you're a
-		rationale person and prefer the former like me. Good? Good.
+		rational person and prefer the former like me. Good? Good.
 	</p>
 
 	<p>Now, why do I love this one?</p>
