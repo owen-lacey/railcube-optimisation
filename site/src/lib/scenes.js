@@ -278,14 +278,12 @@ export function axesScene(letters) {
 
 /**
  * `cellScene` with the lattice's three side lengths written beside its edges.
- * Framed on the box grown a cell every way, so the labels have room inside the
- * viewer whichever edges they land on.
+ * Framed on the box itself, as `cellScene` frames it: the labels sit `LENGTH_GAP`
+ * pixels out, inside the camera's margin.
  */
 export function lengthsScene(letters) {
   const scene = cellScene(letters);
-  const { lo, hi } = scene.grid;
-  const room = { lo: lo.map(v => v - 1), hi: hi.map(v => v + 1) };
-  return { ...scene, lengths: scene.grid, camera: frameFit(cornersOf(room)) };
+  return { ...scene, lengths: scene.grid };
 }
 
 /**
