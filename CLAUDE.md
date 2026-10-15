@@ -117,6 +117,8 @@ closes; it is only the solve that slows there, and only two-of-each that is impo
 
 `npm test` runs the fast tier (~73 s, no dev dependencies). `SLOW=1 npm test` adds the exhaustive searches and full-inventory solves. Slow tests are skipped by name, never silently.
 
+Run the test files covering the change (`node --test tests/<file>.test.js …`); run full `npm test` only on request. Never run tests alongside a heavy background job (a sweep, a database scan, a solve): the solver tests assert timings.
+
 Three rules that keep the tests honest, all learned the hard way:
 
 - **Never assert on a solver variable.** Feed the route back through `chainTrack` and count in plain JavaScript. A silently-unenforced constraint (see below) was caught only because of this.

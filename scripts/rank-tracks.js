@@ -22,7 +22,8 @@ import { parseArgs } from 'node:util';
 import Database from 'better-sqlite3';
 
 import { assertSpends, DB_PATH, derive, random, weightingValuesOf } from './sweep-data.js';
-import { knotInput, knotOf, knotReader } from './knot-curves.js';
+import { knotInput, knotReader } from './knot-curves.js';
+import { knotOf } from '../site/src/lib/knots.js';
 import { DIRECTIONS, weigher } from '../site/src/lib/weighting.js';
 import { SWEEP_CROSSED_WEIGHTS } from '../site/src/lib/sweeps.js';
 

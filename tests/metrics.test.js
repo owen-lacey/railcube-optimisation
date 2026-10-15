@@ -4,8 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
-import { chainTrack } from '../src/track.js';
-import { closeCallsOf, metricsOf, posesIn, posesOf, repeatRuns } from '../src/metrics.js';
+import { chainOpen, chainTrack } from '../src/track.js';
+import { closeCallsOf, metricsOf, posesIn, posesOf, repeatRuns, repeatsOf } from '../src/metrics.js';
 
 const of = shape => metricsOf(chainTrack(routeOf(shape)));
 const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
@@ -102,3 +102,36 @@ test('repeatRuns are the runs repeats counts', () => {
     assert.equal(charged, metricsOf(placed).repeats, shape);
   }
 });
+
+// A track still being built has no last → first: repeats and close calls count
+// only the neighbours it has.
+const built = shape => chainOpen(routeOf(shape)).placed;
+
+// Four straights in a row: steps 0 and 1 start three of a kind. Read as a loop,
+// steps 2 and 3 would too, wrapping round to the first two.
+test('an open track\'s repeats do not wrap', () => {
+  assert.equal(repeatsOf(built('SSSS'), { open: true }), 2);
+  assert.equal(repeatsOf(built('SSSS')), 4);
+  assert.equal(repeatsOf(built('SSIS'), { open: true }), 0);
+});
+
+// Three outside curves after a left: the last comes round face to face with the
+// left curve's cube. Open, the two are not neighbours, so it is a close call;
+// read as a loop, the last piece would be the first's neighbour, so it is not.
+test('an open track\'s ends are not neighbours for close calls', () => {
+  assert.equal(closeCallsOf(built('LOOO'), { open: true }), 1);
+  assert.equal(closeCallsOf(built('LOOO')), 0);
+});
+
+// Only the last two steps can start a run by wrapping, so a loop read open loses
+// at most those two, and only those: every other step reads the same either way.
+for (const [name, { shape }] of Object.entries(LAYOUTS)) {
+  test(`${name} read open loses only the repeats that wrap`, () => {
+    const placed = chainTrack(routeOf(shape));
+    const wrapping = placed.slice(-2).filter((p, k) => {
+      const i = placed.length - 2 + k;
+      return p.type === placed[(i + 1) % placed.length].type && p.type === placed[(i + 2) % placed.length].type;
+    }).length;
+    assert.equal(repeatsOf(placed, { open: true }), repeatsOf(placed) - wrapping, shape);
+  });
+}

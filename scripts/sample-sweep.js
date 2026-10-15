@@ -21,7 +21,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { assertSpends, DB_PATH, derive, openDb, random } from './sweep-data.js';
-import { knotInput, knotOf, knotPool, knotType } from './knot-curves.js';
+import { knotInput, knotPool } from './knot-curves.js';
+import { knotOf, knotType } from '../site/src/lib/knots.js';
 
 const COLUMNS = ['span_across', 'span_up', 'span_along', 'revisits', 'loop_small', 'loop_large'];
 

@@ -24,6 +24,7 @@
   import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
+  import { weightedScoreOf } from '$lib/score.js';
   import { claimKeys } from '$lib/keys.js';
   import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
 
@@ -50,6 +51,10 @@
   // is finished, and a piece added to it would only be one more collision. And the
   // limit.
   const done = $derived(Boolean(view.offender) || view.closed || letters.length >= LIMIT);
+
+  // The score of the track as built: the rejected piece, the last drawn, is not
+  // part of it.
+  const scored = $derived(weightedScoreOf(view.offender ? view.pieces.slice(0, -1) : view.pieces, view.closed));
 
   let narrow = $state(false);
   onMount(() => {
@@ -113,4 +118,12 @@
 
 {#snippet keys()}
   <PieceKeys disabled={done} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
+  {#if scored}<span class="total">{scored.score.toFixed(2)}</span>{/if}
 {/snippet}
+
+<style>
+  .total {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+</style>

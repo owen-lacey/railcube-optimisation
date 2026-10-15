@@ -14,7 +14,8 @@ import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf, shapeOf, identify, trackKey, halvesOf, loopsOf } from '../src/layouts.js';
 import { chainOpen, chainTrack, countPieces, POOLS, POOL_OF } from '../src/track.js';
-import { knotInput, knotOf, knotReader } from '../scripts/knot-curves.js';
+import { knotInput, knotReader } from '../scripts/knot-curves.js';
+import { knotOf } from '../site/src/lib/knots.js';
 
 const entries = Object.entries(LAYOUTS);
 

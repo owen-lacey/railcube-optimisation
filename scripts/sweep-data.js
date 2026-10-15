@@ -23,7 +23,7 @@ import Database from 'better-sqlite3';
 import { chainTrack, countPieces, POOLS } from '../src/track.js';
 import { loopsOf, routeOf, shapeOf, trackKey } from '../src/layouts.js';
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
-import { knotOf } from './knot-curves.js';
+import { knotOf } from '../site/src/lib/knots.js';
 
 export const DB_PATH = fileURLToPath(new URL('../sweeps.db', import.meta.url));
 

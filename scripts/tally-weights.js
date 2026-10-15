@@ -25,7 +25,8 @@ import Database from 'better-sqlite3';
 
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
 import { assertSpends, DB_PATH, derive, weightingValuesOf } from './sweep-data.js';
-import { knotInput, knotOf, knotReader } from './knot-curves.js';
+import { knotInput, knotReader } from './knot-curves.js';
+import { knotOf } from '../site/src/lib/knots.js';
 import { DIRECTIONS, ends } from '../site/src/lib/weighting.js';
 
 const QUESTION = 1;

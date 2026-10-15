@@ -14,7 +14,8 @@ import assert from 'node:assert/strict';
 import { chainTrack } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
-import { knotInput, knotOf, knotReader } from '../scripts/knot-curves.js';
+import { knotInput, knotReader } from '../scripts/knot-curves.js';
+import { knotOf } from '../site/src/lib/knots.js';
 import { SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
 import { DIRECTIONS, ends, weigher } from '../site/src/lib/weighting.js';
 

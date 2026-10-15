@@ -28,7 +28,8 @@
 import { parseArgs } from 'node:util';
 
 import { assertSpends, DB_PATH, derive, openDb, random } from './sweep-data.js';
-import { knotInput, knotOf, knotPool, knotReader, knotType } from './knot-curves.js';
+import { knotInput, knotPool, knotReader } from './knot-curves.js';
+import { knotOf, knotType } from '../site/src/lib/knots.js';
 import { readFront } from './knot-front.js';
 
 const GEOMETRY = ['span_across', 'span_up', 'span_along', 'volume', 'revisits', 'loop_small', 'loop_large'];

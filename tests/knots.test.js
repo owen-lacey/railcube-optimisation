@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
 import { chainTrack } from '../src/track.js';
-import { curvesOf, knotInput, knotOf, knotReader, knotType, lobesOf, SAMPLES } from '../scripts/knot-curves.js';
+import { knotInput, knotReader } from '../scripts/knot-curves.js';
+import { curvesOf, knotOf, knotType, lobesOf, SAMPLES } from '../site/src/lib/knots.js';
 
 const reader = knotReader();
 const topolyOnly = knotReader({ certify: false });

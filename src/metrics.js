@@ -21,10 +21,12 @@ export const spanOf = placed => {
 
 /**
  * Steps that start three of a kind in a row, wrapping last → first because it is
- * a loop. A pair is free; a run of n costs n − 2.
+ * a loop. A pair is free; a run of n costs n − 2. An `open` track — one still
+ * being built — has no last → first, so nothing wraps.
  */
-const repeatsOf = placed => placed.filter((p, i) =>
-  p.type === placed[(i + 1) % placed.length].type
+export const repeatsOf = (placed, { open = false } = {}) => placed.filter((p, i) =>
+  (!open || i + 2 < placed.length)
+  && p.type === placed[(i + 1) % placed.length].type
   && p.type === placed[(i + 2) % placed.length].type).length;
 
 /**
@@ -81,8 +83,11 @@ const keyOf = cell => cell.join(',');
  *
  * The inside curve's hollow is not counted: the train is in material there, and
  * nothing is said about where it is mid-piece.
+ *
+ * Neighbours wrap last → first, because it is a loop. An `open` track — one still
+ * being built — has no last → first, so its ends are not neighbours.
  */
-export function closeCallsOf(placed) {
+export function closeCallsOf(placed, { open = false } = {}) {
   const n = placed.length;
   const crosses = placed.flatMap((p, i) => (p.type === 'cross' ? [i] : []));
   const steps = i => (placed[i].type === 'cross' ? crosses : [i]);
@@ -94,7 +99,9 @@ export function closeCallsOf(placed) {
     if (!riders.has(key)) riders.set(key, { cell: c, at: new Set() });
     steps(i).forEach(j => riders.get(key).at.add(j));
   }));
-  const apart = (i, j) => Math.min((i - j + n) % n, (j - i + n) % n) > 1;
+  const apart = open
+    ? (i, j) => Math.abs(i - j) > 1
+    : (i, j) => Math.min((i - j + n) % n, (j - i + n) % n) > 1;
   return [...riders.values()].filter(({ cell, at }) => FACE_STEPS.some(d => {
     const owner = owners.get(keyOf(cell.map((v, k) => v + d[k])));
     return owner && owner.every(j => [...at].every(i => apart(i, j)));

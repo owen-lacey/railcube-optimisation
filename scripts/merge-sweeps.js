@@ -47,7 +47,8 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SCORES } from '../src/track.js';
-import { knotInput, knotOf, knotPool } from './knot-curves.js';
+import { knotInput, knotPool } from './knot-curves.js';
+import { knotOf } from '../site/src/lib/knots.js';
 import {
   assertSpends, DB_PATH, derive, openDb, questionOf, staged, trackHash, verify,
 } from './sweep-data.js';
