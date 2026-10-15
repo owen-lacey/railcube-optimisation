@@ -78,15 +78,14 @@
 		All of the good layouts perform well on these five metics I mentioned:
 		compactness, close calls, orientation count, repeats and knots.
 	</p>
-	<ScoredTrack shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
+	<ScoredTrack end="best" />
 
 	<p>
 		On the other hand, we can put something objective against why the bad tracks
 		offend us so:
 	</p>
 
-	<!-- TODO cycle through bad ones again with metric count  -->
-	<TrackFigure shape="IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI" />
+	<ScoredTrack end="worst" />
 
 	<p>
 		There might be some additional things you care about, perhaps time spent

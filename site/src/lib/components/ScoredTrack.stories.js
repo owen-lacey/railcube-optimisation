@@ -1,5 +1,5 @@
-// A track with its scorecard over the viewer's top-left corner. The shape must be
-// one the site's data files carry, since the knot is looked up rather than read.
+// The ten best or ten worst under equal weights, each with its scorecard over the
+// viewer's top-left corner.
 
 import ScoredTrack from './ScoredTrack.svelte';
 
@@ -7,12 +7,12 @@ export default {
   title: 'Scored track',
   component: ScoredTrack,
   argTypes: {
-    shape: { control: 'text' },
+    end: { control: 'select', options: ['best', 'worst'] },
   },
 };
 
-/** One of the ten best under equal weights: a trefoil. */
-export const Good = { args: { shape: 'SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI' } };
+/** The ten best. */
+export const Good = { args: { end: 'best' } };
 
-/** One of the ten worst. */
-export const Bad = { args: { shape: 'IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI' } };
+/** The ten worst. */
+export const Bad = { args: { end: 'worst' } };

@@ -10,7 +10,16 @@
   import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
 
   // `end` is 'best' or 'worst'. `train` is the viewer's: its callbacks, or null for no train.
-  let { end = 'best', count = 10, ranked = SWEEP_CROSSED_RANKED, aspect = '16 / 10', train = {} } = $props();
+  // `overlay` is laid over the viewer's top-left corner, given the shape on show; on
+  // its own only, as `Frame`'s is.
+  let {
+    end = 'best',
+    count = 10,
+    ranked = SWEEP_CROSSED_RANKED,
+    aspect = '16 / 10',
+    train = {},
+    overlay = undefined,
+  } = $props();
 
   const tracks = $derived(ranked[end].slice(0, count));
 
@@ -21,7 +30,11 @@
   };
 </script>
 
-<Frame view={{ shape: tracks[index].shape, train }} {aspect}>
+{#snippet shown()}
+  {@render overlay(tracks[index].shape)}
+{/snippet}
+
+<Frame view={{ shape: tracks[index].shape, train }} {aspect} overlay={overlay ? shown : undefined}>
   {#snippet footer()}
     <div class="ranked" role="group" aria-label="{end === 'best' ? 'Best' : 'Worst'} layouts">
       <button type="button" class="turn" aria-label="Previous {end} layout" onclick={() => turn(-1)}><ChevronLeft /></button>
