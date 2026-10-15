@@ -472,7 +472,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
 
   /**
    * Keep shots clear of a box in the viewer's top left, `{ width, height }` in CSS
-   * pixels, or null for none. The track eases over to its new place in step with a
+   * pixels, or along the bottom, `{ edge: 'bottom', width, height }` (see
+   * `freeRegion`), or null for none. The track eases over to its new place in step with a
    * card growing to full screen or back (`$lib/grow.js`), or goes there at once
    * when `instant`. The first box is taken at once, since it arrives once
    * it has been measured, after the first paint; so is a new size for a box already

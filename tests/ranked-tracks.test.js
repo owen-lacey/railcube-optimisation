@@ -14,9 +14,9 @@ import assert from 'node:assert/strict';
 
 import { chainTrack, countPieces, POOLS } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
-import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
+import { readingsOf } from '../site/src/lib/readings.js';
 import { SWEEP_CROSSED_RANKED as ranked, SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
-import { DIRECTIONS, ends, weigher } from '../site/src/lib/weighting.js';
+import { DIRECTIONS, ends, termsOf, weigher } from '../site/src/lib/weighting.js';
 
 const NAMES = Object.keys(DIRECTIONS);
 const { score, scale } = weigher(ranked.ranges);
@@ -25,8 +25,8 @@ test('ranked over the weights file, at equal weights', () => {
   assert.deepEqual(ranked.ranges, table.ranges);
   assert.deepEqual(ranked.question, table.question);
   assert.deepEqual(ranked.weights, Object.fromEntries(NAMES.map(name => [name, 1])));
-  assert.equal(ranked.best.length, 10);
-  assert.equal(ranked.worst.length, 10);
+  assert.equal(ranked.best.length, 100);
+  assert.equal(ranked.worst.length, 100);
 });
 
 test('every layout is legal, spends the inventory, and scores what it says', () => {
@@ -35,14 +35,11 @@ test('every layout is legal, spends the inventory, and scores what it says', () 
     const spent = countPieces(placed);
     for (const pool of POOLS) assert.equal(spent[pool], ranked.question.inventory[pool], `${shape} ${pool}`);
     assert.ok(placed.every(p => p.cell[1] >= 0), `${shape} goes below the floor`);
-    const values = {
-      knotted: Number(knot !== 'unknot'),
-      poses: posesOf(placed),
-      closeCalls: closeCallsOf(placed),
-      repeats: metricsOf(placed).repeats,
-      longestSide: Math.max(...spanOf(placed)),
-    };
+    const values = readingsOf(shape);
+    assert.equal(values.knot, knot, shape);
     assert.equal(score(values, ranked.weights) / scale, stored, shape);
+    const { total } = termsOf(ranked.ranges, values, ranked.weights);
+    assert.ok(Math.abs(total - stored) < 1e-12, `${shape} works out to ${total}, scores ${stored}`);
   }
 });
 

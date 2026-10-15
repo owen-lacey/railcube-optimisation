@@ -38,6 +38,24 @@ export function weigher(ranges) {
   return { score, scale };
 }
 
+/**
+ * A row's weighted score written out term by term, for showing the working: per
+ * metric its `value`, the range's `low` and `high`, `scaled` to 0–1 over it, its
+ * `sign` (DIRECTIONS), `weight` and `contribution` (scaled × sign × weight), in
+ * DIRECTIONS order, and their `total`. Real numbers, so for display: `weigher` is
+ * what ranks. A metric with an empty range contributes nothing.
+ */
+export function termsOf(ranges, row, weights) {
+  const terms = NAMES.map(name => {
+    const [low, high] = ranges[name];
+    const scaled = high > low ? (row[name] - low) / (high - low) : 0;
+    const weight = weights[name] ?? 0;
+    const sign = DIRECTIONS[name];
+    return { name, value: row[name], low, high, scaled, sign, weight, contribution: scaled * sign * weight };
+  });
+  return { terms, total: terms.reduce((sum, t) => sum + t.contribution, 0) };
+}
+
 /** The `count` entries first under `before`, in order, in one pass. */
 function leaders(entries, before, count) {
   const kept = [];

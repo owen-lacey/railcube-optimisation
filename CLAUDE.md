@@ -671,11 +671,22 @@ combinations, ties alphabetical, where these are ten layouts, ties drawn, so sev
 share a combination — and both are kept (Owen's call). `rank-tracks.js` reads every legal, unmirrored row of
 question 1, scores it with `weigher` over the *weights file's* ranges (a row outside them
 fails the run: re-tally first), breaks ties by a seeded draw, re-derives and re-reads the
-knot of all 20, and writes `site/src/lib/data/sweep-crossed-ranked.json`
-(`SWEEP_CROSSED_RANKED`). `RankedTracks` steps through one end with arrows, showing only
+knot of every one kept, and writes `site/src/lib/data/sweep-crossed-ranked.json`
+(`SWEEP_CROSSED_RANKED`). It keeps 100 at each end (`--count 100 --seed 1`); the draw is
+per row in id order, so the first ten did not move when the count went from 10 to 100.
+`RankedTracks` shows the first `count` (10) of one end with arrows, showing only
 the position — Owen's calls, all of them: equal weights, arrows, no metrics in the footer.
-`tests/ranked-tracks.test.js` re-chains and re-scores the file and checks its first best
-and first worst score what `ends` gives at equal weights.
+`ScoredRanking` shows all 100 best as tiles to pick from, docked along the viewer's
+bottom at every width — `LayoutViewer`'s `dock`, framed clear of by a `reserved` box with
+`edge: 'bottom'` (`freeRegion`). A tile is veiled until
+picked, always has its rank and score along its foot, and mounts its viewer only as it
+nears view; the scroller has no scrollbar (Owen's call). The picked one is drawn large with
+`ScoreMaths` under it: per metric, value, range, scaled, weight and points (`termsOf` in
+`weighting.js`), summing to the stored score. `readingsOf` in `site/src/lib/readings.js`
+is the one reading of a shape's five values, shared by `Scorecard`, `ScoreMaths` and the
+tests. `tests/ranked-tracks.test.js` re-chains and re-scores the file, checks the working
+sums to each stored score, and checks its first best and first worst score what `ends`
+gives at equal weights.
 
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 

@@ -35,6 +35,10 @@
     // Laid over the pane's top-left corner, given the scene, while there is one
     // drawn. Unset, nothing is.
     overlay = undefined,
+    // Docked along the pane's bottom edge, given the scene, while there is one
+    // drawn: unlike the overlay it takes clicks, and stays full screen. Unset,
+    // nothing is.
+    dock = undefined,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -66,9 +70,20 @@
   let overlaid = $state(null);
   let overlayWidth = $state(0);
   let overlayHeight = $state(0);
-  const reserved = $derived(overlaid && overlayWidth && !handled
+  const overlayBox = $derived(overlaid && overlayWidth && !handled
     ? { width: overlaid.offsetLeft + overlayWidth, height: overlaid.offsetTop + overlayHeight }
     : null);
+
+  // The dock, down to the bottom edge, so the track is framed clear of it, full
+  // screen too.
+  let docked = $state(null);
+  let dockWidth = $state(0);
+  let dockHeight = $state(0);
+  const dockBox = $derived(docked && dockWidth && dockHeight
+    ? { edge: 'bottom', width: dockWidth, height: dockHeight + parseFloat(getComputedStyle(docked).bottom) }
+    : null);
+
+  const reserved = $derived(overlayBox ?? dockBox);
 </script>
 
 {#snippet footer()}
@@ -84,6 +99,11 @@
       {#if overlay}
         <div class="overlay" bind:this={overlaid} bind:offsetWidth={overlayWidth} bind:offsetHeight={overlayHeight}>
           {@render overlay(result.scene)}
+        </div>
+      {/if}
+      {#if dock}
+        <div class="dock" bind:this={docked} bind:offsetWidth={dockWidth} bind:offsetHeight={dockHeight}>
+          {@render dock(result.scene)}
         </div>
       {/if}
       <TrackViewer
@@ -128,6 +148,15 @@
     left: 0.5rem;
     z-index: 1;
     pointer-events: none;
+  }
+
+  /* Clear of the toggle (bottom right, 36px, 0.5rem in from the edge). */
+  .dock {
+    position: absolute;
+    left: 0.5rem;
+    right: calc(1rem + 36px);
+    bottom: 0.5rem;
+    z-index: 1;
   }
 
   .empty {

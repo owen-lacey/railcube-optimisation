@@ -97,20 +97,29 @@ export function describedZoom(pixelsPerUnit, width, height) {
 /**
  * The part of a `width`×`height` viewer a shot is framed in, `{ left, top, width,
  * height }` in CSS pixels: all of it, or, with `reserved` (`{ width, height }`, a
- * box in its top left that something is laid over), the band beside that box or
- * the band under it — whichever a shot fits in larger.
+ * box that something is laid over), the band clear of it. A box in the top left
+ * leaves the band beside it or the band under it — whichever a shot fits in
+ * larger. A box along the bottom edge (`edge: 'bottom'`, its `height` measured
+ * up from that edge) leaves the band above it.
  */
 export function freeRegion(width, height, reserved, side = bandFor(width, height, reserved)) {
   const whole = { left: 0, top: 0, width, height };
   if (!reserved) return whole;
-  return side === 'beside'
-    ? { left: reserved.width, top: 0, width: width - reserved.width, height }
-    : { left: 0, top: reserved.height, width, height: height - reserved.height };
+  const bands = {
+    beside: { left: reserved.width, top: 0, width: width - reserved.width, height },
+    under: { left: 0, top: reserved.height, width, height: height - reserved.height },
+    above: { left: 0, top: 0, width, height: height - reserved.height },
+  };
+  return bands[side];
 }
 
-/** Which band `freeRegion` frames in when not told: 'beside' the box or 'under' it. */
+/**
+ * Which band `freeRegion` frames in when not told: for a box in the top left,
+ * 'beside' it or 'under' it; for one along the bottom, 'above' it.
+ */
 export function bandFor(width, height, reserved) {
   if (!reserved) return 'beside';
+  if (reserved.edge === 'bottom') return 'above';
   const fit = (w, h) => Math.min(w, h * (REFERENCE_WIDTH / REFERENCE_HEIGHT));
   return fit(width - reserved.width, height) >= fit(width, height - reserved.height) ? 'beside' : 'under';
 }
@@ -266,7 +275,8 @@ export function createCamera(camera, size, onApply) {
 
   /**
    * Keep shots clear of a box in the viewer's top left, `{ width, height }` in CSS
-   * pixels, or null to frame them in the whole viewer. `part` (0–1) frames them
+   * pixels, or along the bottom, `{ edge: 'bottom', width, height }` (see
+   * `freeRegion`), or null to frame them in the whole viewer. `part` (0–1) frames them
    * that share of the way from the whole viewer to clear of the box, so a stage
    * can ease between the two.
    */

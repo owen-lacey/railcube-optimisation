@@ -2,16 +2,17 @@
   // The crossed sweep's ten best or ten worst layouts under equal weights, stepped
   // through by hand, wrapping both ways. Only the position is shown: the post asks
   // which set the reader prefers before it names a single metric. The ranking is
-  // `scripts/rank-tracks.js`'s. A figure — see `$lib/figure.js`.
+  // `scripts/rank-tracks.js`'s, which keeps more than ten: `count` shows the first.
+  // A figure — see `$lib/figure.js`.
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Frame from './Frame.svelte';
   import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
 
   // `end` is 'best' or 'worst'. `train` is the viewer's: its callbacks, or null for no train.
-  let { end = 'best', ranked = SWEEP_CROSSED_RANKED, aspect = '16 / 10', train = {} } = $props();
+  let { end = 'best', count = 10, ranked = SWEEP_CROSSED_RANKED, aspect = '16 / 10', train = {} } = $props();
 
-  const tracks = $derived(ranked[end]);
+  const tracks = $derived(ranked[end].slice(0, count));
 
   let index = $state(0);
 

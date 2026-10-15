@@ -28,6 +28,9 @@ html {
   /* The outline of the card every layout sits in. */
   --card-border: #34476a;
   --card-footer: #19263d;
+
+  /* Laid over a layout not yet picked, like a character not yet chosen. */
+  --veil: rgb(255 255 255 / 0.3);
 }
 
 body {

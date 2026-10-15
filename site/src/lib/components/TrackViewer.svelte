@@ -91,9 +91,10 @@
     outlines = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
-    // A box in the viewer's top left, `{ width, height }` in CSS pixels, that
-    // something is laid over: shots are framed clear of it. Null frames them in the
-    // whole viewer. See `freeRegion` in render/camera.js.
+    // A box in the viewer's top left, `{ width, height }` in CSS pixels, or along
+    // its bottom edge, `{ edge: 'bottom', width, height }`, that something is laid
+    // over: shots are framed clear of it. Null frames them in the whole viewer. See
+    // `freeRegion` in render/camera.js.
     reserved = null,
     // Callouts on cells, `{ key, lines, cell, side, flash }` each: set outside what
     // is drawn with a leader line to the middle of `cell`, and kept there as the
@@ -609,7 +610,7 @@
 
   // Keyed on the box's sides, not the object, so an equal box handed over new
   // does not reframe.
-  const reservedKey = $derived(reserved && `${reserved.width}x${reserved.height}`);
+  const reservedKey = $derived(reserved && `${reserved.edge ?? 'corner'} ${reserved.width}x${reserved.height}`);
   $effect(() => {
     reservedKey;
     if (!ready || !stage) return;

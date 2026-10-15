@@ -7,6 +7,7 @@
 	import Chapter from "./Chapter.svelte";
 	import PoseTracker from "$lib/components/PoseTracker.svelte";
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
+	import ScoredRanking from "$lib/components/ScoredRanking.svelte";
 	import ScoredTrack from "$lib/components/ScoredTrack.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
@@ -131,8 +132,7 @@
 		layout, and pick the one with the best score:
 	</p>
 
-	<!-- TODO: combined score where user can pick their favourite. Show top 100 tracks and how their score is calculated. -->
-	<TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
+	<ScoredRanking />
 
 	<p>
 		By making the weighting of each metric dynamic, you can change the formula

@@ -13,9 +13,9 @@ import assert from 'node:assert/strict';
 
 import { chainTrack } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
-import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
 import { knotInput, knotReader } from '../scripts/knot-curves.js';
 import { knotOf } from '../site/src/lib/knots.js';
+import { readingsOf } from '../site/src/lib/readings.js';
 import { SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
 import { DIRECTIONS, ends, weigher } from '../site/src/lib/weighting.js';
 
@@ -35,12 +35,10 @@ function* settings() {
 test('every sample recounts to its row, on the floor, its knot as filed', () => {
   assert.ok(table.rows.length > 0);
   for (const row of table.rows) {
-    const placed = chainTrack(routeOf(row.shape));
-    assert.deepEqual(
-      [posesOf(placed), closeCallsOf(placed), metricsOf(placed).repeats, Math.max(...spanOf(placed))],
-      [row.poses, row.closeCalls, row.repeats, row.longestSide], row.shape);
-    assert.equal(row.knotted, Number(row.knot !== 'unknot'), row.shape);
-    assert.ok(placed.every(p => p.cell[1] >= 0), `${row.shape} goes below the floor`);
+    const values = readingsOf(row.shape);
+    assert.deepEqual(NAMES.map(name => values[name]), NAMES.map(name => row[name]), row.shape);
+    assert.equal(values.knot, row.knot, row.shape);
+    assert.ok(chainTrack(routeOf(row.shape)).every(p => p.cell[1] >= 0), `${row.shape} goes below the floor`);
   }
 });
 

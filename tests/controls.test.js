@@ -145,6 +145,10 @@ test('a reserved corner frames the shot in the band that fits it larger', () => 
   assert.deepEqual(freeRegion(360, 225, null), { left: 0, top: 0, width: 360, height: 225 });
 });
 
+test('a reserved bottom edge frames the shot above it, whatever fits larger', () => {
+  assert.deepEqual(freeRegion(360, 225, { edge: 'bottom', width: 300, height: 60 }), { left: 0, top: 0, width: 360, height: 165 });
+});
+
 test('a shot framed in a region has its target in the middle of it, at the region\'s zoom', () => {
   const [width, height] = [360, 225];
   const region = freeRegion(width, height, { width: 180, height: 110 });
