@@ -2,7 +2,7 @@
 // weighted tracks.
 //
 //   node scripts/tally-weights.js \
-//     --out site/src/lib/data/sweep-crossed-weights.json [--count 10] [--max-weight 5] [--db <path>]
+//     --out site/src/lib/data/sweep-crossed-weights.json [--count 10] [--db <path>]
 //
 // Every legal row of question 1 is read off sweeps.db's columns — knotted, poses,
 // close calls, repeats, and longest side from the spans — and grouped by those
@@ -11,8 +11,8 @@
 // first shape not stored as a mirror (a mirror reads the same, so its partner
 // stands for both).
 //
-// For every weighting with each weight a whole number from 0 to `--max-weight`,
-// as the sliders offer, the `--count` best and worst groups are found by `ends`
+// For every weighting with each weight a whole number from 0 to its
+// `MAX_WEIGHTS` in weighting.js, as the sliders offer, the `--count` best and worst groups are found by `ends`
 // in weighting.js, ties broken by sample shape; the file keeps their union, and
 // nothing else. Every sample is re-derived and recounted before the file is
 // written — its knot read on a fresh rotation — and one disagreement fails it.
@@ -27,7 +27,7 @@ import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
 import { assertSpends, DB_PATH, derive, weightingValuesOf } from './sweep-data.js';
 import { knotInput, knotReader } from './knot-curves.js';
 import { knotOf } from '../site/src/lib/knots.js';
-import { DIRECTIONS, ends } from '../site/src/lib/weighting.js';
+import { DIRECTIONS, ends, MAX_WEIGHTS, settings } from '../site/src/lib/weighting.js';
 
 const QUESTION = 1;
 const NAMES = Object.keys(DIRECTIONS);
@@ -38,15 +38,12 @@ const { values: args } = parseArgs({
   options: {
     out: { type: 'string' },
     count: { type: 'string', default: '10' },
-    'max-weight': { type: 'string', default: '5' },
     db: { type: 'string', default: DB_PATH },
   },
 });
 const count = Number(args.count);
-const maxWeight = Number(args['max-weight']);
-if (!args.out || !Number.isInteger(count) || count < 1 || !Number.isInteger(maxWeight)) {
-  console.error('usage: node scripts/tally-weights.js --out <file.json> '
-    + '[--count <n>] [--max-weight <n>] [--db <path>]');
+if (!args.out || !Number.isInteger(count) || count < 1) {
+  console.error('usage: node scripts/tally-weights.js --out <file.json> [--count <n>] [--db <path>]');
   process.exit(2);
 }
 
@@ -80,16 +77,10 @@ function tally(path) {
   return { question, population, legal: population - underground, rows };
 }
 
-const rangeOf = (rows, name) => {
-  const vs = rows.map(r => r[name]);
-  return [Math.min(...vs), Math.max(...vs)];
-};
-
 /** The rows at either end of every weighting the sliders can set, all-zero included. */
 function kept(table) {
   const marked = new Set();
-  for (let w = 0; w < (maxWeight + 1) ** NAMES.length; w++) {
-    const weights = Object.fromEntries(NAMES.map((n, i) => [n, Math.floor(w / (maxWeight + 1) ** i) % (maxWeight + 1)]));
+  for (const weights of settings()) {
     const { best, worst } = ends(table, weights);
     for (const { row } of [...best, ...worst]) marked.add(row);
   }
@@ -134,9 +125,8 @@ function write(output, data) {
 }
 
 const { question, population, legal, rows } = tally(args.db);
-const ranges = Object.fromEntries(NAMES.map(name => [name, rangeOf(rows, name)]));
 const order = (a, b) => NAMES.reduce((c, n) => c || a[n] - b[n], 0);
-const shown = kept({ rows, ranges, count }).sort(order);
+const shown = kept({ rows, count }).sort(order);
 await audit(shown, question);
 
 write(args.out, {
@@ -145,9 +135,8 @@ write(args.out, {
   question,
   population,
   legal,
-  maxWeight,
+  maxWeights: MAX_WEIGHTS,
   count,
-  ranges,
   rows: shown,
 });
 console.log(`${rows.length} groups over ${legal.toLocaleString('en-GB')} legal layouts `

@@ -16,33 +16,11 @@
     "startPose": "DF"
   },
   "legal": 27376473,
-  "ranges": {
-    "knotted": [
-      0,
-      1
-    ],
-    "poses": [
-      6,
-      20
-    ],
-    "closeCalls": [
-      0,
-      32
-    ],
-    "repeats": [
-      0,
-      9
-    ],
-    "longestSide": [
-      7,
-      17
-    ]
-  },
   "layouts": [
-    {"metric":"knotted","id":22404642,"shape":"SSSSIOILISSSSLXOROISROIRSSSSSIRIXLIL","knot":"trefoil","tied":1,"others":-1.0179563492063493},
-    {"metric":"poses","id":10552484,"shape":"XSSSILISSLISXSIRSORISSIRSSSILOOROLIS","knot":"unknot","tied":1,"others":-0.9222222222222223},
-    {"metric":"closeCalls","id":25559138,"shape":"SSISSLSOSLOLXIOSSOIIRISSSSSRISXRRLII","knot":"unknot","tied":1,"others":-0.3761904761904762},
-    {"metric":"repeats","id":25398478,"shape":"IRSLRSIISSRLSXOISRLIISSISOSLSSOSOXSI","knot":"unknot","tied":8,"others":-0.8973214285714286},
-    {"metric":"longestSide","id":8126400,"shape":"XLIISOLSSSIISLSSISXILOORRROSSSSISIRS","knot":"unknot","tied":1,"others":0.006448412698412698}
+    {"metric":"knotted","id":22404642,"shape":"SSSSIOILISSSSLXOROISROIRSSSSSIRIXLIL","knot":"trefoil","tied":1,"others":-8},
+    {"metric":"poses","id":10552484,"shape":"XSSSILISSLISXSIRSORISSIRSSSILOOROLIS","knot":"unknot","tied":1,"others":-16},
+    {"metric":"closeCalls","id":25559138,"shape":"SSISSLSOSLOLXIOSSOIIRISSSSSRISXRRLII","knot":"unknot","tied":1,"others":-3},
+    {"metric":"repeats","id":26629980,"shape":"IISXLSROOSSLSISISIOSISOXSLRSSIISRLSR","knot":"unknot","tied":17,"others":-9},
+    {"metric":"longestSide","id":15950364,"shape":"XSLLISSSIILSSRIRXIISSOSOLROSOSSSIIRS","knot":"unknot","tied":1,"others":8}
   ]
 }

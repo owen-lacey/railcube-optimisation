@@ -42,7 +42,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Outlined like PlayPause and WeightedTracks' shuffle. */
+  /* Outlined like PlayPause. */
   .shuffle {
     display: grid;
     place-items: center;

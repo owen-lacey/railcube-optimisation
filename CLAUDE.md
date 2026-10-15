@@ -643,50 +643,62 @@ because re-reading costs ~4 ms a layout (~25 ms when topoly has to read it). Thi
 
 ### The weighted best and worst: `scripts/tally-weights.js` → `WeightedTracks`
 
-Five sliders, 0 to `maxWeight` (5): knotted, orientations, close calls (more is better, all three),
-repeats and longest side (fewer/shorter). Each end shows **ten**, stepped through with
-arrows, and nothing else — no tie count, no shuffle (Owen's calls). A weighting reads a
+**A score is raw points, not scaled** — Owen's call, so a reader can follow it: each metric is
+worth whole points per unit, signed by its direction (`DIRECTIONS`), and the score is
+value × points each, summed (`scoreOf` in `weighting.js`). The post's weights are `WEIGHTS`:
+knotted +10, and +1 an orientation, +1 a close call, −1 a repeat, −1 a cube of longest
+side. Knotted gets 10 because, as a 0/1 reading against close calls' 0–32, it would
+otherwise hardly count. The best scores 42, the worst −16. It replaced a sum of each metric
+rescaled to 0–1 over the sweep's range, which is the same thing as weighting each by
+1/span, so the ends moved: 1 of the old top 10 stayed (the #1), and 50 of the top 100.
+
+Five sliders, each the metric's points each, 0 to its `MAX_WEIGHTS` (knotted 20, the rest 5):
+knotted, orientations, close calls (more is better, all three), repeats and longest side
+(fewer/shorter). `WeightedTracks` is `ScoredRanking` with the
+weights left to the reader: the sliders are `ScoreMaths`' points-each cells (its `onweigh`), in
+the footer, and only the **ten best** are shown, as `TileStrip` tiles that re-rank on a
+slider change, back to the first — no worst end, no tie count, no shuffle (Owen's calls).
+The tally still keeps both ends. A weighting reads a
 layout only through its five values, so the ten are ten distinct *combinations* of them,
 each shown by one sample: its alphabetically first legal, unmirrored shape.
 
-`tally-weights.js` reads question 1's columns in one streaming pass (14,358 combinations
-over 22.8M legal layouts), then for all 7,776 slider settings, all-zero included, takes the
+`tally-weights.js` reads question 1's columns in one streaming pass (14,870 combinations
+over 27.4M legal layouts), then for all 27,216 slider settings (`settings()`), all-zero included, takes the
 `--count` (10) best and worst by `ends` in `weighting.js` — **ties broken alphabetically by
 sample shape**, which is what makes the cut small: with a slider at 0, ties are huge
 (knotted alone ties every knotted combination at the best). It writes only their union to
-`site/src/lib/data/sweep-crossed-weights.json`: 461 rows, 70 KB raw, 12 KB gzipped, against
+`site/src/lib/data/sweep-crossed-weights.json`: 453 rows, 69 KB raw, 12 KB gzipped, against
 1.4 MB / 77 KB for a file of every combination. That is exact, not an approximation: under
 any setting, a row kept for another setting ranks below all of this setting's ten in the
 full order, so ranking the kept rows gives the same ten. The tally and the site rank with
 the one `ends`, so they cannot disagree. An unread knot, or a combination with only
 mirrored rows, fails the tally; every sample is re-derived and its knot re-read on a fresh
-rotation before the file is written. The streaming pass took a few minutes on a quiet
-machine; the 7,776 rankings are seconds. `tests/weighting.test.js` checks `ends` against a
+rotation before the file is written. The whole tally takes about 1.5 minutes. `tests/weighting.test.js` checks `ends` against a
 plain sort of the file over every setting.
 
 **The ten best and ten worst: `scripts/rank-tracks.js` → `RankedTracks`.** Optimising opens
-on two sets, before any metric is named: the crossed sweep's top and bottom 10 under equal
-weights. WeightedTracks at its default sliders is not the same list — its ten are ten
+on two sets, before any metric is named: the crossed sweep's top and bottom 10 under the
+post's `WEIGHTS`. WeightedTracks at its default sliders is not the same list — its ten are ten
 combinations, ties alphabetical, where these are ten layouts, ties drawn, so several can
 share a combination — and both are kept (Owen's call). `rank-tracks.js` reads every legal, unmirrored row of
-question 1, scores it with `weigher` over the *weights file's* ranges (a row outside them
-fails the run: re-tally first), breaks ties by a seeded draw, re-derives and re-reads the
+question 1, scores it with `scoreOf` at `WEIGHTS`, breaks ties by a seeded draw, re-derives and re-reads the
 knot of every one kept, and writes `site/src/lib/data/sweep-crossed-ranked.json`
 (`SWEEP_CROSSED_RANKED`). It keeps 100 at each end (`--count 100 --seed 1`); the draw is
 per row in id order, so the first ten did not move when the count went from 10 to 100.
 `RankedTracks` shows the first `count` (10) of one end with arrows, showing only
-the position — Owen's calls, all of them: equal weights, arrows, no metrics in the footer.
+the position — Owen's calls, all of them: arrows, no metrics in the footer.
 `ScoredRanking` shows all 100 best as tiles to pick from, docked along the viewer's
 bottom at every width — `LayoutViewer`'s `dock`, framed clear of by a `reserved` box with
 `edge: 'bottom'` (`freeRegion`). A tile is veiled until
 picked, always has its rank and score along its foot, and mounts its viewer only as it
 nears view; the scroller has no scrollbar (Owen's call). The picked one is drawn large with
-`ScoreMaths` under it: per metric, value, range, scaled, weight and points (`termsOf` in
+`ScoreMaths` under it: per metric, value, points each and points (`termsOf` in
 `weighting.js`), summing to the stored score. `readingsOf` in `site/src/lib/readings.js`
 is the one reading of a shape's five values, shared by `Scorecard`, `ScoreMaths` and the
 tests. `tests/ranked-tracks.test.js` re-chains and re-scores the file, checks the working
 sums to each stored score, and checks its first best and first worst score what `ends`
-gives at equal weights.
+gives at `WEIGHTS`. `single-metrics.js` breaks its ties at `WEIGHTS` too, the metric
+itself weighing nothing.
 
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 

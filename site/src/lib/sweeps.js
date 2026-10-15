@@ -51,7 +51,7 @@ export const SWEEP_CROSSED = sweepCrossed;
 export const SWEEP_CROSSED_WEIGHTS = sweepCrossedWeights;
 
 /**
- * The crossed sweep's best and worst layouts under equal weights — the order
+ * The crossed sweep's best and worst layouts under the post's weights — the order
  * `weighting.js` scores them in at WeightedTracks' default sliders — ranked over
  * all of sweeps.db, ties broken by a seeded draw, mirrors left out.
  * `scripts/rank-tracks.js` writes it.
@@ -60,8 +60,8 @@ export const SWEEP_CROSSED_RANKED = sweepCrossedRanked;
 
 /**
  * The crossed sweep's best layout on each metric alone: one per metric `weighting.js`
- * weighs, at that metric's best, and of those the lowest on the other four at equal
- * weights. `scripts/single-metrics.js` writes it.
+ * weighs, at that metric's best, and of those the lowest on the other four under
+ * the post's weights. `scripts/single-metrics.js` writes it.
  */
 export const SWEEP_CROSSED_SINGLES = sweepCrossedSingles;
 

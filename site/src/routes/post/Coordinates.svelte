@@ -25,15 +25,15 @@
 
 	<PieceCardGrid full={true} />
 	<p>
-		Each piece affects where the next piece needs to continue from. For example, <PieceTag
+		Each piece affects where the next piece will continue from. For example, <PieceTag
 			letter="S"
 		/> moves the track one place forwards, and <PieceTag letter="L" /> moves it one
 		place forwards and two left, whilst turning left.
 	</p>
 	<PieceMoves />
 	<p>
-		These are relative moves, and our building blocks for how we'll keep track
-		of the train's cell in the track.
+		These are relative movements, and our building blocks for how we'll keep
+		track of the train's cell in the track.
 	</p>
 	<p>
 		Imagine our track was in a box divided into cells the size of a single <PieceTag
@@ -44,7 +44,7 @@
 
 	<TrainCoordinates shape="SSSSLLIOOILL" readout="position" />
 	<p>
-		The coordinates of the train are given by how many cubes away it is from the
+		The position of the train is given by how many cubes away it is from the
 		starting <Highlight colour="grid-color">highlighted cube</Highlight>,
 		expressed in x, y and z. It's directional, so negative numbers means it's
 		going in the other direction that the arrows show.
@@ -60,24 +60,23 @@
 	<PoseCycle />
 
 	<p>
-		Combining a train's position and an orientation gives us its "pose". This is
-		all the information we need to know to know where a train is at any given
-		point along the track. Below is the effect each track piece has on the
-		train's pose for each possible orientation.
+		Combining a train's position and an orientation gives us the "pose" the
+		following piece needs to take. Below is the effect each track piece has on
+		the train's pose for each possible orientation.
 	</p>
 	<PoseStep />
 
 	<p>
-		Let's include the orientation with the position for the same track as
-		earlier.
+		Let's include the orientation with the position using the same track as
+		earlier, giving us its pose.
 	</p>
 	<TrainCoordinates shape="SSSSLLIOOILL" readout="position-pose" />
 
 	<p>
 		If we can add a single track piece to a pose to obtain a new pose, we can do
 		it with groups of track pieces. Try adding and changing the track pieces to
-		see the effect on the final pose. Changing the initial orientation also
-		affects the final pose.
+		see the effect on the final pose, as well as what effect changing the
+		initial orientation has.
 	</p>
 
 	<PoseBuilder />
@@ -85,65 +84,67 @@
 	<p>
 		Now we can do some Rail Cube maths<sup>TM</sup>: given one group of track
 		pieces, we can add another group of track pieces to it to get a new pose.
+		The first step is to rotate the second group so it matches the orientation
+		of the pose the first group finishes at.
 	</p>
 	<TrackRotate a="IROSIRR" b="SIL" />
+	<p>
+		Here, the final position of each group is given relative to the origin cube.
+		Now that the second group continues with the same orientation that the first
+		finishes on, we can add up their positions to get their combined pose. To be
+		explicit, adding a track that finishes at (2, -3, -2) to a track finishing
+		at (-3, 4, 0) gives a combined track that finishes at (-1, 1, -2) so long as
+		they share the same orientation at the join.
+	</p>
 	<TrackJoin a="IROSIRR" b="SIL" />
 
 	<p>
 		The act of making a complete track can be thought of as adding two groups of
-		track pieces together such that it finishes where it started. We have a
-		complete track if the groups add up to (0,0,1), facing (-z +y).
+		track pieces together such that it finishes where it started. Specifically,
+		we have a complete track if the groups add up to (0, 0, 0), facing (-z +y).
+		First we rotate, then join.
 	</p>
 	<TrackSum a="SILISL" b="IL" />
 
 	<p>
 		For this to apply to our situation appropriately, we need to handle the <PieceTag
 			letter="X"
-		/> piece appropriately: that is, the train needs to return to (0,0,1) but from
+		/> piece appropriately: that is, the train needs to return to (0, 0, 0) but from
 		the (-z +x) orientation so it can cross over.
 	</p>
 	<TrackSum a="XSR" b="RRS" />
 
 	<p>
-		If we can generate a track that returns to the crossroads from (-z +x)
-		angle, we can also generate a track
+		Similarly, the train then needs to travel the other half of the
+		figure-of-eight to return in our required (+y -z) orientation to give us a
+		complete track.
 	</p>
-	<TrackSum a="XSL" b="LLS" />
+	<TrackSum a="XSRRRSXSL" b="LLS" />
 
-	<p>Combining:</p>
-	<TrackSum a="XSLLLSX" b="SRRRS" />
-
-	<p>
-		The model picks a group of pieces out of the box at random and makes a track
-		segment, making note of what this does to the train's pose. It does this
-		many times, and then enters into a match-making process, pairing up segments
-		such that the combined segment returns to the <PieceTag letter="X" /> correctly
-		and doesn't kill any passengers.
-	</p>
-	<p>
-		In this example, the randomly generated segment ends at (x,y,z) facing
-		(a,b). We then search through our other segments that result in an
-		orientation of (x,y,z) facing (a,b) so that, when combined, we arrive at the <PieceTag
-			letter="X"
-		/>.
-	</p>
-	<!-- EXAMPLE HERE -->
-	<p>
-		Repeating this process, we have a collection of track segments that return
-		to <PieceTag letter="X" /> correctly. To make it a complete track, we match-make
-		again. This time, we pair two of these closed segments such that their combined
-		inventory is exactly what's in the Rail Cube box.
-	</p>
-	<!-- EXAMPLE HERE -->
+	<p>The model I made to generate these layouts does exactly this:</p>
+	<ol>
+		<li>Pick a handful of pieces from the box at random.</li>
+		<li>
+			Join them together to make a track segment, making note of their finishing
+			pose.
+		</li>
+		<li>
+			Do this many times, and pair up segments that would finish when it meets
+			the <PieceTag letter="X" /> for the first time at orientation (-z +x).
+		</li>
+		<li>
+			Similarly, do this again with segments that add up to (-z -x), giving the
+			other half of the figure-of-eight.
+		</li>
+		<li>
+			We then have a bunch of halves. Pair these up based on the inventory they
+			use. When combined, they must use every piece in the box.
+		</li>
+	</ol>
 	<p>
 		This approach is fairly brute force and exhaustive. It only generates a
-		valid train track every ~50,0000 attempts.
-	</p>
-	<p>
-		All of this so far has been very boring and diligent, but necessary. I
-		forgive you for wondering when we're gonna make all those sick layouts we
-		saw at the start. We now have everything we need to build a valid Rail Cube
-		track that avoids most lawsuits, and can start optimising for aforementioned
-		awesomeness.
+		valid train track every ~50,0000 attempts. Fortunately, my laptop doesn't
+		have feelings and it happily chewed away at this, making me over 20 million
+		valid layouts.
 	</p>
 </Chapter>

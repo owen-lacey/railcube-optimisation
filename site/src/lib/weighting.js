@@ -1,10 +1,11 @@
 // The best and the worst of the crossed sweep, by a weighting of five metrics.
 //
 // Knotted (better knotted), poses (more), close calls (more), repeats (fewer)
-// and longest side (shorter): each is rescaled to 0–1 over the sweep, signed by
-// its direction here, multiplied by its weight and summed. A weighted sum reads a
-// layout only through those five values, so the sweep is ranked by its
-// combinations of them, each standing for every layout that shares it.
+// and longest side (shorter): each is worth a whole number of points per unit,
+// its weight, signed by its direction here, and the points are summed. Knotted is
+// 0 or 1, so its weight is the points a knot brings. A weighted sum reads a layout
+// only through those five values, so the sweep is ranked by its combinations of
+// them, each standing for every layout that shares it.
 //
 // The data is `data/sweep-crossed-weights.json`: for every slider setting, the
 // `count` best and `count` worst combinations over every legal layout in
@@ -22,39 +23,27 @@ export const DIRECTIONS = { knotted: 1, poses: 1, closeCalls: 1, repeats: -1, lo
 /** Each metric's name on screen, in DIRECTIONS order. */
 export const LABELS = { knotted: 'Knotted', poses: 'Orientations', closeCalls: 'Close calls', repeats: 'Repeats', longestSide: 'Longest side' };
 
+/** The post's weighting, points per unit: a knot is worth ten, everything else one. */
+export const WEIGHTS = { knotted: 10, poses: 1, closeCalls: 1, repeats: 1, longestSide: 1 };
+
+/** How far each slider goes, and so every weighting the tally covers. */
+export const MAX_WEIGHTS = { knotted: 20, poses: 5, closeCalls: 5, repeats: 5, longestSide: 5 };
+
 const NAMES = Object.keys(DIRECTIONS);
 
-const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+/** A row's score under `weights`, a missing one weighing nothing: whole numbers, so ties are exact. */
+export const scoreOf = (row, weights) => NAMES.reduce(
+  (total, name) => total + (weights[name] ?? 0) * DIRECTIONS[name] * row[name], 0);
 
 /**
- * A row's weighted score, in integers given integer weights: every term
- * multiplied through by the LCM of the ranges, so rows that tie really are equal
- * rather than a rounding apart. `scale` turns it back into the 0–1-per-metric
- * reading.
+ * A row's score written out term by term, for showing the working: per metric
+ * its `value`, its `points` each (weight × DIRECTIONS) and the `contribution`
+ * (value × points), in DIRECTIONS order, and their `total`, which is `scoreOf`.
  */
-export function weigher(ranges) {
-  const spans = NAMES.map(name => ranges[name][1] - ranges[name][0]);
-  const scale = spans.filter(Boolean).reduce((a, b) => a * b / gcd(a, b), 1);
-  const score = (row, weights) => NAMES.reduce((total, name, i) => (spans[i]
-    ? total + (weights[name] ?? 0) * DIRECTIONS[name] * (row[name] - ranges[name][0]) * scale / spans[i]
-    : total), 0);
-  return { score, scale };
-}
-
-/**
- * A row's weighted score written out term by term, for showing the working: per
- * metric its `value`, the range's `low` and `high`, `scaled` to 0–1 over it, its
- * `sign` (DIRECTIONS), `weight` and `contribution` (scaled × sign × weight), in
- * DIRECTIONS order, and their `total`. Real numbers, so for display: `weigher` is
- * what ranks. A metric with an empty range contributes nothing.
- */
-export function termsOf(ranges, row, weights) {
+export function termsOf(row, weights) {
   const terms = NAMES.map(name => {
-    const [low, high] = ranges[name];
-    const scaled = high > low ? (row[name] - low) / (high - low) : 0;
-    const weight = weights[name] ?? 0;
-    const sign = DIRECTIONS[name];
-    return { name, value: row[name], low, high, scaled, sign, weight, contribution: scaled * sign * weight };
+    const points = (weights[name] ?? 0) * DIRECTIONS[name];
+    return { name, value: row[name], points, contribution: row[name] * points };
   });
   return { terms, total: terms.reduce((sum, t) => sum + t.contribution, 0) };
 }
@@ -77,12 +66,15 @@ function leaders(entries, before, count) {
  * worst first, each `{ row, score }`. A tie goes to the row whose shape comes
  * first alphabetically, at either end.
  */
-export function ends({ rows, ranges, count }, weights) {
-  const { score, scale } = weigher(ranges);
-  const scored = rows.map(row => ({ row, value: score(row, weights) }));
+export function ends({ rows, count }, weights) {
+  const scored = rows.map(row => ({ row, score: scoreOf(row, weights) }));
   const first = (a, b) => a.row.shape < b.row.shape;
-  const best = leaders(scored, (a, b) => a.value > b.value || (a.value === b.value && first(a, b)), count);
-  const worst = leaders(scored, (a, b) => a.value < b.value || (a.value === b.value && first(a, b)), count);
-  const scaled = list => list.map(({ row, value }) => ({ row, score: value / scale }));
-  return { best: scaled(best), worst: scaled(worst) };
+  const best = leaders(scored, (a, b) => a.score > b.score || (a.score === b.score && first(a, b)), count);
+  const worst = leaders(scored, (a, b) => a.score < b.score || (a.score === b.score && first(a, b)), count);
+  return { best, worst };
 }
+
+/** Every weighting the sliders can set, all-zero included, each weight 0 to its MAX_WEIGHTS. */
+export const settings = () => NAMES.reduce(
+  (at, name) => at.flatMap(w => Array.from({ length: MAX_WEIGHTS[name] + 1 }, (_, v) => ({ ...w, [name]: v }))),
+  [{}]);

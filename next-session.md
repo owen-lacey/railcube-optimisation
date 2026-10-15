@@ -1,86 +1,55 @@
-# Handoff: make the weighted-tracks data top and bottom 10 per slider setting
+# Handoff: show the live score in the track builder through the Scorecard
 
 ## Starting Prompt
 
-Shrink `site/src/lib/data/sweep-crossed-weights.json` (1.43 MB raw / 77 KB gzipped) to only
-the combinations the site can ever show: the **top 10 and bottom 10 for every slider
-setting**, sliders 0–5 on all five metrics (knotted, orientations, close calls, repeats, longest
-side), all 7,775 non-zero settings, **zeros included** — Owen does not want a minimum of 1.
+Build the running weighted score into the track builder (`site/src/lib/components/TrackBuilder.svelte`) using the Scorecard (`site/src/lib/components/Scorecard.svelte`), so the five readings and the total update as a track is clicked together.
 
-How it works, as Owen asked for it and as was measured last session:
+Where things stand (commit `c137f66`):
+- **The score already exists.** `weightedScoreOf(placed, closed)` in `site/src/lib/score.js` returns `{ readings: { knotted, poses, closeCalls, repeats, longestSide }, score }`, or null for no pieces.
+  - It uses equal weights over the crossed sweep's ranges (`SWEEP_CROSSED_WEIGHTS.ranges`).
+  - It is live: on an open track, repeats and close calls count only real neighbours, through the `{ open }` option of `repeatsOf`/`closeCallsOf` in `src/metrics.js`.
+  - Knotted is 0 until the loop closes. It is then read in the browser by `readKnot` in `site/src/lib/knots.js`, which is the JS port of the topoly knot reader.
+- **`TrackBuilder` already wires it, roughly.** A `scored` derived value, computed on `view.pieces` minus the offender, feeds a bare `score.toFixed(2)` total in the footer. That total was a stand-in until there was UI.
+- **The Scorecard cannot take that yet.** It takes a `shape` and reads it through `readingsOf(shape)` in `site/src/lib/readings.js` (uncommitted, Owen's). That function calls `chainTrack`, so it only works on closed tracks, and it looks the knot up in stored data, so it only works on swept shapes. Neither holds for a track being built.
+- **How the Scorecard is shown elsewhere.** `ScoredTrack.svelte` lays it over the viewer's top-left corner through `Frame`'s `overlay` snippet. `TrackBuilder` uses `ExpandingCard` + `TrackViewer` directly, not `Frame`.
 
-- Group the legal layouts of question 1 in `sweeps.db` by their five values (14,358
-  combinations over 22,847,539 legal layouts).
-- Each combination carries **one sample: its alphabetically first legal shape.**
-- For each setting, rank combinations by `weigher` score (`site/src/lib/weighting.js`),
-  **ties broken alphabetically by that sample shape**, and keep the top 10 and bottom 10.
-- The union is **458 combinations, ~53 KB raw, ~8.6 KB gzipped** (top/bottom 1 alone: 55
-  combinations, 1.4 KB gzipped).
+Ground rules: this is a learning exercise for Owen, so do not prescribe the design. Ask him, before building, about:
+1. **How the Scorecard gets its numbers in the builder.** It could take readings as a prop, `weightedScoreOf` and `readingsOf` could merge, or something else. `readings.js` and `score.js` currently assemble the same five readings two ways.
+2. **Whether the Scorecard shows the total** (or the per-metric working, as `ScoreMaths` does with `termsOf` in `weighting.js`), and **whether the footer total stays**.
+3. **How an open track's readings should look.** An unclosed track has no knot. And a short track scores outside the sweep's ranges (above 1 on longest side, below 0 on orientations), which is currently unclamped.
+4. **Where it sits over the builder's viewer**, given that `TrackBuilder` has no `overlay` slot and expands to full screen.
 
-Do this through `scripts/tally-weights.js` (it writes the file `WeightedTracks` reads), not
-a new script, and change `weighting.js` and `WeightedTracks.svelte` to match. Before
-writing code, read `scripts/tally-weights.js`, `site/src/lib/weighting.js`,
-`site/src/lib/components/WeightedTracks.svelte`, `scripts/rank-tracks.js` and
-`tests/weighting.test.js`, then put these open decisions to Owen — they are his to make,
-not yours:
+First: read `TrackBuilder.svelte`, `Scorecard.svelte`, `ScoredTrack.svelte`, `Frame.svelte`, `ExpandingCard.svelte`, `score.js` and `readings.js`. Then ask Owen the questions above.
 
-1. **The "N of 22.8M tie" count** under each end goes: it needs every tied row. Drop the
-   line, or something else?
-2. **What the component shows**: still one best and one worst end, or the 10 best and 10
-   worst? (The 10 best are 10 distinct combinations, not 10 tied tracks.)
-3. **Shuffle**: with one sample per combination there is nothing to cycle at an end. Drop
-   shuffle, or keep a few samples per combination?
-4. **`unsure` / unread-knot handling** in `weighting.js`: every knot is now read, so it can
-   go — confirm (no-backward-compatibility rule says remove it).
-5. **Overlap with the ranked figure**: another session built `scripts/rank-tracks.js` →
-   `sweep-crossed-ranked.json` (`SWEEP_CROSSED_RANKED`, `RankedTracks.svelte`) for the
-   equal-weights 10 best/worst. This file would be a superset of it. Keep both, or fold
-   one into the other?
-
-Constraints: `rank-tracks.js` reads `ranges` from this file's header, so keep `ranges` (or
-update `rank-tracks.js` with it). Keep `tally-weights.js`'s audit — every kept sample
-re-derived and its knot re-read on a fresh rotation before the file is written. Mirrors
-score like their partner; the sizing counted them, so decide whether the alphabetical pick
-should skip `mirrored = 1` rows as the tally's examples do. The working tree holds other
-sessions' uncommitted changes — commit only your own, by path, and only when Owen asks.
+Testing rules (CLAUDE.md):
+- Run only the test files covering the change, e.g. `node --test tests/score.test.js tests/weighting.test.js`.
+- Never run the full `npm test` unless Owen asks, and never alongside a heavy job.
+- Check UI by driving Storybook over CDP (see CLAUDE.md).
 
 ## Relevant Files
 
-- `scripts/tally-weights.js` — writes the file; currently one row per combination with
-  `count` and `examples` only at ends. Imports `weightingValuesOf` from
-  `scripts/sweep-data.js` (moved there by the other session).
-- `site/src/lib/data/sweep-crossed-weights.json` — regenerated last session over 22.8M
-  layouts (uncommitted), same shape as before.
-- `site/src/lib/weighting.js` — `weigher` (integer scores via the LCM of ranges),
-  `extremes` (tied ends, counts, `unsure`).
-- `site/src/lib/components/WeightedTracks.svelte` — sliders, best/worst, count line,
-  shuffle.
-- `site/src/lib/sweeps.js` — exports `SWEEP_CROSSED_WEIGHTS`.
-- `scripts/rank-tracks.js`, `site/src/lib/data/sweep-crossed-ranked.json`,
-  `site/src/lib/components/RankedTracks.svelte`, `tests/ranked-tracks.test.js` — the
-  other session's equal-weights top/bottom 10; depends on this file's `ranges`.
-- `tests/weighting.test.js` — checks the ends over all 3,125 all-positive settings; will
-  need rewriting for the new semantics.
-- `/var/folders/pt/0mqlb8ld7k7_t48hvyl301rc0000gn/T/firsts.mjs` — the throwaway sizing
-  script (one streaming pass, then ranking every setting). Its scan is cached in
-  `firsts.json` beside it (14,358 combinations with their first shapes) — useful to check
-  the implementation's output against, not to ship.
-- `CLAUDE.md` — "The weighted best and worst" section describes the current file and will
-  need updating.
+- `site/src/lib/components/TrackBuilder.svelte`: the builder. It holds `letters`, derives `view` from `openScene`, and has the `scored` derived value and footer total from last session.
+- `site/src/lib/components/Scorecard.svelte`: the five readings as a `<dl>`, styled as a see-through overlay. It takes `shape` only.
+- `site/src/lib/components/ScoredTrack.svelte`: the pattern for overlaying the Scorecard on a viewer (`Frame` `overlay` snippet).
+- `site/src/lib/score.js`: `weightedScoreOf(placed, closed)`, the live, open-aware readings and score.
+- `site/src/lib/readings.js`: `readingsOf(shape)`, uncommitted and Owen's. Closed shapes only, with stored knots. Shared by Scorecard, ScoreMaths and the tests.
+- `site/src/lib/knots.js`: the JS knot reader (`readKnot`, `certified`, `alexander`).
+- `site/src/lib/weighting.js`: `weigher`, `DIRECTIONS`, and the uncommitted `termsOf` (the per-metric working).
+- `site/src/lib/components/ScoreMaths.svelte`: uncommitted, Owen's. Shows the score's working term by term.
+- `site/src/lib/components/ExpandingCard.svelte`, `Frame.svelte`, `LayoutCard.svelte`: card, footer and overlay plumbing.
+- `src/metrics.js`: `repeatsOf` / `closeCallsOf` with `{ open }`.
+- `tests/score.test.js`, `tests/metrics.test.js`, `tests/knot-reader.test.js`: last session's tests.
 
 ## Key Context
 
-- **Why zero weights matter**: with any slider at 0, ties are huge (knotted alone ties all
-  3,032 knotted combinations at best, all 11,326 unknotted at worst), so "ever at an end"
-  keeps every row. Alphabetical tie-breaking is what makes the cut work with zeros.
-- **Reading `sweeps.db`**: a `GROUP BY … min(shape)` over 23M rows sorts on disk and was
-  still scanning after 17 min — stream rows with `.iterate()` and reduce in JS instead.
-  Even streaming took 27 min under heavy machine load (~3 min per 2M rows); the tally
-  took a few minutes on a quiet machine.
-- **Ranges unchanged by the new layouts**: knotted 0–1, orientations 6–20, close calls 0–27,
-  repeats 0–9, longest side 7–17. Equal-weights best is still 2.360,
-  `IRSSIIXLSLSOLLSSOSSIIRISSIXSORROSSSI`.
-- **Database state**: last session's sweep added 7,595,410 layouts (23,305,965 total, 6.4
-  GB). No backup since `sweeps.db.backup-2026-10-10` (taken before that sweep) — the new
-  rows exist only in `sweeps.db`. All generators, the merge watch and the top-0.1% watcher
-  are stopped.
+- **Owen's calls from last session:**
+  - The score is the five-metric weighting at equal weights.
+  - Repeats and close calls must be known as the track is built, not only once closed.
+  - The knot reader was ported to JS.
+- **The JS knot reader was checked against `sweeps.db`.** Over 81,020 rows (10,000 uniform, plus all 71,045 knotted), it agreed with the stored knot on every reading except row 14772602, which the certificate proves is stored wrong.
+  - The certificate clears 99.4% of unknot readings, matching the Python one.
+  - Timing: ~1.7 ms a certified reading, ~30 ms median (65 ms at the 99th percentile) for one that needs the Alexander polynomial.
+  - The builder reads the knot only on the piece that closes the loop.
+- **Stuck tracks.** When a piece is rejected, `openScene`'s `view.pieces` ends with that piece, so scoring must drop it (`TrackBuilder` already does).
+- **Uncommitted work in the tree is Owen's.** That includes `readings.js`, `ScoreMaths`, `ScoredRanking`, `termsOf`, and changes in `CLAUDE.md`, `Scorecard.svelte` and `tests/weighting.test.js`. Commit only this session's changes, by explicit path, with no AI trailer.
+- **Open follow-ups, not for this task:** whether the sweep tooling moves from topoly to the JS reader, retiring `scripts/knots.py`.

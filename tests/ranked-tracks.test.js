@@ -1,4 +1,4 @@
-// The crossed sweep's best and worst layouts under equal weights, as the post's
+// The crossed sweep's best and worst layouts under the post's weights, as the post's
 // opening of Optimising shows them.
 //
 // The ranking is a claim about sweeps.db, which a fresh clone does not have, so
@@ -16,15 +16,11 @@ import { chainTrack, countPieces, POOLS } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { readingsOf } from '../site/src/lib/readings.js';
 import { SWEEP_CROSSED_RANKED as ranked, SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
-import { DIRECTIONS, ends, termsOf, weigher } from '../site/src/lib/weighting.js';
+import { ends, scoreOf, termsOf, WEIGHTS } from '../site/src/lib/weighting.js';
 
-const NAMES = Object.keys(DIRECTIONS);
-const { score, scale } = weigher(ranked.ranges);
-
-test('ranked over the weights file, at equal weights', () => {
-  assert.deepEqual(ranked.ranges, table.ranges);
+test('ranked over the weights file\'s question, at the post\'s weights', () => {
   assert.deepEqual(ranked.question, table.question);
-  assert.deepEqual(ranked.weights, Object.fromEntries(NAMES.map(name => [name, 1])));
+  assert.deepEqual(ranked.weights, WEIGHTS);
   assert.equal(ranked.best.length, 100);
   assert.equal(ranked.worst.length, 100);
 });
@@ -37,9 +33,8 @@ test('every layout is legal, spends the inventory, and scores what it says', () 
     assert.ok(placed.every(p => p.cell[1] >= 0), `${shape} goes below the floor`);
     const values = readingsOf(shape);
     assert.equal(values.knot, knot, shape);
-    assert.equal(score(values, ranked.weights) / scale, stored, shape);
-    const { total } = termsOf(ranked.ranges, values, ranked.weights);
-    assert.ok(Math.abs(total - stored) < 1e-12, `${shape} works out to ${total}, scores ${stored}`);
+    assert.equal(scoreOf(values, ranked.weights), stored, shape);
+    assert.equal(termsOf(values, ranked.weights).total, stored, shape);
   }
 });
 

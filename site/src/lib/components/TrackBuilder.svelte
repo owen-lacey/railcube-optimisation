@@ -58,8 +58,8 @@
   // limit.
   const done = $derived(Boolean(view.offender) || view.closed || letters.length >= LIMIT);
 
-  // The readings of the track as built, scored over the crossed sweep's ranges at
-  // equal weights, unclamped: the rejected piece, the last drawn, is not part of it.
+  // The readings of the track as built, scored at the post's weights: the rejected
+  // piece, the last drawn, is not part of it.
   const readings = $derived(liveReadingsOf(view.offender ? view.pieces.slice(0, -1) : view.pieces, view.closed));
 
   // What is spent of the inventory, and the pieces with none left to add.

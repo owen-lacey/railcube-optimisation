@@ -1,27 +1,26 @@
-// The best and the worst of every legal crossed layout in sweeps.db, by a
-// weighting of knots, poses, close calls, repeats and longest side. Drag a slider
-// to change how much one matters; the arrows step through the ten at each end.
+// The ten best of every legal crossed layout in sweeps.db, by a weighting of
+// knots, poses, close calls, repeats and longest side. Drag a weight's slider in
+// the maths to change how many points it is worth; the tiles re-rank and the first is
+// picked.
 
 import WeightedTracks from './WeightedTracks.svelte';
-
-const EVEN = { knotted: 1, poses: 1, closeCalls: 1, repeats: 1, longestSide: 1 };
+import { WEIGHTS } from '$lib/weighting.js';
 
 export default {
   title: 'Weighted tracks',
   component: WeightedTracks,
   argTypes: {
     weights: { control: 'object' },
-    aspect: { control: 'text' },
   },
 };
 
 export const Default = {
-  args: { weights: EVEN },
+  args: { weights: WEIGHTS },
 };
 
 /**
- * Longest side alone: the most compact layouts against the most sprawling. The
- * other weights are zero, so the ten at each end are ties, in alphabetical order.
+ * Longest side alone: the most compact layouts. The other weights are zero, so
+ * the ten are ties, in alphabetical order.
  */
 export const LongestSideOnly = {
   args: { weights: { knotted: 0, poses: 0, closeCalls: 0, repeats: 0, longestSide: 1 } },
@@ -29,5 +28,5 @@ export const LongestSideOnly = {
 
 /** No train: the tracks alone. */
 export const NoTrain = {
-  args: { weights: EVEN, train: null },
+  args: { weights: WEIGHTS, train: null },
 };

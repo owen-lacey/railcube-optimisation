@@ -1,16 +1,14 @@
-// The crossed sweep's best and worst layouts under equal weights, ranked, for the
+// The crossed sweep's best and worst layouts under the post's weights, ranked, for the
 // post's "Consider this set of layouts" and "Now these".
 //
 //   node scripts/rank-tracks.js --seed 1 \
 //     --out site/src/lib/data/sweep-crossed-ranked.json [--count 10] [--db <path>]
 //
 // Every legal row of question 1 is scored the way the weighted tracks score it —
-// `weigher` in site/src/lib/weighting.js, over the ranges in
-// sweep-crossed-weights.json, every weight 1 — so the best here is WeightedTracks'
-// best at its default sliders. The top and bottom `--count` are kept, ties broken
-// by a seeded draw, with rows stored as a mirror left out (a mirror reads the
-// same, so its partner stands for both). A row outside the weights file's ranges
-// fails the run: the file is stale and the scores would mean something else.
+// `scoreOf` in site/src/lib/weighting.js at its `WEIGHTS` — so the best here is
+// WeightedTracks' best at its default sliders. The top and bottom `--count` are
+// kept, ties broken by a seeded draw, with rows stored as a mirror left out (a
+// mirror reads the same, so its partner stands for both).
 //
 // Every layout kept is re-derived, its readings recounted against its row, and
 // its knot read again on a fresh rotation; one disagreement fails the file.
@@ -24,12 +22,9 @@ import Database from 'better-sqlite3';
 import { auditRows } from './audit-rows.js';
 import { DB_PATH, random, weightingValuesOf } from './sweep-data.js';
 import { knotOf } from '../site/src/lib/knots.js';
-import { DIRECTIONS, weigher } from '../site/src/lib/weighting.js';
-import { SWEEP_CROSSED_WEIGHTS } from '../site/src/lib/sweeps.js';
+import { scoreOf, WEIGHTS } from '../site/src/lib/weighting.js';
 
 const QUESTION = 1;
-const NAMES = Object.keys(DIRECTIONS);
-const WEIGHTS = Object.fromEntries(NAMES.map(name => [name, 1]));
 
 const { values: args } = parseArgs({
   options: {
@@ -44,19 +39,6 @@ const count = Number(args.count);
 if (!Number.isInteger(seed) || !args.out || !Number.isInteger(count) || count < 1) {
   console.error('usage: node scripts/rank-tracks.js --seed <n> --out <file.json> [--count <n>] [--db <path>]');
   process.exit(2);
-}
-
-const { ranges } = SWEEP_CROSSED_WEIGHTS;
-const { score, scale } = weigher(ranges);
-
-/** Throw unless every value sits inside the weights file's range for it. */
-function assertInRange(r, values) {
-  for (const name of NAMES) {
-    const [low, high] = ranges[name];
-    if (values[name] < low || values[name] > high) {
-      throw new Error(`row ${r.id} has ${name} ${values[name]}, outside ${low}–${high}: re-run tally-weights.js`);
-    }
-  }
 }
 
 /**
@@ -92,8 +74,7 @@ function rank(path) {
     if (r.mirrored === 1) continue;
     const values = weightingValuesOf(r);
     if (values.knotted === null) throw new Error(`row ${r.id} has its knot unread: run hydrate-sweeps.js --knots`);
-    assertInRange(r, values);
-    const entry = { row: r, score: score(values, WEIGHTS), draw: next() };
+    const entry = { row: r, score: scoreOf(values, WEIGHTS), draw: next() };
     best.offer(entry);
     worst.offer(entry);
   }
@@ -105,7 +86,7 @@ const { question, legal, best, worst } = rank(args.db);
 await auditRows([...best, ...worst].map(({ row }) => row), question);
 
 const entry = ({ row, score: s }) => ({
-  id: row.id, shape: row.shape, knot: knotOf(row.knot_over, row.knot_under), score: s / scale });
+  id: row.id, shape: row.shape, knot: knotOf(row.knot_over, row.knot_under), score: s });
 
 // One layout per line, as sample-sweep.js writes its shapes.
 const lines = list => ['[', ...list.map((e, i) => `    ${JSON.stringify(entry(e))}${i < list.length - 1 ? ',' : ''}`), '  ]'].join('\n');
@@ -116,7 +97,6 @@ const body = JSON.stringify({
   legal,
   seed,
   weights: WEIGHTS,
-  ranges,
   best: [],
   worst: [],
 }, null, 2)
@@ -124,5 +104,5 @@ const body = JSON.stringify({
   .replace('"worst": []', () => `"worst": ${lines(worst)}`);
 mkdirSync(dirname(args.out), { recursive: true });
 writeFileSync(args.out, `${body}\n`);
-console.log(`ranked ${legal.toLocaleString('en-GB')} legal layouts: best ${(best[0].score / scale).toFixed(3)}, `
-  + `worst ${(worst[0].score / scale).toFixed(3)}; ${best.length + worst.length} re-derived. wrote ${args.out}`);
+console.log(`ranked ${legal.toLocaleString('en-GB')} legal layouts: best ${best[0].score}, `
+  + `worst ${worst[0].score}; ${best.length + worst.length} re-derived. wrote ${args.out}`);
