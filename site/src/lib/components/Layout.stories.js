@@ -13,7 +13,7 @@
 // so it is simply drawn finished and driven.
 
 import LayoutViewer from './LayoutViewer.svelte';
-import { cellScene, axesScene } from '$lib/scenes.js';
+import { cellScene, axesScene, repeatsScene } from '$lib/scenes.js';
 
 // The transition's kind and dials are separate controls, put together here into
 // the one object LayoutViewer takes.
@@ -130,6 +130,18 @@ export const WithAxes = {
       description: {
         story: 'The lattice with the origin\'s axis arrows at its low corner, and the frame '
           + 'fitted to reach them.',
+      },
+    },
+  },
+};
+
+export const Repeats = {
+  args: { shape: 'LIIOILIOLOIIOIIXSSSSSSSRRSSSSSSRSXRL', scene: repeatsScene },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Every run of three or more of a kind pulses between its own colour and a paler '
+          + 'one, with a callout giving its length and what the repeats metric charges for it.',
       },
     },
   },

@@ -80,6 +80,10 @@ export const ALARM = '#dc2626';
 export const ALARM_FLASH = '#fca5a5';
 export const ALARM_PERIOD = 0.9;  // seconds for a full dark-pale-dark cycle
 
+// A piece picked out — a repeat, say — pulses on the same period, but between its
+// own colour and this far towards white, so it still reads as its own type.
+export const HIGHLIGHT_MIX = 0.6;
+
 // The piece it is drawn over shows through it. It lies exactly on top of whatever it
 // ran into, so it is swollen a little about its own middle — enough that the two
 // never share a face for the depth buffer to fight over — and drawn see-through, so

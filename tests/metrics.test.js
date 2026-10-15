@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
 import { chainTrack } from '../src/track.js';
-import { closeCallsOf, metricsOf, posesIn, posesOf } from '../src/metrics.js';
+import { closeCallsOf, metricsOf, posesIn, posesOf, repeatRuns } from '../src/metrics.js';
 
 const of = shape => metricsOf(chainTrack(routeOf(shape)));
 const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
@@ -82,3 +82,23 @@ for (const [name, { shape }] of Object.entries(LAYOUTS)) {
     assert.deepEqual(readings(mirrorOf(shape)), readings(shape));
   });
 }
+
+// The runs repeats charges for. Each costs its length less two, so over every
+// layout they add up to repeats — a loop all of one kind aside, where every step
+// starts three of a kind and the one run is the whole loop.
+const REPEATED = 'LIIOILIOLOIIOIIXSSSSSSSRRSSSSSSRSXRL';
+
+test('repeatRuns are the runs repeats counts', () => {
+  const runs = shape => repeatRuns(chainTrack(routeOf(shape)));
+  assert.deepEqual(runs(REPEATED), [{ start: 16, length: 7 }, { start: 25, length: 6 }]);
+  // The same track entered part-way through its seven straights, which then wrap.
+  assert.deepEqual(runs(REPEATED.slice(20) + REPEATED.slice(0, 20)),
+    [{ start: 5, length: 6 }, { start: 32, length: 7 }]);
+  assert.deepEqual(runs('SSIISSII'), []);
+  assert.deepEqual(runs('LLLL'), [{ start: 0, length: 4 }]);
+  for (const shape of [REPEATED, ...Object.values(LAYOUTS).map(l => l.shape)]) {
+    const placed = chainTrack(routeOf(shape));
+    const charged = repeatRuns(placed).reduce((sum, r) => sum + r.length - 2, 0);
+    assert.equal(charged, metricsOf(placed).repeats, shape);
+  }
+});

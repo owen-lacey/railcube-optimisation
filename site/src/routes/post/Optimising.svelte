@@ -9,7 +9,7 @@
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
-	import { lengthsScene } from "$lib/scenes.js";
+	import { lengthsScene, repeatsScene } from "$lib/scenes.js";
 	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
 	import PieceTag from "$lib/components/PieceTag.svelte";
 </script>
@@ -50,12 +50,15 @@
 		track does just that, omitting the entire +z face.
 	</p>
 	<PoseTracker shape="IRSISSRIIROXSSLSSOORISLISSILSSSOLXSI" />
-	<!-- TODO: anim the repeated section. -->
 	<p>
 		Excessive repeats should also be avoided. They're a symptom of poor
 		craftsmanship, bailing the engineer out of suboptimal design decisions.
 		Two-in-a-row is OK for me because hairpin turns are cool.
 	</p>
+	<TrackFigure
+		shape="LIIOILIOLOIIOIIXSSSSSSSRRSSSSSSRSXRL"
+		scene={repeatsScene}
+	/>
 	<p>
 		Saving my favourite for last: knots. How freaking cool is it when you're on
 		a roller coaster and it goes inside one of its inversions, like <a

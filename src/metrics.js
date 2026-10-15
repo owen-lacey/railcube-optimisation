@@ -28,6 +28,26 @@ const repeatsOf = placed => placed.filter((p, i) =>
   && p.type === placed[(i + 2) % placed.length].type).length;
 
 /**
+ * The runs `repeatsOf` charges for: three or more of a kind in a row, wrapping
+ * last → first, as `{ start, length }` in route order. A run that wraps starts
+ * near the end. A loop all of one kind is one run, starting at 0.
+ */
+export const repeatRuns = placed => {
+  const n = placed.length;
+  const same = i => placed[i].type === placed[(i + n - 1) % n].type;
+  const first = placed.findIndex((_, i) => !same(i));
+  if (first === -1) return [{ start: 0, length: n }];
+  const runs = [];
+  for (let i = first; i < first + n;) {
+    let length = 1;
+    while (length < n && same((i + length) % n)) length += 1;
+    if (length >= 3) runs.push({ start: i % n, length });
+    i += length;
+  }
+  return runs;
+};
+
+/**
  * Steps the train rides face up, on top of a cube: its floor faces down. Read off
  * the floor's direction rather than its letter.
  */

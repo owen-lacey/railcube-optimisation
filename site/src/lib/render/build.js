@@ -24,7 +24,7 @@
 // simulation is not reversible — a pile does not know which of the thousands of
 // tracks that collapse into it was the one — so nothing here touches cannon.
 
-import { CUBE, ALARM, ALARM_FLASH, ALARM_PERIOD } from './dimensions.js';
+import { CUBE, ALARM, ALARM_FLASH, ALARM_PERIOD, HIGHLIGHT_MIX } from './dimensions.js';
 import { cubePosition, poseRotation, axisAngle, compose, turnToward, add, through } from './vec.js';
 import { createDriver } from './drive.js';
 import { originAt, comAt } from '../shapes.js';
@@ -327,27 +327,54 @@ function departuresFor(leaving, { beat, flight }, tilt) {
 const STEADY = { color: ALARM, look: 'clash' };
 const FLASH = { color: ALARM_FLASH, look: 'clash' };
 
+// A highlighted piece keeps its own colour, and pulses to a pale tint of it: solid,
+// its own size, only lighter. `HIGHLIGHT_MIX` of the way to white, mixed in sRGB.
+const paler = hex => `#${[1, 3, 5].map(i => Math.round(
+  parseInt(hex.slice(i, i + 2), 16) * (1 - HIGHLIGHT_MIX) + 255 * HIGHLIGHT_MIX,
+).toString(16).padStart(2, '0')).join('')}`;
+
+// Each mark's two looks, the one it is held at first.
+const ALARMED = () => [STEADY, FLASH];
+const PALED = slot => [{ color: paler(slot.color) }, { color: slot.color }];
+
 /**
- * The rejected piece saying so, from `from` on: a function of the phase's clock that
- * restyles the cube when its half of the pulse changes, and says whether it still
- * wants frames. `alarm` is `{ id, pulse }`, or null for none; `pulse` false holds it
- * at `STEADY`, which is what a reader who has asked for reduced motion gets.
+ * The cubes to pulse: `alarm`, `{ id, pulse }`, a rejected piece; `highlight`,
+ * `{ ids, pulse }`, pieces picked out. Either may be null.
+ */
+const marksOf = (alarm, highlight) => [
+  ...(alarm ? [{ id: alarm.id, pulse: alarm.pulse, looks: ALARMED }] : []),
+  ...(highlight ? highlight.ids.map(id => ({ id, pulse: highlight.pulse, looks: PALED })) : []),
+];
+
+/**
+ * The marked pieces saying so, each from `from` of its slot on: a function of the
+ * phase's clock that restyles a cube when its half of the pulse changes, and says
+ * whether it still wants frames. A mark whose `pulse` is false is held at its first
+ * look, which is what a reader who has asked for reduced motion gets.
  *
  * Each phase runs its own, because a cube must only ever have one thing writing to
  * it in a frame — and the phase is what owns the cube.
  */
-function alarmFor(stage, slots, alarm, from = () => 0) {
-  const slot = alarm && slots.find(s => s.id === alarm.id);
-  if (!slot) return null;
-  const starts = from(slot);
-  let lit = null;
+function pulseFor(stage, slots, marks, from = () => 0) {
+  const pulsing = marks.flatMap(mark => {
+    const slot = slots.find(s => s.id === mark.id);
+    return slot ? [{ ...mark, slot, starts: from(slot), lit: null }] : [];
+  });
+  if (!pulsing.length) return null;
+  const half = ALARM_PERIOD / 2;
   return elapsed => {
-    if (elapsed < starts) return true;
-    const half = ALARM_PERIOD / 2;
-    const want = alarm.pulse && Math.floor((elapsed - starts) / half) % 2 === 1 ? FLASH : STEADY;
-    if (want !== lit) stage.cube(slot.id, slot).restyle(want);
-    lit = want;
-    return alarm.pulse;
+    let wanting = false;
+    for (const mark of pulsing) {
+      if (elapsed < mark.starts) {
+        wanting = true;
+        continue;
+      }
+      const want = mark.pulse && Math.floor((elapsed - mark.starts) / half) % 2 === 1 ? 1 : 0;
+      if (want !== mark.lit) stage.cube(mark.slot.id, mark.slot).restyle(mark.looks(mark.slot)[want]);
+      mark.lit = want;
+      wanting ||= mark.pulse;
+    }
+    return wanting;
   };
 }
 
@@ -367,13 +394,14 @@ function alarmFor(stage, slots, alarm, from = () => 0) {
  * piece from, so it moves only once a piece is finished. A held train is written once, when
  * it gets there, so it costs no draws.
  *
- * `alarm` is a rejected piece to flag — see `alarmFor`. A track with one never
- * closes, so it is never driven.
+ * `alarm` is a rejected piece to flag — see `pulseFor`. A track with one never
+ * closes, so it is never driven. `highlight` is pieces picked out, pulsing paler,
+ * which a driven track keeps doing while the train goes round.
  */
-export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, alarm = null } = {}) {
+export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, alarm = null, highlight = null } = {}) {
   const slots = slotsFor(stage, pieces);
   for (const slot of slots) finish(stage, slot);
-  const flag = alarmFor(stage, slots, alarm);
+  const flag = pulseFor(stage, slots, marksOf(alarm, highlight));
   flag?.(0);
   if (!drive) return { advance: (_, elapsed) => (flag?.(elapsed) ? undefined : false) };
 
@@ -381,7 +409,9 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
   // piece's cube and moves only once it has finished a piece, as a held one's does.
   const driver = createDriver(stage, { byPiece: Boolean(trainAt) });
   driver.setRoute(pieces);
-  if (!trainAt) return { advance: (_, elapsed) => { driver.at(elapsed); }, dispose: driver.dispose };
+  if (!trainAt) {
+    return { advance: (_, elapsed) => { flag?.(elapsed); driver.at(elapsed); }, dispose: driver.dispose };
+  }
 
   // A hold let go carries on from the piece it held, not from wherever the clock
   // says it would have got to: the drive is timed from `since`, starting at the
@@ -399,6 +429,7 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
   };
   return {
     advance: (_, elapsed) => {
+      flag?.(elapsed);
       const held = trainAt();
       if (typeof held === 'number') {
         heldAt = held;
@@ -439,13 +470,14 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
  * replaced first, so a quick second change never strands one half-way out.
  *
  * `alarm` is a cube the model has rejected — a piece that has been asked to go
- * somewhere it cannot; see `alarmFor`. It pulses from the moment it lands and does
- * not stop, so the phase never finishes while one is pulsing.
+ * somewhere it cannot; see `pulseFor`. It pulses from the moment it lands and does
+ * not stop, so the phase never finishes while one is pulsing. `highlight` is pieces
+ * picked out, which pulse paler the same way.
  *
  * `arrival` is how pieces come and go — a name in `ARRIVALS`.
  */
 export function growPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = false, alarm = null, instant = false, leaving = [], arrival = 'flip',
+  pace = PACE, speed = 1, drive = false, alarm = null, highlight = null, instant = false, leaving = [], arrival = 'flip',
 } = {}) {
   const motion = ARRIVALS[arrival];
   const timing = timingFor(pace, speed, 0);
@@ -476,7 +508,7 @@ export function growPhase(stage, pieces, {
 
   // It is minted in ALARM already — `openScene` paints it — so the first repaint
   // due is the pale one, half a period after it lands.
-  const flag = alarmFor(stage, slots, alarm, slot => (arriving.includes(slot) ? slot.lands : 0));
+  const flag = pulseFor(stage, slots, marksOf(alarm, highlight), slot => (arriving.includes(slot) ? slot.lands : 0));
 
   const driver = drive ? createDriver(stage) : null;
   const closes = arriving.reduce((last, s) => Math.max(last, s.lands), clear) + timing.hold;
@@ -523,11 +555,11 @@ export function growPhase(stage, pieces, {
         });
       }
 
-      // A piece that cannot go down keeps saying so.
-      if (flag?.(elapsed)) return undefined;
+      // A marked piece keeps saying so, and a train drives on round it.
+      const pulsing = flag?.(elapsed);
       if (!driver) {
         const settled = next === arriving.length && !flying.length && !leavingStill();
-        return instant || settled ? false : undefined;
+        return !pulsing && (instant || settled) ? false : undefined;
       }
       if (closedAt === null && elapsed >= (instant ? 0 : closes)) {
         closedAt = elapsed;
@@ -545,14 +577,14 @@ export function growPhase(stage, pieces, {
 /**
  * A track clicking itself together. Pieces already on the stage are picked up off
  * the floor; anything else is minted from off-frame. `alarm` is a rejected piece to
- * flag once it has landed — see `alarmFor`.
+ * flag once it has landed — see `pulseFor` — and `highlight` pieces picked out.
  */
 export function buildPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = true, delay = 0, onPickUp = null, alarm = null,
+  pace = PACE, speed = 1, drive = true, delay = 0, onPickUp = null, alarm = null, highlight = null,
 } = {}) {
   const timing = timingFor(pace, speed, delay);
   const slots = slotsFor(stage, pieces, timing);
-  const flag = alarmFor(stage, slots, alarm, slot => slot.lands);
+  const flag = pulseFor(stage, slots, marksOf(alarm, highlight), slot => slot.lands);
   const driver = drive ? createDriver(stage) : null;
   // The train sets off once the loop is closed, which is the *last* landing —
   // and with two kinds of arrival that is no longer simply the last piece.
@@ -598,8 +630,8 @@ export function buildPhase(stage, pieces, {
         return true;
       });
 
-      if (flag?.(elapsed)) return undefined;
-      if (!driver) return next === slots.length && !flying.length ? false : undefined;
+      const pulsing = flag?.(elapsed);
+      if (!driver) return !pulsing && next === slots.length && !flying.length ? false : undefined;
       if (closedAt === null && slots.length && elapsed >= closes) {
         closedAt = elapsed;
         driver.setRoute(pieces);

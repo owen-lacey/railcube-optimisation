@@ -78,6 +78,7 @@
         train={result.scene.closed ? train : null}
         {transition}
         alarm={result.scene.offender?.id ?? null}
+        highlight={result.scene.highlight ?? []}
         controls={handled ? controls : null}
         aspect={expanded ? 'auto' : aspect}
         {paused}

@@ -954,10 +954,14 @@ its transition. Four things about it:
   is shared, and see-through at `ALARM_OPACITY` (`paint.clash` in `stage.js`), so the
   colours blend. Owen's call, over a `polygonOffset` that took the cell in turns: that
   left small red patches showing through the other piece's rail, which read as strange.
-- It is `alarmFor` in `build.js`, run by `trackPhase`, `buildPhase` and `growPhase` each
+- It is `pulseFor` in `build.js`, run by `trackPhase`, `buildPhase` and `growPhase` each
   rather than by a phase of its own, so that exactly one thing ever writes to a cube in a
   frame — the same rule `onPickUp` exists to protect. Because any viewer can be handed one,
   every `TrackViewer` gates its loop on being on screen, not only one that animates at mount.
+- The same pulse picks pieces out without alarming: `TrackViewer`'s `highlight` (cube IDs)
+  keeps each piece solid and its own colour, pulsing to `HIGHLIGHT_MIX` of the way to white,
+  held pale under reduced motion. `repeatsScene` uses it for every run `repeatRuns`
+  (`src/metrics.js`) finds, with a callout per run — Owen's calls, for the post's repeats figure.
 - **Which step is at fault is not always which cube is.** A cross traversed a third time
   places nothing, so what flashes is the cross already in that cell. `openScene` handles
   that; `cubeIds` is `identify` with revisits kept as `null` so the two line up.

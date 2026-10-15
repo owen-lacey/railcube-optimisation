@@ -6,6 +6,7 @@
 
 import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step, SCORES } from '../../../src/track.js';
 import { routeOf, identify } from '../../../src/layouts.js';
+import { repeatRuns } from '../../../src/metrics.js';
 import { COLORS, ALARM, CUBE } from './render/dimensions.js';
 import { DIR, toWorld, toCell, add } from './render/vec.js';
 import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT, describedZoom } from './render/camera.js';
@@ -123,6 +124,29 @@ export function openScene(letters, startPose = 'DF') {
  */
 export function layoutScene(letters) {
   return onItsCubes(openScene(letters));
+}
+
+/**
+ * `layoutScene` with its repeats picked out: every run of three or more of a kind
+ * (`repeatRuns`) highlighted, each with a callout on its middle cube giving its
+ * length and what the repeats metric charges for it. Repeats are a loop's, so the
+ * route must close.
+ */
+export function repeatsScene(letters) {
+  const scene = layoutScene(letters);
+  if (!scene.closed) throw new Error(`${letters} is not a closed loop, so it has no repeats`);
+  const ids = cubeIds(scene.pieces);
+  const runs = repeatRuns(scene.pieces).map(({ start, length }) =>
+    Array.from({ length }, (_, k) => (start + k) % scene.pieces.length));
+  return {
+    ...scene,
+    highlight: runs.flat().map(i => ids[i]).filter(id => id !== null),
+    notes: runs.map(run => ({
+      key: `run ${run[0]}`,
+      cell: trackCell(scene.pieces[run[Math.floor(run.length / 2)]]),
+      lines: [[{ text: `${run.length} in a row · ${run.length - 2} repeats` }]],
+    })),
+  };
 }
 
 /** A scene framed the way `layoutScene` frames one. */

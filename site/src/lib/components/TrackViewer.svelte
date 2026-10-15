@@ -98,9 +98,12 @@
     // 'above' or 'below'; unset, it is chosen. See `calloutsFor`.
     notes = [],
     // The ID of a cube the model has rejected, `5L` say, or null. It is drawn where
-    // it was asked to go and pulses there, whatever the transition — see `alarmFor`
+    // it was asked to go and pulses there, whatever the transition — see `pulseFor`
     // in build.js. Read when a layout is shown.
     alarm = null,
+    // The IDs of cubes picked out — a repeat, say. Each keeps its own colour and
+    // pulses to a pale tint of it, on the alarm's period. Read when a layout is shown.
+    highlight = [],
   } = $props();
 
   // The settings a transition leaves out.
@@ -109,6 +112,8 @@
   // What a phase is told of the rejected piece. Held still for a reader who has
   // asked for reduced motion: a pulsing element is the whole of what that is about.
   const flagged = () => alarm && { id: alarm, pulse: !reduced };
+  // And of the picked-out pieces. Held pale for that reader.
+  const picked = () => (highlight.length ? { ids: highlight, pulse: !reduced } : null);
 
   // How long the collapse is simulated for at the outside.
   //
@@ -287,7 +292,7 @@
   const grown = () => {
     const { pace, speed, arrival } = settings();
     return {
-      arrival, pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(),
+      arrival, pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(), highlight: picked(),
     };
   };
 
@@ -352,7 +357,7 @@
 
   /** The layout drawn finished and driven, over whatever cubes are on the stage. */
   const finished = next => trackPhase(stage, next, {
-    drive: Boolean(train), trainAt: train?.at, onTrainAt: train?.onAt, alarm: flagged(),
+    drive: Boolean(train), trainAt: train?.at, onTrainAt: train?.onAt, alarm: flagged(), highlight: picked(),
   });
 
   /**
@@ -453,7 +458,7 @@
     stage.clear();
     const { pace, speed } = settings();
     stage.run([buildPhase(stage, next, {
-      pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(),
+      pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(), highlight: picked(),
     })]);
   }
 
@@ -475,7 +480,7 @@
       delay: Number(handover),
       onPickUp: collapse.release,
       drive: Boolean(train),
-      alarm: flagged(),
+      alarm: flagged(), highlight: picked(),
     }))]);
   }
 

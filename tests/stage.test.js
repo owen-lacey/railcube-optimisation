@@ -27,7 +27,7 @@ import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js
 import { fadeInPhase, fadeOutPhase, overlayFadePhase, changingFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene, frameFit, cornersOf } from '../site/src/lib/scenes.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene, repeatsScene, frameFit, cornersOf } from '../site/src/lib/scenes.js';
 import { poseReadout, trackCell } from '../site/src/lib/catalogue.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
@@ -1107,6 +1107,75 @@ for (const [name, phaseOf] of Object.entries(CARRIED)) {
     assert.equal(carried.color, after.pieces[8].color, 'it is still painted as the rejected piece');
   });
 }
+
+// A repeat is picked out without leaving its own colour: each cube of every run
+// pulses between its swatch and a paler one, solid and its own size, and nothing
+// else is repainted. The post's own repeated layout: runs of seven and six straights.
+const REPEATED = 'LIIOILIOLOIIOIIXSSSSSSSRRSSSSSSRSXRL';
+
+// Driven too, as the post draws it: a pulse must neither be stalled by the train
+// nor stall it.
+const HIGHLIGHTED = {
+  'a finished drawing': (stage, pieces, highlight) => trackPhase(stage, pieces, { drive: false, highlight }),
+  'a build': (stage, pieces, highlight) => buildPhase(stage, pieces, { drive: false, highlight }),
+  'a driven drawing': (stage, pieces, highlight) => trackPhase(stage, pieces, { highlight }),
+  'a held drawing': (stage, pieces, highlight) => trackPhase(stage, pieces, { trainAt: () => 3, highlight }),
+  'a driven build': (stage, pieces, highlight) => buildPhase(stage, pieces, { highlight }),
+  'a driven grow': (stage, pieces, highlight) => growPhase(stage, pieces, { drive: true, highlight }),
+};
+
+for (const [name, phaseOf] of Object.entries(HIGHLIGHTED)) {
+  test(`highlighted pieces in ${name} pulse paler in their own colour, and nothing else does`, () => {
+    const clock = fakeClock();
+    const { stage, handles } = staged();
+    const view = repeatsScene(REPEATED);
+    assert.equal(view.highlight.length, 13);
+    assert.deepEqual(view.notes.map(n => n.lines[0][0].text), ['7 in a row · 5 repeats', '6 in a row · 4 repeats']);
+    stage.run([phaseOf(stage, view.pieces, { ids: view.highlight, pulse: true })]);
+    stage.start();
+    clock.run(6);
+
+    const ids = cubeIds(view.pieces);
+    const colorOf = new Map(view.pieces.map((p, i) => [ids[i], p.color]));
+    const lit = view.highlight.map(id => stage.cubes.get(id));
+    const rest = [...stage.cubes.keys()].filter(id => !view.highlight.includes(id)).map(id => stage.cubes.get(id));
+    const train = name.startsWith('a driven') ? handles.at(-1) : null;
+    assert.equal(train && handles.length, train && stage.cubes.size + 1, 'the train never set off');
+    const writes = train?.transforms.length;
+    const shapes = rest.map(cube => cube.mesh.mesh.geometry);
+    const seen = new Set();
+    clock.run(ALARM_PERIOD * 2, () => {
+      for (const cube of lit) {
+        assert.equal(cube.look, 'solid', `${cube.id} is not drawn solid`);
+        assert.equal(cube.mesh.mesh.material.transparent, false, `${cube.id} is see-through`);
+        seen.add(cube.color === colorOf.get(cube.id) ? 'own' : cube.color);
+      }
+    });
+    const paler = [...seen].filter(c => c !== 'own');
+    assert.ok(seen.has('own') && paler.length === 1, `the straights showed ${[...seen]}`);
+    assert.ok(parseInt(paler[0].slice(1), 16) > parseInt(colorOf.get(lit[0].id).slice(1), 16), 'the pulse is not paler');
+    for (const [i, cube] of rest.entries()) {
+      assert.equal(cube.mesh.mesh.geometry, shapes[i], `${cube.id} was repainted by the highlight`);
+    }
+    if (train) assert.ok(train.transforms.length > writes, 'the train stood still');
+    assert.equal(clock.running(), true, 'the pulse stopped');
+  });
+}
+
+test('held still, highlighted pieces are pale, and the drawing finishes', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  const view = repeatsScene(REPEATED);
+  stage.run([trackPhase(stage, view.pieces, { drive: false, highlight: { ids: view.highlight, pulse: false } })]);
+  const cube = stage.cubes.get(view.highlight[0]);
+  const held = cube.mesh.mesh.geometry;
+  stage.start();
+  clock.run(ALARM_PERIOD * 2);
+
+  assert.notEqual(cube.color, view.pieces.find(p => p.type === 'straight').color, 'it is not pale');
+  assert.equal(cube.mesh.mesh.geometry, held, 'it was repainted');
+  assert.equal(clock.running(), false, 'a still drawing is asking for frames');
+});
 
 test('held still, a rejected piece is see-through dark red, and the drawing finishes', () => {
   const clock = fakeClock();
