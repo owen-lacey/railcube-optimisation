@@ -10,6 +10,7 @@
   import ScoreMaths from './ScoreMaths.svelte';
   import TrackViewer from './TrackViewer.svelte';
   import { MediaQuery, SvelteSet } from 'svelte/reactivity';
+  import { readingsOf } from '$lib/readings.js';
   import { layoutScene } from '$lib/scenes.js';
   import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
 
@@ -70,7 +71,7 @@
 </script>
 
 {#snippet maths()}
-  <ScoreMaths {shape} ranges={ranked.ranges} weights={ranked.weights} />
+  <ScoreMaths readings={readingsOf(shape)} ranges={ranked.ranges} weights={ranked.weights} />
 {/snippet}
 
 {#snippet tiles()}

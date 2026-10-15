@@ -2,14 +2,15 @@
   // How a layout's combined score is worked out, a row per reading: its value, the
   // range it is rescaled over (the whole crossed sweep's), where it sits in that
   // range, signed by whether more is better, times its weight. The rows sum to the
-  // score. The readings are the Scorecard's (`$lib/readings.js`), the sum is
-  // `termsOf` in `$lib/weighting.js`.
-  import { readingsOf } from '$lib/readings.js';
+  // score. The sum is `termsOf` in `$lib/weighting.js`.
   import { termsOf } from '$lib/weighting.js';
   import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
 
+  // `readings` is `{ knotted, poses, closeCalls, repeats, longestSide }`: a swept
+  // layout's from `$lib/readings.js`, a track being built's from `$lib/score.js`.
+  // Null is no track yet, and every value is a dash.
   let {
-    shape,
+    readings,
     ranges = SWEEP_CROSSED_RANKED.ranges,
     weights = SWEEP_CROSSED_RANKED.weights,
   } = $props();
@@ -23,19 +24,33 @@
     ['knotted', 'Knotted'],
   ];
 
+  const DASH = '—';
+
   const working = $derived.by(() => {
-    const { terms, total } = termsOf(ranges, readingsOf(shape), weights);
+    if (!readings) {
+      const rows = LABELS.map(([name, label]) => {
+        const [low, high] = ranges[name];
+        return { name, label, value: null, low, high, scaled: null, sign: 1, weight: weights[name] ?? 0, contribution: null };
+      });
+      return { rows, total: null };
+    }
+    const { terms, total } = termsOf(ranges, readings, weights);
     const byName = Object.fromEntries(terms.map(t => [t.name, t]));
     return { rows: LABELS.map(([name, label]) => ({ ...byName[name], label })), total };
   });
 
   // Signed with a real minus, to two places. A zero is unsigned.
   const signed = n => {
+    if (n === null) return DASH;
     const text = Math.abs(n).toFixed(2);
     if (Number(text) === 0) return text;
     return `${n < 0 ? '−' : '+'}${text}`;
   };
-  const shown = (name, value) => (name === 'knotted' ? (value ? 'yes' : 'no') : value);
+  const shown = (name, value) => {
+    if (value === null) return DASH;
+    if (name === 'knotted') return value ? 'yes' : 'no';
+    return value;
+  };
 </script>
 
 <table class="maths">
@@ -55,7 +70,7 @@
         <th scope="row">{label}</th>
         <td>{shown(name, value)}</td>
         <td>{low}–{high}</td>
-        <td>{signed(scaled * sign)}</td>
+        <td>{signed(scaled === null ? null : scaled * sign)}</td>
         <td>×{weight}</td>
         <td>{signed(contribution)}</td>
       </tr>

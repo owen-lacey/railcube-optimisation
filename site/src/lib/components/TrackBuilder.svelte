@@ -21,10 +21,11 @@
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
   import PieceKeys from './PieceKeys.svelte';
+  import ScoreMaths from './ScoreMaths.svelte';
   import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
-  import { weightedScoreOf } from '$lib/score.js';
+  import { liveReadingsOf } from '$lib/score.js';
   import { claimKeys } from '$lib/keys.js';
   import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
 
@@ -52,9 +53,9 @@
   // limit.
   const done = $derived(Boolean(view.offender) || view.closed || letters.length >= LIMIT);
 
-  // The score of the track as built: the rejected piece, the last drawn, is not
-  // part of it.
-  const scored = $derived(weightedScoreOf(view.offender ? view.pieces.slice(0, -1) : view.pieces, view.closed));
+  // The readings of the track as built, scored over the crossed sweep's ranges at
+  // equal weights, unclamped: the rejected piece, the last drawn, is not part of it.
+  const readings = $derived(liveReadingsOf(view.offender ? view.pieces.slice(0, -1) : view.pieces, view.closed));
 
   let narrow = $state(false);
   onMount(() => {
@@ -117,13 +118,6 @@
 </div>
 
 {#snippet keys()}
+  <ScoreMaths {readings} />
   <PieceKeys disabled={done} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
-  {#if scored}<span class="total">{scored.score.toFixed(2)}</span>{/if}
 {/snippet}
-
-<style>
-  .total {
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-</style>

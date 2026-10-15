@@ -1,18 +1,19 @@
-// How a layout's combined score is worked out. The shape must be one the site's
-// data files carry, since the knot is looked up rather than read.
+// How a layout's combined score is worked out. The shapes must be ones the site's
+// data files carry, since `readingsOf` looks the knot up rather than reading it.
 
 import ScoreMaths from './ScoreMaths.svelte';
+import { readingsOf } from '$lib/readings.js';
 
 export default {
   title: 'Score maths',
   component: ScoreMaths,
-  argTypes: {
-    shape: { control: 'text' },
-  },
 };
 
 /** One of the ten best under equal weights: a trefoil. */
-export const Good = { args: { shape: 'SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI' } };
+export const Good = { args: { readings: readingsOf('SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI') } };
 
 /** One of the ten worst. */
-export const Bad = { args: { shape: 'IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI' } };
+export const Bad = { args: { readings: readingsOf('IRSSSSSIIRLLRXOISSSSIILRIOLOOSSSSXSI') } };
+
+/** No track yet: every value a dash. */
+export const Empty = { args: { readings: null } };
