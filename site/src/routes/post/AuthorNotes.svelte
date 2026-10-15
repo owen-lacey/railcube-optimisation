@@ -19,10 +19,12 @@
 		are layouts that score higher than the ones you've seen.
 	</p>
 
-	<ul>
-		<li>
-			Prove that it's infeasible to enumerate all solutions, which is where CP
-			comes in
-		</li>
-	</ul>
+	<p>
+		Finding <b>the</b> optimal Rail Cube is therefore easier said than done. An
+		earlier version of my model used my
+		<a href="https://github.com/owen-lacey/cpsat-js" target="_blank"
+			>javascript port of Google's CP-SAT solver</a
+		>, but I eventually learned that it was no match for this solution space,
+		especially when we introduced more complex metrics like knotting.
+	</p>
 </Chapter>
