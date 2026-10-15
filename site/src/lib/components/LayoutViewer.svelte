@@ -32,6 +32,9 @@
     // The card's footer, given the scene, or undefined while there is nothing drawn.
     // Unset, the card has none.
     caption = undefined,
+    // Laid over the pane's top-left corner, given the scene, while there is one
+    // drawn. Unset, nothing is.
+    overlay = undefined,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -54,6 +57,18 @@
   // eases home while the card shrinks.
   let expanded = $state(false);
   let handled = $state(false);
+
+  // The overlay's corner of the pane, to its far edges, so the track is framed
+  // clear of it in the page. Full screen there is room enough, and the track is
+  // centred again. Read off `handled` rather than `expanded`, which holds until
+  // the card has shrunk back: the track sets off for its place in the page as the
+  // card does.
+  let overlaid = $state(null);
+  let overlayWidth = $state(0);
+  let overlayHeight = $state(0);
+  const reserved = $derived(overlaid && overlayWidth && !handled
+    ? { width: overlaid.offsetLeft + overlayWidth, height: overlaid.offsetTop + overlayHeight }
+    : null);
 </script>
 
 {#snippet footer()}
@@ -66,6 +81,11 @@
   {#snippet children(toggle)}
     {#if result.state === 'ok'}
       {#if controls}{@render toggle()}{/if}
+      {#if overlay}
+        <div class="overlay" bind:this={overlaid} bind:offsetWidth={overlayWidth} bind:offsetHeight={overlayHeight}>
+          {@render overlay(result.scene)}
+        </div>
+      {/if}
       <TrackViewer
         pieces={result.scene.pieces}
         camera={result.scene.camera}
@@ -82,6 +102,7 @@
         controls={handled ? controls : null}
         aspect={expanded ? 'auto' : aspect}
         {paused}
+        {reserved}
         blueprint
         label="The layout {letters}"
       />
@@ -99,6 +120,16 @@
 </ExpandingCard>
 
 <style>
+  /* Clear of the reset button (top right) and the toggle (bottom right). It never
+     takes a drag from the viewer under it. */
+  .overlay {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 1;
+    pointer-events: none;
+  }
+
   .empty {
     display: grid;
     place-items: center;

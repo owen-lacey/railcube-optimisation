@@ -14,7 +14,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OrthographicCamera, Vector3 } from 'three';
 import { orbit, zoomed, slid, ZOOM_BY } from '../site/src/lib/render/controls.js';
-import { adjusted, createCamera, polyView, offscreen, CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT } from '../site/src/lib/render/camera.js';
+import {
+  adjusted, appliedZoom, createCamera, freeRegion, polyView, offscreen, CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT,
+} from '../site/src/lib/render/camera.js';
 
 const still = { rotX: 65, rotY: 45, zoomBy: 1, offset: [0, 0, 0] };
 
@@ -133,4 +135,56 @@ test('an arrival sets off beyond the edge of the picture nearest where it is goi
       }
     }
   }
+});
+
+test('a reserved corner frames the shot in the band that fits it larger', () => {
+  // A phone-wide 16/10 card: beside the box fits larger than under it.
+  assert.deepEqual(freeRegion(360, 225, { width: 180, height: 110 }), { left: 180, top: 0, width: 180, height: 225 });
+  // A wide, tall card: under it does.
+  assert.deepEqual(freeRegion(400, 600, { width: 180, height: 110 }), { left: 0, top: 110, width: 400, height: 490 });
+  assert.deepEqual(freeRegion(360, 225, null), { left: 0, top: 0, width: 360, height: 225 });
+});
+
+test('a shot framed in a region has its target in the middle of it, at the region\'s zoom', () => {
+  const [width, height] = [360, 225];
+  const region = freeRegion(width, height, { width: 180, height: 110 });
+  for (const rotX of [0, 65, 90]) {
+    for (const rotY of [-45, 100]) {
+      const camera = new OrthographicCamera();
+      const description = { 'rot-x': rotX, 'rot-y': rotY, zoom: 3, target: '2,-1,4' };
+      const zoom = polyView(camera, description, width, height, region);
+      assert.equal(zoom, appliedZoom(3, region.width, region.height));
+      const ndc = new Vector3(2, -1, 4).project(camera);
+      const at = [(ndc.x + 1) / 2 * width, (1 - ndc.y) / 2 * height];
+      assert.ok(Math.abs(at[0] - (region.left + region.width / 2)) < 1e-6, `x at ${rotX}/${rotY}`);
+      assert.ok(Math.abs(at[1] - (region.top + region.height / 2)) < 1e-6, `y at ${rotX}/${rotY}`);
+    }
+  }
+});
+
+test('a point set off-screen from a region is off the whole viewer', () => {
+  const [width, height] = [360, 225];
+  const region = freeRegion(width, height, { width: 180, height: 110 });
+  const description = { 'rot-x': 65, 'rot-y': -45, zoom: 3, target: '0,0,0' };
+  const camera = new OrthographicCamera();
+  polyView(camera, description, width, height, region);
+  for (const point of [[0, 0, 0], [3, 0, 0], [-3, 2, 1], [0, 0, 5]]) {
+    const start = new Vector3(...offscreen(point, description, width, height, 1, region)).project(camera);
+    assert.ok(Math.abs(start.x) > 1 || Math.abs(start.y) > 1, `${point} starts on screen`);
+  }
+});
+
+test('part way to clear of a box, the band holds as the viewer changes shape', () => {
+  // A card growing to full screen on a phone: beside the box fits better at the
+  // start, under it by the end, and a band flipping mid-ease jumps the track.
+  const size = { width: 360, height: 225 };
+  const camera = createCamera(new OrthographicCamera(), () => size);
+  const box = { width: 180, height: 110 };
+  camera.reserve(box, 1);
+  assert.equal(camera.region().left, 180, 'beside the box, to begin with');
+  Object.assign(size, { width: 360, height: 700 });
+  camera.reserve(box, 0.5);
+  assert.deepEqual(camera.region(), { left: 90, top: 0, width: 270, height: 700 }, 'still easing from beside it');
+  camera.reserve(box, 1);
+  assert.deepEqual(camera.region(), { left: 0, top: 110, width: 360, height: 590 }, 'settled, it picks again');
 });

@@ -91,6 +91,10 @@
     outlines = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
+    // A box in the viewer's top left, `{ width, height }` in CSS pixels, that
+    // something is laid over: shots are framed clear of it. Null frames them in the
+    // whole viewer. See `freeRegion` in render/camera.js.
+    reserved = null,
     // Callouts on cells, `{ key, lines, cell, side, flash }` each: set outside what
     // is drawn with a leader line to the middle of `cell`, and kept there as the
     // camera moves. A line is an array of parts, `{ text, changed }`, and
@@ -512,6 +516,7 @@
           onChanging: share => { changingShare = share; },
         });
         stage.setPaused(paused);
+        stage.reserve(reserved, { instant: true });
         ready = true;
         // A tumble is framed once, here, and never again. A grow is framed by
         // `showGrown`, from the first paint.
@@ -600,6 +605,15 @@
     if (!ready || !stage) return;
     stage.setPaused(hold);
     stage.start();
+  });
+
+  // Keyed on the box's sides, not the object, so an equal box handed over new
+  // does not reframe.
+  const reservedKey = $derived(reserved && `${reserved.width}x${reserved.height}`);
+  $effect(() => {
+    reservedKey;
+    if (!ready || !stage) return;
+    stage.reserve(reserved, { instant: reduced });
   });
 
   // The lattice. Keyed on the box's corners, not the object: an equal box handed

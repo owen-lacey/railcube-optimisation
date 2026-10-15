@@ -7,6 +7,7 @@
 	import Chapter from "./Chapter.svelte";
 	import PoseTracker from "$lib/components/PoseTracker.svelte";
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
+	import ScoredTrack from "$lib/components/ScoredTrack.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import { knotScene, lengthsScene, repeatsScene } from "$lib/scenes.js";
@@ -76,8 +77,7 @@
 		All of the good layouts perform well on these five metics I mentioned:
 		compactness, close calls, orientation count, repeats and knots.
 	</p>
-	<!-- TODO: Annotate track with metric count. -->
-	<TrackFigure shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
+	<ScoredTrack shape="SISSXOLSLSLSSOSOIRRSISROSIIRXSISILSI" />
 
 	<p>
 		On the other hand, we can put something objective against why the bad tracks

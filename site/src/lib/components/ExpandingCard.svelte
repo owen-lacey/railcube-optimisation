@@ -12,6 +12,7 @@
   import Maximize2 from '@lucide/svelte/icons/maximize-2';
   import Minimize2 from '@lucide/svelte/icons/minimize-2';
   import LayoutCard from './LayoutCard.svelte';
+  import { GROW, GROW_CSS } from '$lib/grow.js';
 
   let {
     children,
@@ -22,9 +23,6 @@
     onkeydown = undefined,
   } = $props();
 
-  // How long the card takes to grow to full screen, or back, in seconds.
-  const GROW = 0.38;
-  const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
 
   let dialog = $state(null);
   let toggle = $state(null);
@@ -44,7 +42,7 @@
   // The dialog's box moves rather than being scaled, so the viewer is resized every
   // frame and the track grows with it, square rather than stretched.
   function grow(from, to) {
-    const timing = { duration: GROW * 1000, easing: EASE };
+    const timing = { duration: GROW * 1000, easing: GROW_CSS };
     const backdrop = from === FULL ? [1, 0] : [0, 1];
     dialog.animate({ opacity: backdrop }, { ...timing, pseudoElement: '::backdrop' });
     moving = dialog.animate([from, to], timing);

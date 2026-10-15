@@ -8,8 +8,10 @@
   import { HOST } from '$lib/figure.js';
 
   // `view` is a FigureView. `footer` is given the scene being drawn, or undefined
-  // while there is none. `aspect` is the viewer's on its own; a host has its own.
-  let { view, footer = undefined, aspect = '16 / 10' } = $props();
+  // while there is none. `overlay` is laid over the viewer's top-left corner, given
+  // the scene; on its own only, since a host draws the view. `aspect` is the
+  // viewer's on its own; a host has its own.
+  let { view, footer = undefined, overlay = undefined, aspect = '16 / 10' } = $props();
 
   /** @type {import('$lib/figure.js').FigureHostApi | undefined} */
   const host = getContext(HOST);
@@ -22,5 +24,5 @@
 {#if host}
   {@render footer?.(host.drawn)}
 {:else}
-  <LayoutViewer {...view} {aspect} caption={footer}></LayoutViewer>
+  <LayoutViewer {...view} {aspect} caption={footer} {overlay}></LayoutViewer>
 {/if}

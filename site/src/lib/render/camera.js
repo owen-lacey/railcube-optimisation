@@ -95,6 +95,27 @@ export function describedZoom(pixelsPerUnit, width, height) {
 }
 
 /**
+ * The part of a `width`×`height` viewer a shot is framed in, `{ left, top, width,
+ * height }` in CSS pixels: all of it, or, with `reserved` (`{ width, height }`, a
+ * box in its top left that something is laid over), the band beside that box or
+ * the band under it — whichever a shot fits in larger.
+ */
+export function freeRegion(width, height, reserved, side = bandFor(width, height, reserved)) {
+  const whole = { left: 0, top: 0, width, height };
+  if (!reserved) return whole;
+  return side === 'beside'
+    ? { left: reserved.width, top: 0, width: width - reserved.width, height }
+    : { left: 0, top: reserved.height, width, height: height - reserved.height };
+}
+
+/** Which band `freeRegion` frames in when not told: 'beside' the box or 'under' it. */
+export function bandFor(width, height, reserved) {
+  if (!reserved) return 'beside';
+  const fit = (w, h) => Math.min(w, h * (REFERENCE_WIDTH / REFERENCE_HEIGHT));
+  return fit(width - reserved.width, height) >= fit(width, height - reserved.height) ? 'beside' : 'under';
+}
+
+/**
  * The screen's axes in the world for a description's tilt, turn and roll: `towards`
  * the viewer, and `right` and `up` the screen. See `polyView`.
  */
@@ -128,24 +149,35 @@ export function pinnedShot({ target, perUnit, at, ...angles }, width, height) {
  * A world point beyond the nearest edge of a description's frame from `position`:
  * where `position` lands on a `width`×`height` viewer, pushed straight out through
  * whichever edge is closest, far enough that `margin` world units round it are
- * still off the picture. Where a piece arriving from off-screen sets off.
+ * still off the picture. Where a piece arriving from off-screen sets off. `region`
+ * is the part of the viewer the shot is framed in — see `freeRegion`.
  */
-export function offscreen(position, description, width, height, margin) {
+export function offscreen(position, description, width, height, margin, region = freeRegion(width, height)) {
   const base = { ...CAMERA, ...description };
-  const zoom = appliedZoom(base.zoom, width, height);
+  const zoom = appliedZoom(base.zoom, region.width, region.height);
   const { right, up } = screenAxes(base);
   const from = new Vector3(...position).sub(new Vector3(...numbers(base.target)));
   const x = from.dot(right);
   const y = from.dot(up);
-  const [halfW, halfH] = [width / 2 / zoom, height / 2 / zoom];
+  const { left, rightEdge, top, bottom } = edges(width, height, region, zoom);
   const exits = [
-    { axis: right, sign: 1, room: halfW - x },
-    { axis: right, sign: -1, room: halfW + x },
-    { axis: up, sign: 1, room: halfH - y },
-    { axis: up, sign: -1, room: halfH + y },
+    { axis: right, sign: 1, room: rightEdge - x },
+    { axis: right, sign: -1, room: left + x },
+    { axis: up, sign: 1, room: top - y },
+    { axis: up, sign: -1, room: bottom + y },
   ];
   const { axis, sign, room } = exits.reduce((best, exit) => (exit.room < best.room ? exit : best));
   return new Vector3(...position).addScaledVector(axis, sign * (Math.max(room, 0) + margin)).toArray();
+}
+
+/**
+ * How far the viewer's edges stand from the target, in world units at `zoom`: the
+ * target is drawn in the middle of `region`, not necessarily of the viewer.
+ */
+function edges(width, height, region, zoom) {
+  const x = region.left + region.width / 2;
+  const y = region.top + region.height / 2;
+  return { left: x / zoom, rightEdge: (width - x) / zoom, top: y / zoom, bottom: (height - y) / zoom };
 }
 
 /**
@@ -168,18 +200,23 @@ export function offscreen(position, description, width, height, margin) {
  * `roll`, if the description has one, then turns the picture clockwise by that
  * many degrees about the line of sight. Tilt and turn alone keep screen right level, so a shot from the side can
  * never have up anywhere but up the screen; the roll is what can.
+ *
+ * `region` is the part of the viewer the shot is framed in — see `freeRegion`. The
+ * zoom is fitted to it and the target drawn in its middle; the rest of the viewer
+ * still draws, past its edges.
  */
-export function polyView(camera, description, width, height) {
+export function polyView(camera, description, width, height, region = freeRegion(width, height)) {
   const base = { ...CAMERA, ...description };
-  const zoom = appliedZoom(base.zoom, width, height);
+  const zoom = appliedZoom(base.zoom, region.width, region.height);
   const { towards, right, up } = screenAxes(base);
   const target = new Vector3(...numbers(base.target));
   camera.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(right, up, towards));
   camera.position.copy(target).addScaledVector(towards, DISTANCE);
-  camera.left = -width / 2 / zoom;
-  camera.right = width / 2 / zoom;
-  camera.top = height / 2 / zoom;
-  camera.bottom = -height / 2 / zoom;
+  const { left, rightEdge, top, bottom } = edges(width, height, region, zoom);
+  camera.left = -left;
+  camera.right = rightEdge;
+  camera.top = top;
+  camera.bottom = -bottom;
   camera.near = 1;
   camera.far = DISTANCE * 2;
   camera.updateProjectionMatrix();
@@ -194,6 +231,27 @@ export function polyView(camera, description, width, height) {
 export function createCamera(camera, size, onApply) {
   let described = {};
   let view = null;
+  let reserved = null;
+  let share = 1;
+  let side = 'beside';
+
+  /**
+   * The part of the viewer shots are framed in now: the region clear of the
+   * reserved box, `share` of the way there from the whole viewer — see `freeRegion`.
+   *
+   * The band is chosen afresh only while shots are wholly clear of the box. Part
+   * way, it is the one they are easing from or to: a card growing to full screen
+   * changes shape as it goes, and the band it fits better would flip mid-ease and
+   * jump the track across.
+   */
+  function region() {
+    const { width, height } = size();
+    const [w, h] = [width || REFERENCE_WIDTH, height || REFERENCE_HEIGHT];
+    if (share === 1) side = bandFor(w, h, reserved);
+    const whole = freeRegion(w, h);
+    const clear = freeRegion(w, h, reserved, side);
+    return Object.fromEntries(Object.keys(whole).map(k => [k, whole[k] + (clear[k] - whole[k]) * share]));
+  }
   let applied = { ...CAMERA, zoom: appliedZoom(CAMERA.zoom, REFERENCE_WIDTH, REFERENCE_HEIGHT) };
 
   /** (Re-)apply the current description at the viewer's current size. */
@@ -202,8 +260,20 @@ export function createCamera(camera, size, onApply) {
     const w = width || REFERENCE_WIDTH;
     const h = height || REFERENCE_HEIGHT;
     const shot = { ...CAMERA, ...adjusted(described, view) };
-    applied = { ...shot, zoom: polyView(camera, shot, w, h) };
+    applied = { ...shot, zoom: polyView(camera, shot, w, h, region()) };
     onApply?.();
+  }
+
+  /**
+   * Keep shots clear of a box in the viewer's top left, `{ width, height }` in CSS
+   * pixels, or null to frame them in the whole viewer. `part` (0–1) frames them
+   * that share of the way from the whole viewer to clear of the box, so a stage
+   * can ease between the two.
+   */
+  function reserve(box, part = 1) {
+    reserved = box;
+    share = part;
+    applyCamera();
   }
 
   /** Apply a camera description; what it does not name comes from `CAMERA`. */
@@ -237,6 +307,7 @@ export function createCamera(camera, size, onApply) {
   }
 
   return {
-    frameTo, applyCamera, view: currentView, untouched, adjust, reset, touched: () => view !== null, applied: () => applied,
+    frameTo, applyCamera, reserve, region, view: currentView, untouched, adjust, reset, touched: () => view !== null,
+    applied: () => applied,
   };
 }

@@ -38,6 +38,7 @@ import { createCamera, viewBetween, adjusted, offscreen, REFERENCE_WIDTH, REFERE
 import { sharedRenderer } from './renderer.js';
 import { cellBox, cellFace, cellEdges } from './grid.js';
 import { backdropOf } from './blueprint.js';
+import { GROW, growEase } from '../grow.js';
 import { PROJ } from '../../../../src/track.js';
 import { originCell, axisArrows, axisAnchor, labelSpots } from './axes.js';
 import { TRAIN_CELL_INSET, LIGHT, ALARM_SWELL, ALARM_OPACITY, STEP_W } from './dimensions.js';
@@ -242,7 +243,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   }
 
   const {
-    frameTo: applyDescription, applyCamera, view, untouched, adjust: adjustView, reset: resetView, touched, applied,
+    frameTo: applyDescription, applyCamera, reserve: reserveCamera, region, view, untouched, adjust: adjustView, reset: resetView, touched,
+    applied,
   } = createCamera(camera, size, () => { invalidate(); onCamera?.(); });
 
   /**
@@ -253,7 +255,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   const offscreenFrom = (position, description, margin) => {
     const { width, height } = size();
     const shot = adjusted(description, touched() ? view() : null);
-    return offscreen(position, shot, width || REFERENCE_WIDTH, height || REFERENCE_HEIGHT, margin);
+    return offscreen(position, shot, width || REFERENCE_WIDTH, height || REFERENCE_HEIGHT, margin, region());
   };
 
   /** Where the blueprint's sheet of dots sits under the camera now — see `backdropOf`. */
@@ -273,6 +275,9 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   let framed = null;     // the camera description in force, or being panned away from
   let pan = null;        // { to, seconds, spent }, null when the camera is still
   let homing = null;     // { from, seconds, spent }, while a hand-moved view eases back
+  let reserved = null;   // the box shots are kept clear of, kept while easing away from it
+  let share = 1;         // how far shots are clear of it — see `reserve` in camera.js
+  let shifting = null;   // { from, to, seconds, spent }, while `share` eases
   let paused = false;
   let lost = 0;          // loop time spent on paused frames, which is not time that passed
 
@@ -464,6 +469,39 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     return true;
   }
 
+
+  /**
+   * Keep shots clear of a box in the viewer's top left, `{ width, height }` in CSS
+   * pixels, or null for none. The track eases over to its new place in step with a
+   * card growing to full screen or back (`$lib/grow.js`), or goes there at once
+   * when `instant`. The first box is taken at once, since it arrives once
+   * it has been measured, after the first paint; so is a new size for a box already
+   * kept clear of, since it is the same place, only measured again.
+   */
+  function reserve(box, { instant = false } = {}) {
+    const to = box ? 1 : 0;
+    const first = !reserved;
+    if (box) reserved = box;
+    shifting = null;
+    if (instant || first || share === to) {
+      share = to;
+      return reserveCamera(reserved, share);
+    }
+    shifting = { from: share, to, seconds: GROW, spent: 0 };
+    loop.start();
+  }
+
+  /** Advance a shift, and say whether one is still running. */
+  function stepShift(delta) {
+    if (!shifting) return false;
+    shifting.spent += delta;
+    const t = Math.min(1, shifting.spent / shifting.seconds);
+    share = shifting.from + (shifting.to - shifting.from) * growEase(t);
+    reserveCamera(reserved, share);
+    if (t === 1) shifting = null;
+    return t < 1;
+  }
+
   /**
    * Advance the head phase, and move on when it says it is finished.
    *
@@ -476,7 +514,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   function tick(delta, elapsed) {
     // A reset is the reader's own hand on the camera, so like a gesture it moves
     // whether or not everything else is held.
-    const homeward = stepHome(delta);
+    const shifted = stepShift(delta);
+    const homeward = stepHome(delta) || shifted;
     // Paused, a frame is a still: the head phase is drawn where it has got to and
     // the loop stops. That one frame is what puts a train on a track shown while
     // paused, which would otherwise sit unturned at the origin until play. Its delta
@@ -836,6 +875,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     frameTo,
     panTo,
     applyCamera,
+    reserve,
     applied,
     backdrop,
     offscreen: offscreenFrom,

@@ -22,7 +22,8 @@ import assert from 'node:assert/strict';
 import { chainTrack, countPieces, POOLS, SCORES } from '../src/track.js';
 import { loopsOf, routeOf, shapeOf, trackKey } from '../src/layouts.js';
 import {
-  SWEEPS, SWEEP_28, SWEEP_CROSSED, SHAPES_28, SHAPES_CROSSED, sample, volumeOf,
+  SWEEPS, SWEEP_28, SWEEP_CROSSED, SWEEP_CROSSED_RANKED, SWEEP_CROSSED_WEIGHTS,
+  SHAPES_28, SHAPES_CROSSED, knotOf, sample, volumeOf,
 } from '../site/src/lib/sweeps.js';
 
 const spanOf = placed => {
@@ -174,4 +175,16 @@ test('a sample cannot ask for more layouts than there are', () => {
 
 test('volumeOf multiplies the span out', () => {
   assert.equal(volumeOf({ span: [9, 6, 8] }), 432);
+});
+
+test('knotOf gives the knot every file stores, and the files agree', () => {
+  const rows = [
+    ...SWEEP_CROSSED.shapes, ...SWEEP_CROSSED_WEIGHTS.rows,
+    ...SWEEP_CROSSED_RANKED.best, ...SWEEP_CROSSED_RANKED.worst,
+  ];
+  for (const { shape, knot } of rows) assert.equal(knotOf(shape), knot, shape);
+});
+
+test('knotOf throws for a shape no file carries', () => {
+  assert.throws(() => knotOf('LLLL'), /no stored knot for LLLL/);
 });

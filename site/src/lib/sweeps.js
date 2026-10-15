@@ -91,3 +91,21 @@ export function sample(count, seed = 0, layouts = sweep28.shapes) {
 }
 
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+
+/**
+ * Every knot the site's data files carry, by shape. A knot is read by topoly in
+ * Python, so the browser cannot read one; it can only look up what was stored.
+ */
+const KNOTS = new Map([
+  ...sweepCrossed.shapes,
+  ...sweepCrossedWeights.rows,
+  ...sweepCrossedRanked.best,
+  ...sweepCrossedRanked.worst,
+].map(({ shape, knot }) => [shape, knot]));
+
+/** The stored knot of a crossed layout: 'unknot', 'trefoil', … Throws for a shape no file carries. */
+export function knotOf(shape) {
+  const knot = KNOTS.get(shape);
+  if (!knot) throw new Error(`no stored knot for ${shape}`);
+  return knot;
+}
