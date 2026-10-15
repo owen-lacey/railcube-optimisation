@@ -10,6 +10,10 @@
 </section>
 
 <style>
+	.chapter > :global(hr) {
+		margin: 5rem 0 0;
+	}
+
 	.chapter > :global(h2) {
 		font-size: 1.4rem;
 		line-height: 1.2;
