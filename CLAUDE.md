@@ -1035,7 +1035,11 @@ dialog, and the dialog is `tabindex="-1"` so a click on the canvas lands focus o
 a builder uses is `preventDefault`-ed there, so `keys.js` (and a `Gate` behind the dialog)
 never sees it. Adding goes dead while the
 track is stuck, since nothing after a rejected piece could be built, and once the loop
-closes, since a finished track takes no more. What it does differently is the camera: it
+closes, since a finished track takes no more. `TrackBuilder` also holds the crossed sweep's
+inventory (its scores are the ones to beat): `InventoryCard`, over the viewer's corner, has a small
+box per piece in its colour that fades out as the piece goes down, and a piece's button and key go dead once all of it is down —
+`usedOf`/`spentOut` in `building.js`, counting cubes, so a crossed cross is one and a rejected
+piece none. What it does differently is the camera: it
 starts wide (`BUILD_FLOOR`, passed as `from`, is `sketchBox`'s floor in place of the
 sketch's tight one). `PoseBuilder` keeps the sketch's tight floor. Square on a phone, 16/10 otherwise, unless `aspect` is
 given.

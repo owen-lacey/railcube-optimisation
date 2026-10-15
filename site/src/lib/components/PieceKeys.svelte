@@ -3,8 +3,9 @@
   import Delete from '@lucide/svelte/icons/delete';
   import { PIECES } from '$lib/catalogue.js';
 
-  // `disabled` stops adding; `canRemove` is whether there is a piece to take off.
-  let { disabled = false, canRemove = false, onadd, onremove } = $props();
+  // `disabled` stops adding; `spent` is the letters with none left to add;
+  // `canRemove` is whether there is a piece to take off.
+  let { disabled = false, spent = new Set(), canRemove = false, onadd, onremove } = $props();
 </script>
 
 <div class="keys">
@@ -13,10 +14,10 @@
       type="button"
       class="piece"
       style:--piece={piece.hex}
-      {disabled}
+      disabled={disabled || spent.has(piece.letter)}
       onclick={() => onadd(piece.letter)}
-      aria-label={`Add piece: ${piece.name}`}
-      title={piece.name}
+      aria-label={spent.has(piece.letter) ? `${piece.name}: none left` : `Add piece: ${piece.name}`}
+      title={spent.has(piece.letter) ? `${piece.name}: none left` : piece.name}
     >{piece.letter}</button>
   {/each}
   <button

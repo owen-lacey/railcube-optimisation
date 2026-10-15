@@ -65,3 +65,26 @@ export function keyAction(event) {
   const letter = ARROWS[event.key] ?? event.key.toUpperCase();
   return letter.length === 1 && LETTERS.includes(letter) ? { add: letter } : null;
 }
+
+/**
+ * How many of each piece type the letters have put down: the cubes, so a crossed
+ * cross is one (its second pass places nothing, as `identify` counts it), and a
+ * rejected piece is none, since it is not down.
+ */
+export function usedOf(letters, startPose = 'DF') {
+  const { placed, faults } = chainOpen(routeOf(letters), startPose);
+  const down = faults.length ? placed.slice(0, faults[0].index) : placed;
+  const used = {};
+  for (const { type, revisit } of down) {
+    if (!revisit) used[type] = (used[type] ?? 0) + 1;
+  }
+  return used;
+}
+
+/** The letters of every piece type the letters have used all of the inventory's. */
+export function spentOut(letters, inventory, startPose = 'DF') {
+  const used = usedOf(letters, startPose);
+  return new Set(PIECES
+    .filter(p => (used[p.type] ?? 0) >= (inventory[p.type] ?? 0))
+    .map(p => p.letter));
+}

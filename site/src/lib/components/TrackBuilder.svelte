@@ -22,12 +22,17 @@
   import ExpandingCard from './ExpandingCard.svelte';
   import PieceKeys from './PieceKeys.svelte';
   import ScoreMaths from './ScoreMaths.svelte';
+  import InventoryCard from './InventoryCard.svelte';
   import BuildPrompt from './BuildPrompt.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
   import { liveReadingsOf } from '$lib/score.js';
   import { claimKeys } from '$lib/keys.js';
-  import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
+  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
+  import { LIMIT, seed, added, removed, keyAction, usedOf, spentOut } from '$lib/building.js';
+
+  // The crossed sweep's pieces, since its scores are the ones to beat.
+  const INVENTORY = SWEEP_CROSSED_RANKED.question.inventory;
 
   let {
     shape = '',
@@ -57,6 +62,10 @@
   // equal weights, unclamped: the rejected piece, the last drawn, is not part of it.
   const readings = $derived(liveReadingsOf(view.offender ? view.pieces.slice(0, -1) : view.pieces, view.closed));
 
+  // What is spent of the inventory, and the pieces with none left to add.
+  const used = $derived(usedOf(letters));
+  const spent = $derived(spentOut(letters, INVENTORY));
+
   let narrow = $state(false);
   onMount(() => {
     const query = window.matchMedia('(max-width: 600px)');
@@ -78,7 +87,7 @@
   onMount(() => claimKeys(builder, onKeydown));
 
   const add = letter => {
-    if (!done) letters = added(letters, letter);
+    if (!done && !spent.has(letter)) letters = added(letters, letter);
   };
   const removeLast = () => { letters = removed(letters); };
 
@@ -112,6 +121,7 @@
         blueprint
         label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
       />
+      <div class="inventory"><InventoryCard {used} inventory={INVENTORY} /></div>
       {#if empty}<BuildPrompt />{/if}
     {/snippet}
   </ExpandingCard>
@@ -119,5 +129,17 @@
 
 {#snippet keys()}
   <ScoreMaths {readings} />
-  <PieceKeys disabled={done} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
+  <PieceKeys disabled={done} {spent} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
 {/snippet}
+
+<style>
+  /* Over the viewer's top-left corner, clear of the reset button and the toggle,
+     as `LayoutViewer`'s overlay is. It never takes a drag from the viewer under it. */
+  .inventory {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 1;
+    pointer-events: none;
+  }
+</style>
