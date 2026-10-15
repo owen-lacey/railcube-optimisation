@@ -9,6 +9,7 @@
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
 	import ScoredRanking from "$lib/components/ScoredRanking.svelte";
 	import ScoredTrack from "$lib/components/ScoredTrack.svelte";
+	import SingleMetrics from "$lib/components/SingleMetrics.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import { knotScene, lengthsScene, repeatsScene } from "$lib/scenes.js";
@@ -94,8 +95,7 @@
 		metrics on their own are largely unimpressive.
 	</p>
 
-	<!-- TODO: cycle through single objectives: here is time spent upside down -->
-	<TrackFigure shape="IILLSLOISSXOISRSIORSSRSSSSXSSIOSIILR" />
+	<SingleMetrics />
 
 	<p>
 		Our ability to express these opinions in a way the model can understand

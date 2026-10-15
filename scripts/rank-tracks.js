@@ -21,8 +21,8 @@ import { parseArgs } from 'node:util';
 
 import Database from 'better-sqlite3';
 
-import { assertSpends, DB_PATH, derive, random, weightingValuesOf } from './sweep-data.js';
-import { knotInput, knotReader } from './knot-curves.js';
+import { auditRows } from './audit-rows.js';
+import { DB_PATH, random, weightingValuesOf } from './sweep-data.js';
 import { knotOf } from '../site/src/lib/knots.js';
 import { DIRECTIONS, weigher } from '../site/src/lib/weighting.js';
 import { SWEEP_CROSSED_WEIGHTS } from '../site/src/lib/sweeps.js';
@@ -30,10 +30,6 @@ import { SWEEP_CROSSED_WEIGHTS } from '../site/src/lib/sweeps.js';
 const QUESTION = 1;
 const NAMES = Object.keys(DIRECTIONS);
 const WEIGHTS = Object.fromEntries(NAMES.map(name => [name, 1]));
-// A seed away from any row id, so the audit's rotations are not the scan's.
-const AUDIT_SEED = 2 ** 33;
-// The columns a row's values come from, re-derived in the audit.
-const RECOUNTED = ['poses', 'close_calls', 'repeats', 'span_across', 'span_up', 'span_along'];
 
 const { values: args } = parseArgs({
   options: {
@@ -105,29 +101,8 @@ function rank(path) {
   return { question, legal, best: best.kept, worst: worst.kept };
 }
 
-/** Re-derive every kept layout, recount it to its row, and read its knot afresh. */
-async function audit(entries, question) {
-  const placed = entries.map(({ row }) => {
-    const { placed: chained, columns } = derive(row.shape);
-    assertSpends(chained, question, row.shape);
-    const off = RECOUNTED.filter(c => columns[c] !== row[c]);
-    if (off.length) throw new Error(`${row.shape} recounts ${off.map(c => `${c} ${columns[c]}`)}, stored ${off.map(c => row[c])}`);
-    if (columns.underground) throw new Error(`${row.shape} goes below the floor`);
-    return chained;
-  });
-  const reader = knotReader();
-  const polys = await reader.read(entries.map(({ row }, i) => ({
-    id: row.id, seed: AUDIT_SEED + row.id, ...knotInput(placed[i]) })));
-  await reader.close();
-  entries.forEach(({ row }, i) => {
-    const knot = knotOf(polys[i].over, polys[i].under);
-    const stored = knotOf(row.knot_over, row.knot_under);
-    if (knot !== stored) throw new Error(`${row.shape} reads ${knot}, stored ${stored}`);
-  });
-}
-
 const { question, legal, best, worst } = rank(args.db);
-await audit([...best, ...worst], question);
+await auditRows([...best, ...worst].map(({ row }) => row), question);
 
 const entry = ({ row, score: s }) => ({
   id: row.id, shape: row.shape, knot: knotOf(row.knot_over, row.knot_under), score: s / scale });

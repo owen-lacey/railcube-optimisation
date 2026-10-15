@@ -3,24 +3,25 @@
   // close calls, orientation count, repeats and knots. See `$lib/readings.js`.
   import { readingsOf } from '$lib/readings.js';
 
-  let { shape } = $props();
+  // `emphasis` is a `weighting.js` metric name, whose row is picked out, or undefined.
+  let { shape, emphasis = undefined } = $props();
 
   const readings = $derived.by(() => {
     const { longestSide, closeCalls, poses, repeats, knotted } = readingsOf(shape);
     return [
-      ['Longest side', longestSide],
-      ['Close calls', closeCalls],
-      ['Orientation count', poses],
-      ['Repeats', repeats],
-      ['Knotted', knotted ? 'yes' : 'no'],
+      ['longestSide', 'Longest side', longestSide],
+      ['closeCalls', 'Close calls', closeCalls],
+      ['poses', 'Orientation count', poses],
+      ['repeats', 'Repeats', repeats],
+      ['knotted', 'Knotted', knotted ? 'yes' : 'no'],
     ];
   });
 </script>
 
 <dl class="scorecard">
-  {#each readings as [label, value] (label)}
-    <dt>{label}</dt>
-    <dd>{value}</dd>
+  {#each readings as [name, label, value] (name)}
+    <dt data-emphasis={name === emphasis || undefined}>{label}</dt>
+    <dd data-emphasis={name === emphasis || undefined}>{value}</dd>
   {/each}
 </dl>
 
@@ -53,5 +54,10 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     text-align: right;
+  }
+
+  [data-emphasis] {
+    color: var(--grid-color);
+    font-weight: 700;
   }
 </style>

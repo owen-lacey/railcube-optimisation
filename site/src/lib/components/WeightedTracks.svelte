@@ -10,7 +10,7 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import LayoutViewer from './LayoutViewer.svelte';
   import { SWEEP_CROSSED_WEIGHTS } from '$lib/sweeps.js';
-  import { ends } from '$lib/weighting.js';
+  import { ends, LABELS } from '$lib/weighting.js';
 
   // `train` is LayoutViewer's: its callbacks, or null for no train. A slider
   // replaces `weights` rather than writing into it: an object handed in as a prop
@@ -26,13 +26,14 @@
   // go no further.
   const max = table.maxWeight;
 
-  const METRICS = [
-    { name: 'knotted', label: 'Knotted', hint: 'knotted is better' },
-    { name: 'poses', label: 'Orientations', hint: 'more is better' },
-    { name: 'closeCalls', label: 'Close calls', hint: 'more is better' },
-    { name: 'repeats', label: 'Repeats', hint: 'fewer is better' },
-    { name: 'longestSide', label: 'Longest side', hint: 'shorter is better' },
-  ];
+  const HINTS = {
+    knotted: 'knotted is better',
+    poses: 'more is better',
+    closeCalls: 'more is better',
+    repeats: 'fewer is better',
+    longestSide: 'shorter is better',
+  };
+  const METRICS = Object.entries(LABELS).map(([name, label]) => ({ name, label, hint: HINTS[name] }));
 
   const ranked = $derived(ends(table, weights));
 

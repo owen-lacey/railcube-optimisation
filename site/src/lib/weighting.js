@@ -19,6 +19,9 @@
 
 export const DIRECTIONS = { knotted: 1, poses: 1, closeCalls: 1, repeats: -1, longestSide: -1 };
 
+/** Each metric's name on screen, in DIRECTIONS order. */
+export const LABELS = { knotted: 'Knotted', poses: 'Orientations', closeCalls: 'Close calls', repeats: 'Repeats', longestSide: 'Longest side' };
+
 const NAMES = Object.keys(DIRECTIONS);
 
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);

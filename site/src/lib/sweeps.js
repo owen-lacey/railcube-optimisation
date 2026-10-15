@@ -34,6 +34,7 @@ import sweep28 from './data/sweep-28.json' with { type: 'json' };
 import sweepCrossed from './data/sweep-crossed.json' with { type: 'json' };
 import sweepCrossedWeights from './data/sweep-crossed-weights.json' with { type: 'json' };
 import sweepCrossedRanked from './data/sweep-crossed-ranked.json' with { type: 'json' };
+import sweepCrossedSingles from './data/sweep-crossed-singles.json' with { type: 'json' };
 
 /** The 28-cube sweep: the question, the run, and every distinct layout it found. */
 export const SWEEP_28 = sweep28;
@@ -56,6 +57,13 @@ export const SWEEP_CROSSED_WEIGHTS = sweepCrossedWeights;
  * `scripts/rank-tracks.js` writes it.
  */
 export const SWEEP_CROSSED_RANKED = sweepCrossedRanked;
+
+/**
+ * The crossed sweep's best layout on each metric alone: one per metric `weighting.js`
+ * weighs, at that metric's best, and of those the lowest on the other four at equal
+ * weights. `scripts/single-metrics.js` writes it.
+ */
+export const SWEEP_CROSSED_SINGLES = sweepCrossedSingles;
 
 /** Every sweep the site carries, for anything that wants to iterate rather than name one. */
 export const SWEEPS = [SWEEP_28, SWEEP_CROSSED];
@@ -101,6 +109,7 @@ const KNOTS = new Map([
   ...sweepCrossedWeights.rows,
   ...sweepCrossedRanked.best,
   ...sweepCrossedRanked.worst,
+  ...sweepCrossedSingles.layouts,
 ].map(({ shape, knot }) => [shape, knot]));
 
 /** The stored knot of a crossed layout: 'unknot', 'trefoil', … Throws for a shape no file carries. */
