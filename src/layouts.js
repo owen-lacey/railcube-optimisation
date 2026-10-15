@@ -126,11 +126,31 @@ export function trackKey(shape) {
  * the loops always sum to its length, so only the split says anything.
  */
 export function loopsOf(placed) {
-  const at = placed.flatMap((piece, i) => (piece.type === 'cross' ? [i] : []));
-  if (at.length !== 2) return null;
+  const at = crossedAt(placed);
+  if (at === null) return null;
   const gap = at[1] - at[0];
   return [Math.min(gap, placed.length - gap), Math.max(gap, placed.length - gap)];
 }
+
+/**
+ * The two loops a crossing makes as the steps inside each, the cross's own passes
+ * left out: from just after its first pass to just before its second, then from
+ * just after its second round to just before its first. In route order, or null
+ * when nothing is crossed.
+ */
+export function halvesOf(placed) {
+  const at = crossedAt(placed);
+  if (at === null) return null;
+  const n = placed.length;
+  const between = (from, to) => Array.from({ length: (to - from - 1 + n) % n }, (_, k) => (from + 1 + k) % n);
+  return [between(at[0], at[1]), between(at[1], at[0])];
+}
+
+/** The steps a crossed cross is passed at, or null when nothing is crossed. */
+const crossedAt = placed => {
+  const at = placed.flatMap((piece, i) => (piece.type === 'cross' ? [i] : []));
+  return at.length === 2 ? at : null;
+};
 
 if (Object.keys(LETTER_OF).length !== PIECE_TYPES.length) {
   throw new Error('the letter table has drifted from the piece catalogue');

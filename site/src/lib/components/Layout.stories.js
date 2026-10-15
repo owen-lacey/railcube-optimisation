@@ -13,7 +13,7 @@
 // so it is simply drawn finished and driven.
 
 import LayoutViewer from './LayoutViewer.svelte';
-import { cellScene, axesScene, repeatsScene } from '$lib/scenes.js';
+import { cellScene, axesScene, repeatsScene, knotScene } from '$lib/scenes.js';
 
 // The transition's kind and dials are separate controls, put together here into
 // the one object LayoutViewer takes.
@@ -142,6 +142,19 @@ export const Repeats = {
       description: {
         story: 'Every run of three or more of a kind pulses between its own colour and a paler '
           + 'one, with a callout giving its length and what the repeats metric charges for it.',
+      },
+    },
+  },
+};
+
+export const KnotHalves = {
+  name: 'Knot halves',
+  args: { shape: 'ILIOIXIRSISSRISSSOSRRSOXSLLISSLSSOSI', scene: knotScene },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A trefoil. The two halves its crossing makes take turns being drawn paler, '
+          + 'a second each; the cross belongs to both, so it keeps its own colour.',
       },
     },
   },

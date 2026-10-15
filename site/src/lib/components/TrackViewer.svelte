@@ -101,9 +101,11 @@
     // it was asked to go and pulses there, whatever the transition — see `pulseFor`
     // in build.js. Read when a layout is shown.
     alarm = null,
-    // The IDs of cubes picked out — a repeat, say. Each keeps its own colour and
-    // pulses to a pale tint of it, on the alarm's period. Read when a layout is shown.
-    highlight = [],
+    // Cubes picked out, `{ groups, turn }`, or null: groups of cube IDs — a knot's
+    // halves, say — that take turns, `turn` seconds each, being drawn a pale tint of
+    // their own colour. A lone group pulses. See `marksOf` in build.js. Read when a
+    // layout is shown.
+    highlight = null,
   } = $props();
 
   // The settings a transition leaves out.
@@ -112,8 +114,8 @@
   // What a phase is told of the rejected piece. Held still for a reader who has
   // asked for reduced motion: a pulsing element is the whole of what that is about.
   const flagged = () => alarm && { id: alarm, pulse: !reduced };
-  // And of the picked-out pieces. Held pale for that reader.
-  const picked = () => (highlight.length ? { ids: highlight, pulse: !reduced } : null);
+  // And of the picked-out pieces. Held at the first group's turn for that reader.
+  const picked = () => highlight && { ...highlight, pulse: !reduced };
 
   // How long the collapse is simulated for at the outside.
   //

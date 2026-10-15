@@ -5,9 +5,9 @@
 // on them: a single piece and the pose gallery are catalogues, not tracks.
 
 import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step, SCORES } from '../../../src/track.js';
-import { routeOf, identify } from '../../../src/layouts.js';
+import { routeOf, identify, halvesOf } from '../../../src/layouts.js';
 import { repeatRuns } from '../../../src/metrics.js';
-import { COLORS, ALARM, CUBE } from './render/dimensions.js';
+import { COLORS, ALARM, ALARM_PERIOD, KNOT_TURN, CUBE } from './render/dimensions.js';
 import { DIR, toWorld, toCell, add } from './render/vec.js';
 import { CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT, describedZoom } from './render/camera.js';
 import { axisAnchor, labelSpots } from './render/axes.js';
@@ -140,13 +140,26 @@ export function repeatsScene(letters) {
     Array.from({ length }, (_, k) => (start + k) % scene.pieces.length));
   return {
     ...scene,
-    highlight: runs.flat().map(i => ids[i]).filter(id => id !== null),
+    highlight: { groups: [runs.flat().map(i => ids[i]).filter(id => id !== null)], turn: ALARM_PERIOD / 2 },
     notes: runs.map(run => ({
       key: `run ${run[0]}`,
       cell: trackCell(scene.pieces[run[Math.floor(run.length / 2)]]),
       lines: [[{ text: `${run.length} in a row · ${run.length - 2} repeats` }]],
     })),
   };
+}
+
+/**
+ * `layoutScene` with the two halves its crossing makes (`halvesOf`) picked out in
+ * turn, `KNOT_TURN` seconds each. The cross belongs to both, so it is in neither.
+ */
+export function knotScene(letters) {
+  const scene = layoutScene(letters);
+  if (!scene.closed) throw new Error(`${letters} is not a closed loop, so it has no halves`);
+  const halves = halvesOf(scene.pieces);
+  if (halves === null) throw new Error(`${letters} is not crossed, so it has no halves`);
+  const ids = cubeIds(scene.pieces);
+  return { ...scene, highlight: { groups: halves.map(half => half.map(i => ids[i])), turn: KNOT_TURN } };
 }
 
 /** A scene framed the way `layoutScene` frames one. */

@@ -339,18 +339,29 @@ const PALED = slot => [{ color: paler(slot.color) }, { color: slot.color }];
 
 /**
  * The cubes to pulse: `alarm`, `{ id, pulse }`, a rejected piece; `highlight`,
- * `{ ids, pulse }`, pieces picked out. Either may be null.
+ * `{ groups, turn, pulse }`, pieces picked out. Either may be null.
+ *
+ * The alarm's clock starts when its cube lands, and it flashes every half period.
+ * A highlight's groups take turns, `turn` seconds each, on the phase's own clock so
+ * a group stays in step however its cubes arrived: group k is pale in the k-th turn
+ * of every round. A round is never shorter than two turns, so a lone group pulses.
  */
 const marksOf = (alarm, highlight) => [
-  ...(alarm ? [{ id: alarm.id, pulse: alarm.pulse, looks: ALARMED }] : []),
-  ...(highlight ? highlight.ids.map(id => ({ id, pulse: highlight.pulse, looks: PALED })) : []),
+  ...(alarm ? [{
+    id: alarm.id, pulse: alarm.pulse, looks: ALARMED, sinceLanding: true,
+    lookAt: t => Math.floor(t / (ALARM_PERIOD / 2)) % 2,
+  }] : []),
+  ...(highlight ? highlight.groups.flatMap((ids, group) => ids.map(id => ({
+    id, pulse: highlight.pulse, looks: PALED, sinceLanding: false,
+    lookAt: t => (Math.floor(t / highlight.turn) % Math.max(highlight.groups.length, 2) === group ? 0 : 1),
+  }))) : []),
 ];
 
 /**
  * The marked pieces saying so, each from `from` of its slot on: a function of the
- * phase's clock that restyles a cube when its half of the pulse changes, and says
- * whether it still wants frames. A mark whose `pulse` is false is held at its first
- * look, which is what a reader who has asked for reduced motion gets.
+ * phase's clock that restyles a cube when its look changes, and says whether it
+ * still wants frames. A mark whose `pulse` is false is held at its look at the
+ * start, which is what a reader who has asked for reduced motion gets.
  *
  * Each phase runs its own, because a cube must only ever have one thing writing to
  * it in a frame — and the phase is what owns the cube.
@@ -361,7 +372,6 @@ function pulseFor(stage, slots, marks, from = () => 0) {
     return slot ? [{ ...mark, slot, starts: from(slot), lit: null }] : [];
   });
   if (!pulsing.length) return null;
-  const half = ALARM_PERIOD / 2;
   return elapsed => {
     let wanting = false;
     for (const mark of pulsing) {
@@ -369,7 +379,7 @@ function pulseFor(stage, slots, marks, from = () => 0) {
         wanting = true;
         continue;
       }
-      const want = mark.pulse && Math.floor((elapsed - mark.starts) / half) % 2 === 1 ? 1 : 0;
+      const want = mark.lookAt(mark.pulse ? elapsed - (mark.sinceLanding ? mark.starts : 0) : 0);
       if (want !== mark.lit) stage.cube(mark.slot.id, mark.slot).restyle(mark.looks(mark.slot)[want]);
       mark.lit = want;
       wanting ||= mark.pulse;

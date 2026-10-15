@@ -958,10 +958,15 @@ its transition. Four things about it:
   rather than by a phase of its own, so that exactly one thing ever writes to a cube in a
   frame — the same rule `onPickUp` exists to protect. Because any viewer can be handed one,
   every `TrackViewer` gates its loop on being on screen, not only one that animates at mount.
-- The same pulse picks pieces out without alarming: `TrackViewer`'s `highlight` (cube IDs)
-  keeps each piece solid and its own colour, pulsing to `HIGHLIGHT_MIX` of the way to white,
-  held pale under reduced motion. `repeatsScene` uses it for every run `repeatRuns`
-  (`src/metrics.js`) finds, with a callout per run — Owen's calls, for the post's repeats figure.
+- The same pulse picks pieces out without alarming: `TrackViewer`'s `highlight`,
+  `{ groups, turn }`, keeps each piece solid and its own colour, and the groups of cube IDs
+  take turns, `turn` seconds each, at `HIGHLIGHT_MIX` of the way to white. A round is never
+  under two turns, so a lone group pulses. Turns run on the phase's clock, not each cube's
+  landing, so a group stays in step through a build; under reduced motion the first group is
+  held pale. `repeatsScene` is one group, every run `repeatRuns` (`src/metrics.js`) finds, on
+  the alarm's beat, with a callout per run. `knotScene` is two, the halves a crossing makes
+  (`halvesOf` in `src/layouts.js`), `KNOT_TURN` (1 s) each, the cross in neither and no
+  callouts. Owen's calls, for the post's repeats and knots figures.
 - **Which step is at fault is not always which cube is.** A cross traversed a third time
   places nothing, so what flashes is the cross already in that cell. `openScene` handles
   that; `cubeIds` is `identify` with revisits kept as `null` so the two line up.

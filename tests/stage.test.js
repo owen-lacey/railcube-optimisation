@@ -27,7 +27,7 @@ import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js
 import { fadeInPhase, fadeOutPhase, overlayFadePhase, changingFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene, repeatsScene, frameFit, cornersOf } from '../site/src/lib/scenes.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene, repeatsScene, knotScene, frameFit, cornersOf } from '../site/src/lib/scenes.js';
 import { poseReadout, trackCell } from '../site/src/lib/catalogue.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
@@ -1129,16 +1129,18 @@ for (const [name, phaseOf] of Object.entries(HIGHLIGHTED)) {
     const clock = fakeClock();
     const { stage, handles } = staged();
     const view = repeatsScene(REPEATED);
-    assert.equal(view.highlight.length, 13);
+    const [picked] = view.highlight.groups;
+    assert.equal(view.highlight.groups.length, 1);
+    assert.equal(picked.length, 13);
     assert.deepEqual(view.notes.map(n => n.lines[0][0].text), ['7 in a row · 5 repeats', '6 in a row · 4 repeats']);
-    stage.run([phaseOf(stage, view.pieces, { ids: view.highlight, pulse: true })]);
+    stage.run([phaseOf(stage, view.pieces, { ...view.highlight, pulse: true })]);
     stage.start();
     clock.run(6);
 
     const ids = cubeIds(view.pieces);
     const colorOf = new Map(view.pieces.map((p, i) => [ids[i], p.color]));
-    const lit = view.highlight.map(id => stage.cubes.get(id));
-    const rest = [...stage.cubes.keys()].filter(id => !view.highlight.includes(id)).map(id => stage.cubes.get(id));
+    const lit = picked.map(id => stage.cubes.get(id));
+    const rest = [...stage.cubes.keys()].filter(id => !picked.includes(id)).map(id => stage.cubes.get(id));
     const train = name.startsWith('a driven') ? handles.at(-1) : null;
     assert.equal(train && handles.length, train && stage.cubes.size + 1, 'the train never set off');
     const writes = train?.transforms.length;
@@ -1166,14 +1168,61 @@ test('held still, highlighted pieces are pale, and the drawing finishes', () => 
   const clock = fakeClock();
   const { stage } = staged();
   const view = repeatsScene(REPEATED);
-  stage.run([trackPhase(stage, view.pieces, { drive: false, highlight: { ids: view.highlight, pulse: false } })]);
-  const cube = stage.cubes.get(view.highlight[0]);
+  stage.run([trackPhase(stage, view.pieces, { drive: false, highlight: { ...view.highlight, pulse: false } })]);
+  const cube = stage.cubes.get(view.highlight.groups[0][0]);
   const held = cube.mesh.mesh.geometry;
   stage.start();
   clock.run(ALARM_PERIOD * 2);
 
   assert.notEqual(cube.color, view.pieces.find(p => p.type === 'straight').color, 'it is not pale');
   assert.equal(cube.mesh.mesh.geometry, held, 'it was repainted');
+  assert.equal(clock.running(), false, 'a still drawing is asking for frames');
+});
+
+// A knot's halves take turns: in each turn one half is pale and the other its own
+// colour, and the cross, in both, is never repainted. The post's trefoil.
+const KNOTTED = 'ILIOIXIRSISSRISSSOSRRSOXSLLISSLSSOSI';
+
+/** Which of `ids` are drawn paler than their own colour. */
+const palerOf = (stage, view, ids) => {
+  const all = cubeIds(view.pieces);
+  const colorOf = new Map(view.pieces.map((p, i) => [all[i], p.color]));
+  return ids.filter(id => stage.cubes.get(id).color !== colorOf.get(id));
+};
+
+test('a knot\'s halves take turns being paler, and the cross is never repainted', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  const view = knotScene(KNOTTED);
+  const [a, b] = view.highlight.groups;
+  assert.deepEqual([a.length, b.length], [17, 17]);
+  stage.run([trackPhase(stage, view.pieces, { drive: false, highlight: { ...view.highlight, pulse: true } })]);
+  const cross = stage.cubes.get('1X');
+  const held = cross.mesh.mesh.geometry;
+  stage.start();
+
+  const { turn } = view.highlight;
+  for (let k = 0; k < 4; k += 1) {
+    clock.run(k === 0 ? turn / 2 : turn);
+    const [lit, unlit] = k % 2 === 0 ? [a, b] : [b, a];
+    assert.deepEqual(palerOf(stage, view, lit), lit, `turn ${k}: not every piece of its half is pale`);
+    assert.deepEqual(palerOf(stage, view, unlit), [], `turn ${k}: the other half is pale too`);
+    assert.equal(cross.mesh.mesh.geometry, held, `turn ${k}: the cross was repainted`);
+  }
+  assert.equal(clock.running(), true, 'the turns stopped');
+});
+
+test('held still, a knot\'s first half is pale and the second its own colour', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  const view = knotScene(KNOTTED);
+  const [a, b] = view.highlight.groups;
+  stage.run([trackPhase(stage, view.pieces, { drive: false, highlight: { ...view.highlight, pulse: false } })]);
+  stage.start();
+  clock.run(view.highlight.turn * 3);
+
+  assert.deepEqual(palerOf(stage, view, a), a);
+  assert.deepEqual(palerOf(stage, view, b), []);
   assert.equal(clock.running(), false, 'a still drawing is asking for frames');
 });
 

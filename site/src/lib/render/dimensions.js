@@ -84,6 +84,9 @@ export const ALARM_PERIOD = 0.9;  // seconds for a full dark-pale-dark cycle
 // own colour and this far towards white, so it still reads as its own type.
 export const HIGHLIGHT_MIX = 0.6;
 
+// Seconds each half of a knot stays picked out before the other takes its turn.
+export const KNOT_TURN = 1;
+
 // The piece it is drawn over shows through it. It lies exactly on top of whatever it
 // ran into, so it is swollen a little about its own middle — enough that the two
 // never share a face for the depth buffer to fight over — and drawn see-through, so

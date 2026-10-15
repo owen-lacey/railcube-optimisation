@@ -9,7 +9,7 @@
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
-	import { lengthsScene, repeatsScene } from "$lib/scenes.js";
+	import { knotScene, lengthsScene, repeatsScene } from "$lib/scenes.js";
 	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
 	import PieceTag from "$lib/components/PieceTag.svelte";
 </script>
@@ -67,8 +67,10 @@
 		> at Alton Towers. A layout that ties itself in knots gets bonus points in my
 		book.
 	</p>
-	<!-- TODO: Fix on this one. -->
-	<TrackFigure shape="ILIOIXIRSISSRISSSOSRRSOXSLLISSLSSOSI" />
+	<TrackFigure
+		shape="ILIOIXIRSISSRISSSOSRRSOXSLLISSLSSOSI"
+		scene={knotScene}
+	/>
 
 	<p>
 		All of the good layouts perform well on these five metics I mentioned:

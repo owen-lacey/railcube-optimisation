@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LAYOUTS, routeOf, shapeOf, identify, trackKey } from '../src/layouts.js';
+import { LAYOUTS, routeOf, shapeOf, identify, trackKey, halvesOf, loopsOf } from '../src/layouts.js';
 import { chainOpen, chainTrack, countPieces, POOLS, POOL_OF } from '../src/track.js';
 import { knotInput, knotOf, knotReader } from '../scripts/knot-curves.js';
 
@@ -150,4 +150,18 @@ test('every layout is the knot it says it is', async () => {
   } finally {
     await reader.close();
   }
+});
+
+test('a crossing\'s halves are every step but the cross, split where it is passed', () => {
+  // The post's knotted layout, and its shifts: the halves move with the route and
+  // always hold the loops' steps less the pass each loop ends on.
+  const knotted = 'ILIOIXIRSISSRISSSOSRRSOXSLLISSLSSOSI';
+  for (let i = 0; i < knotted.length; i += 1) {
+    const placed = chainTrack(routeOf(knotted.slice(i) + knotted.slice(0, i)));
+    const halves = halvesOf(placed);
+    const rest = placed.flatMap((p, k) => (p.type === 'cross' ? [] : [k]));
+    assert.deepEqual(halves.flat().sort((a, b) => a - b), rest, `shifted by ${i}`);
+    assert.deepEqual(halves.map(h => h.length + 1).sort((a, b) => a - b), loopsOf(placed), `shifted by ${i}`);
+  }
+  assert.equal(halvesOf(chainTrack(routeOf(LAYOUTS.set.shape))), null);
 });
