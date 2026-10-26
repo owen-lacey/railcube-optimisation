@@ -1,9 +1,11 @@
 <script>
-	// A stretch of the post told over one viewer. The viewer stays put in a box filling
-	// the top of the screen; the text runs through a band of fixed height reserved
-	// below it, so the two never overlap, and each paragraph changes what is in the
-	// box as it arrives. The box lets go once the last step has gone under it, so
-	// whatever follows the section arrives in the band and pushes the box away.
+	// A stretch of the post told over one viewer. On a narrow screen the viewer stays
+	// put in a box over the top half of the screen; the text runs through a band
+	// reserved below it, so the two never overlap, and each paragraph changes what is
+	// in the box as it arrives. The box lets go once the last step has gone under it,
+	// so whatever follows the section arrives in the band and pushes the box away. On
+	// a wide screen the section widens past the post's column, the box stands the
+	// screen's height on the right, and the text runs past it on the left.
 	//
 	// A step is `{ body, figure, props }`: `body` a snippet of prose, `figure` a figure
 	// component (see `$lib/figure.js`) and `props` its own — the same component, with
@@ -16,6 +18,7 @@
 	// once the page first scrolls, and stays gone.
 	import { onMount } from "svelte";
 	import { Tween, prefersReducedMotion } from "svelte/motion";
+	import { MediaQuery } from "svelte/reactivity";
 	import { cubicOut } from "svelte/easing";
 	import scrollama from "scrollama";
 	import LayoutViewer from "./LayoutViewer.svelte";
@@ -33,6 +36,8 @@
 	// in seconds.
 	const SETTLE = 0.3;
 	const WORDS = 0.4;
+	// Side by side from this width up; the same breakpoint as the stylesheet's.
+	const wide = new MediaQuery("min-width: 900px");
 
 	// `transition` is how one step's picture becomes the next's, a TrackViewer kind:
 	// `move` carries the cubes over while the camera pans; `steps` fades the old
@@ -75,17 +80,21 @@
 		shown = true;
 	}
 
-	// The band is tall enough for the tallest step to be read whole, clear of the fade:
-	// each step's prose is measured, so a narrow screen, where it wraps onto more
-	// lines, takes the room from the box rather than running off the bottom.
+	// The band is at least half the screen, and tall enough for the tallest step to be
+	// read whole, clear of the fade: each step's prose is measured, so a narrow screen,
+	// where it wraps onto more lines, takes the room from the box rather than running
+	// off the bottom.
 	let prose = $state([]);
 	const tallest = $derived(Math.max(0, ...prose.filter(Boolean)));
 
-	// A step is the one being read once its top is halfway down the band. The line is
-	// in pixels, measured off the stage, rather than a fraction of the viewport: a
-	// phone's address bar coming and going changes the one but not the other.
-	const line = () =>
-		`${Math.round((window.innerHeight + stage.offsetHeight) / 2)}px`;
+	// A step is the one being read once its top is halfway down the band, or down the
+	// screen when nothing is over the text. The line is in pixels, measured off the
+	// stage, rather than a fraction of the viewport: a phone's address bar coming and
+	// going changes the one but not the other.
+	const line = () => {
+		const over = wide.current ? 0 : stage.offsetHeight;
+		return `${Math.round((window.innerHeight + over) / 2)}px`;
+	};
 
 	// The title's O is the first step's track, and a page zooms from it into this
 	// section's viewer: `hold` hides the section while it does, `landing` says what
@@ -128,9 +137,10 @@
 	// Whether the page has scrolled since the section mounted, which the cue goes on.
 	let scrolled = $state(false);
 
-	// The band moves the line, and scrollama has to be told.
+	// The band and the layout move the line, and scrollama has to be told.
 	$effect(() => {
 		tallest;
+		wide.current;
 		scroller?.offset(line());
 	});
 
@@ -189,19 +199,21 @@
 				</LayoutViewer>
 			</div>
 		</div>
-		{#each steps as step, i}
-			<div class="step" bind:this={triggers[i]}>
-				<div class="prose" bind:clientHeight={prose[i]}>
-					{@render step.body()}
-					{#if step.cue}
-						<div class="cue" class:gone={scrolled}>
-							{step.cue}
-							<ChevronDown aria-hidden="true" />
-						</div>
-					{/if}
+		<div class="steps">
+			{#each steps as step, i}
+				<div class="step" bind:this={triggers[i]}>
+					<div class="prose" bind:clientHeight={prose[i]}>
+						{@render step.body()}
+						{#if step.cue}
+							<div class="cue" class:gone={scrolled}>
+								{step.cue}
+								<ChevronDown aria-hidden="true" />
+							</div>
+						{/if}
+					</div>
 				</div>
-			</div>
-		{/each}
+			{/each}
+		</div>
 	</div>
 </section>
 
@@ -213,6 +225,8 @@
 			12rem,
 			calc(var(--prose-height) + var(--fade-height) + var(--step-bottom))
 		);
+		/* Half the screen at most; less only when the band needs more than the other half. */
+		--stage-height: min(50svh, calc(100svh - var(--band-height)));
 
 		/* The fade goes with the box when it lets go, so whatever follows the section
 		   starts clear of it rather than under it. A margin, so a heading's own larger
@@ -262,7 +276,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 1;
-		height: calc(100svh - var(--band-height));
+		height: var(--stage-height);
 		padding: 0.75rem 0;
 		box-sizing: border-box;
 		background: var(--page);
@@ -315,9 +329,47 @@
 	/* A paragraph being read sits clear of the fade, and fades only once it moves
      on up towards the box. */
 	.step {
-		min-height: var(--band-height);
+		min-height: max(var(--band-height), calc(100svh - var(--stage-height)));
 		box-sizing: border-box;
 		padding: var(--fade-height) 0 var(--step-bottom);
+	}
+
+	/* Side by side: the section widens past the post's column, the box stands the
+	   screen's height on the right, and each step is centred beside it as it is read.
+	   Nothing passes under the box, so there is no fade. The breakpoint is `wide`'s. */
+	@media (min-width: 900px) {
+		.scrolly {
+			--wide: min(72rem, 100vw - 2.5rem);
+			margin-inline: calc((100% - var(--wide)) / 2);
+		}
+
+		.pinned {
+			display: grid;
+			grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
+			gap: 2.5rem;
+		}
+
+		.stage {
+			grid-area: 1 / 2;
+			height: 100svh;
+			align-self: start;
+		}
+
+		.steps {
+			grid-area: 1 / 1;
+		}
+
+		.stage::after {
+			display: none;
+		}
+
+		.step {
+			min-height: 100svh;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			padding: 0;
+		}
 	}
 
 	/* Holds its paragraphs' margins, so measuring it measures them too. */
