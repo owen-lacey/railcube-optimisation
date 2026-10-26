@@ -858,8 +858,9 @@ reason, which is exactly what the first render did until it was caught in a brow
 The post opens on a `StepSection`, its only one: one viewer and its prose filling one screen,
 stepped by back and forwards buttons or the left and right arrows (`claimKeys`), each step
 changing what the viewer shows. It replaced a scrollama scrolly section, on Owen's call. On a
-narrow screen the viewer is the top half (shrinking only if the text needs more than the
-rest), the prose under it, and the buttons sticky along the bottom; from 900px the section
+narrow screen the prose and buttons sit along the bottom at their own height (the tallest
+step's), and the viewer is square in the room left above them, centred down it (shorter
+than square only if that room is); from 900px the section
 widens past the post's column, the viewer stands the screen's height on the right, and the
 prose and buttons are centred on the left. Every step's prose sits in one grid cell with only
 the current one shown, so the text is always the tallest step's height and the buttons never

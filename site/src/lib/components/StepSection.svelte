@@ -2,7 +2,8 @@
 	// A stretch of the post told over one viewer, a step at a time. The reader steps
 	// through it with the back and forwards buttons, or the left and right arrows, and
 	// each step changes what is in the box. It fills one screen: on a narrow one the
-	// viewer is over the top half, the text under it and the buttons along the bottom;
+	// text and buttons sit along the bottom at their own height, and the viewer is
+	// square in the rest, centred down it;
 	// on a wide one the section widens past the post's column, the viewer stands the
 	// screen's height on the right, and the text and buttons are on the left.
 	//
@@ -54,9 +55,9 @@
 	// with the viewer showing and its border, dots and text about to fade in.
 	let held = $state(false);
 	let settling = $state(false);
-
 	// Fading away, once "All aboard!" is pressed.
 	let leaving = $state(false);
+
 	/** @type {import('$lib/figure.js').FigureView | undefined} */
 	let view = $state();
 	// How much of the footer is showing, 0 to 1: all of it when the step's figure has
@@ -157,10 +158,10 @@
 	class="stepped"
 	class:held
 	class:settling
-	bind:this={section}
 	class:leaving
-	style:--settle="{SETTLE}s"
+	bind:this={section}
 	ontransitionend={faded}
+	style:--settle="{SETTLE}s"
 	style:--words="{WORDS}s"
 >
 	<div class="stage" bind:this={stage}>
@@ -224,21 +225,21 @@
 </section>
 
 <style>
-	/* One screen: the viewer over the top half, shrinking only when the text needs
-	   more than the other half, and the buttons along the bottom. */
+	/* One screen: the text and buttons along the bottom at their own height, and the
+	   viewer square in what is left above them, centred down it. */
 	.stepped {
 		display: flex;
 		flex-direction: column;
 		height: 100svh;
 	}
 
-	.held {
 	.leaving {
 		opacity: 0;
 		pointer-events: none;
 		transition: opacity var(--words) ease-out;
 	}
 
+	.held {
 		visibility: hidden;
 	}
 
@@ -282,18 +283,25 @@
 
 	.settling :is(.steps, .nav) {
 		opacity: 0;
-	}
 		transform: translateY(var(--arrive-rise));
+	}
 
 	.stage {
-		flex: 0 1 50svh;
+		flex: 1 1 0;
 		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
 		padding: 0.75rem 0;
 		box-sizing: border-box;
 	}
 
+	/* Square, or as near as the room above the text allows. */
 	.box {
-		height: 100%;
+		width: 100%;
+		aspect-ratio: 1;
+		min-height: 0;
+		max-height: 100%;
 	}
 
 	/* Exactly the box, so a footer the viewer has grown over is pushed out of the
@@ -324,7 +332,7 @@
 	}
 
 	.text {
-		flex: 1 0 auto;
+		flex: 0 0 auto;
 		display: flex;
 		flex-direction: column;
 	}
@@ -409,6 +417,11 @@
 		.stage {
 			grid-area: 1 / 2;
 			height: 100svh;
+		}
+
+		.box {
+			height: 100%;
+			aspect-ratio: auto;
 		}
 
 		.text {
