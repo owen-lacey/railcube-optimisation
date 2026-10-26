@@ -885,7 +885,7 @@ the section and renders only its footer.
 - **`TrackViewer` re-shows on a new `train`**, even over the same pieces, because train
   callbacks are captured in `show()`. Without it a section's next step would drive the
   previous figure's train.
-- **The card is one size for every step.** A footer is a fixed `FOOTER` (6.5rem). A figure with
+- **The card is one size for every step.** A footer is a card's usual bar, measured, not a fixed height. A figure with
   no footer has no bar, and the viewer takes the whole card.
 - **`/post` opens on the `Splash`, not the section.** The `main:has(> .splash:first-child)`
   rule in `site/src/routes/+layout.svelte` drops the layout's top padding for the splash instead.

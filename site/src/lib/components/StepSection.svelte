@@ -32,9 +32,6 @@
 
 	// How long the camera takes to ease to a new step's frame, in seconds.
 	const PAN = 0.6;
-	// The footer's height, in rem: room for the tallest a figure has, a caption over
-	// a slider.
-	const FOOTER = 6.5;
 	// Landing, how long the card's border and dots take to fade in, and then the text,
 	// in seconds.
 	const SETTLE = 0.3;
@@ -51,6 +48,8 @@
 	let viewer = $state(null);
 	let width = $state(0);
 	let height = $state(0);
+	// The footer's own height, in CSS pixels, border included: a card's usual bar.
+	let footerHeight = $state(0);
 	// Out of sight with its train held, while the title zooms into it; then landing,
 	// with the viewer showing and its border, dots and text about to fade in.
 	let held = $state(false);
@@ -73,8 +72,7 @@
 	// is outside both.
 	const aspect = $derived.by(() => {
 		if (!width || !height) return undefined;
-		const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-		return `${width - 4} / ${height - 4 - footed.current * FOOTER * rem}`;
+		return `${width - 4} / ${height - 4 - footed.current * footerHeight}`;
 	});
 
 	function show(next, hasFooter) {
@@ -143,15 +141,24 @@
 		requestAnimationFrame(() => requestAnimationFrame(() => (settling = false)));
 	}
 
-	onMount(() =>
-		claimKeys(section, (event) => {
+	onMount(() => {
+		// The bar is always there, empty on a step without a footer, so it can be
+		// measured before any step needs it.
+		const footer = stage.querySelector(".footer");
+		const ro = new ResizeObserver(() => (footerHeight = footer.offsetHeight));
+		ro.observe(footer);
+		const release = claimKeys(section, (event) => {
 			if (held || leaving) return;
 			if (event.key === "ArrowLeft") back();
 			else if (event.key === "ArrowRight") forwards();
 			else return;
 			event.preventDefault();
-		})
-	);
+		});
+		return () => {
+			ro.disconnect();
+			release();
+		};
+	});
 </script>
 
 <section
@@ -168,7 +175,6 @@
 		<div
 			class="box"
 			class:footless={footed.target === 0}
-			style:--footer-height="{FOOTER}rem"
 			bind:clientWidth={width}
 			bind:clientHeight={height}
 		>
@@ -315,13 +321,6 @@
 		margin: 0;
 		height: 100%;
 		box-sizing: border-box;
-	}
-
-	/* Always the same height, whatever the step's figure puts in it. */
-	.box :global(.footer) {
-		height: var(--footer-height);
-		box-sizing: border-box;
-		align-content: center;
 	}
 
 	/* Full screen the viewer is laid out above the footer rather than over it, so a
