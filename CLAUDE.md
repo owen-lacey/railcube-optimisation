@@ -743,8 +743,8 @@ and `threejs-fidelity-spike` hold the measurements.
   the solids in the order lattice → fill by `renderOrder`; that matched PolyCSS to
   the pixel. The lattice stays prisms (`gridLines`), not `LineSegments`, which are one pixel
   wide at any zoom. Overlay meshes carry `OVERLAY` names so tests can find them.
-- **The blueprint** (`blueprint` prop: on by default in `LayoutViewer`, off in
-  `TrackViewer`, so piece cards never get it) is a sheet of isometric dots behind a
+- **The blueprint** (`blueprint` prop: off in `TrackViewer`, passed by every
+  `LayoutCard` figure, so piece cards and tiles never get it) is a sheet of isometric dots behind a
   viewer, edge to edge, so it is plain where the handle-able area begins and ends. It is
   a CSS background on `TrackViewer`, not in the scene: `stage.backdrop()` (`backdropOf`
   in `blueprint.js`) gives the spacing — a cell's edge at the applied zoom — and the

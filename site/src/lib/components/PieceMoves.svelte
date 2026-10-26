@@ -27,6 +27,7 @@
         grid={scene.grid}
         outlines={scene.outlines}
         {aspect}
+        blueprint
         label="The {piece.name.toLowerCase()}, with the cubes it starts and ends at outlined"
       />
     </Tabs.Content>

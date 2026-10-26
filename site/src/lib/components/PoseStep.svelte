@@ -61,6 +61,7 @@
 				outlines={scene.outlines}
 				{notes}
 				{aspect}
+				blueprint
 				label="The {piece.name.toLowerCase()} entered {describePose(
 					pose
 				)}, leaving the train {describePose(scene.after.pose)}"

@@ -30,6 +30,7 @@
 		origin={scene.origin}
 		ghosts={[poseGhost(pose)]}
 		{aspect}
+		blueprint
 		label="The train inside one cube, in each of its 24 orientations in turn"
 	/>
 </LayoutCard>
