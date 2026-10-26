@@ -235,7 +235,7 @@
    *
    * A new `train` shows it again even when the pieces are the same: its callbacks
    * are handed to the phase here, so a viewer whose figure changes under it (a
-   * scrolly section's next step) would otherwise keep driving the old one's.
+   * stepped section's next step) would otherwise keep driving the old one's.
    */
   function show(next) {
     const key = keyOf(next);

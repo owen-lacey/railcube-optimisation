@@ -828,10 +828,10 @@ as the cubes go, and one it brings fades in once they land (Owen's call, for eve
 marked `changing` in `TrackViewer`'s `arriving`, drawn on a paint of its own at
 `setChangingOpacity`'s share, which `--changing` carries to the callouts. Ghosts still go
 at once. The train comes back once everything has landed. It
-is what the scrolly section uses, with `pan`. `steps`: a layout for a new `step` is a new
+is what the stepped section uses, with `pan`. `steps`: a layout for a new `step` is a new
 picture — the old fades out where it stands, the camera cuts, and the new fades in a
 `piece.group` at a time (`render/fade.js`); within a step it is a move. The track
-generator's section asks for it (`ScrollySection`'s `transition`, Owen's call), so each
+generator's section asks for it (`StepSection`'s `transition`, Owen's call), so each
 step's left group fades in, then its right. A tumble is the only kind that imports
 `tumble.js`: that module reaches `cannon-es`, so it is loaded dynamically on mount, which
 keeps a physics engine out of a page of static piece cards — and out of `Sketch`, which
@@ -853,12 +853,19 @@ is free to hand over an equal-but-new array — either of which, compared by ref
 as a shape change. In sequencing mode that means the track knocking itself down for no
 reason, which is exactly what the first render did until it was caught in a browser.
 
-### Scrollytelling: `ScrollySection`
+### Stepping through: `StepSection`
 
-The post opens on a `ScrollySection` (scrollama), its only one: one viewer in a box stuck to the top of the
-screen, and the prose running through a fixed band below it, each paragraph changing what the
-box shows as it arrives. A step is `{ body, figure, props }` — a snippet of prose, and a figure
-component with its own props.
+The post opens on a `StepSection`, its only one: one viewer and its prose filling one screen,
+stepped by back and forwards buttons or the left and right arrows (`claimKeys`), each step
+changing what the viewer shows. It replaced a scrollama scrolly section, on Owen's call. On a
+narrow screen the viewer is the top half (shrinking only if the text needs more than the
+rest), the prose under it, and the buttons sticky along the bottom; from 900px the section
+widens past the post's column, the viewer stands the screen's height on the right, and the
+prose and buttons are centred on the left. Every step's prose sits in one grid cell with only
+the current one shown, so the text is always the tallest step's height and the buttons never
+move between steps — no measuring. On the last step forwards is **"All aboard!"**, which calls
+`onaboard`. A step is `{ body, figure, props }` — a snippet of prose, and a figure component
+with its own props.
 
 **A figure is the same component standalone or as a step** — Owen's call: being usable as a
 step must not change how a figure is written in the post, so nothing wraps one. The contract is
@@ -880,12 +887,8 @@ the section and renders only its footer.
   no footer has no bar, and the viewer takes the whole card.
 - **`/post` opens on the `Splash`, not the section.** The `main:has(> .splash:first-child)`
   rule in `site/src/routes/+layout.svelte` drops the layout's top padding for the splash instead.
-- Steps trigger at the middle of the band, measured in pixels off the stage
-  (`scroller.offset(...)`, scrollama 3.2's name for `offsetTrigger`), because a phone's address
-  bar changes the viewport but not the stage. The box stays pinned until the last step has
-  slid under it, so what follows the section (the post's next heading) pushes it away.
-- Synchronous `scrollTo` jumps do not fire scrollama. A CDP check has to scroll a little at a
-  time.
+- A CDP check of the arrows has to wait for the page to settle: a key sent before the
+  section's `IntersectionObserver` has reported is nobody's (see `keys.js`).
 - **Step prose is styled by the section, from tokens.** `--prose-size` and `--prose-leading`
   sit on the layout's `main`; `Chapter` and the step rule both read them. A snippet takes its
   scope from the file it is written in, so no one file's `<style>` can reach every chapter's
@@ -894,17 +897,20 @@ the section and renders only its footer.
 ### The post is chapters: `site/src/routes/post/`
 
 `+page.svelte` is only the sequence: the splash, `Opening` (the first section; it hands the
-page its `ScrollySection` through a bindable `scrolly`, for the zoom), `TitleZoom`, then one
+page its `StepSection` through a bindable `section`, for the zoom), `TitleZoom`, then one
 file per chapter (`Coordinates`, `TrackBuilding`, `Optimising`, `AuthorNotes`), each a
 `Chapter` — a `<section>` with an id, carrying the post's prose typography. The prose in them
-is Owen's notes.md, word for word. Every chapter is rendered, under the splash too.
+is Owen's notes.md, word for word.
 
-**The splash is the post's only gate, and the opening its only scrolly section** — Owen's
-call: chapter gates and later scrolly sections were removed as bad UX, so past the opening
-the post is plain prose and standalone figures. `Gate` (`$lib/components/`) is the splash's
-">": pressed, or sent the right arrow while it is mostly in view (`claimKeys`, so it never
-fights a builder's keys), it calls `onleave`, fades (`FADE`, 0.4 s) and then `onopen` — at
-once under reduced motion. The page tracks only whether the splash is `passed`.
+**Two gates: the splash, then the opening's "All aboard!"** — Owen's calls. Chapter gates and
+later sections like the opening were removed as bad UX, so past the opening the post is plain
+prose and standalone figures. The chapters are not rendered until "All aboard!" is pressed
+(`aboard`); until then the section is `locked` and the layout holds the page to one screen,
+as it does for the splash. Pressed, the chapters mount and the page smooth-scrolls to
+`#coordinates`, the opening left above; pressing it again scrolls there again. `Gate`
+(`$lib/components/`) is the splash's "Start" button, its corners and fill the same as the viewer's tool buttons: pressed, or sent the right arrow while it is mostly
+in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, fades (`FADE`,
+0.4 s) and then `onopen` — at once under reduced motion.
 
 ### The title: `Splash`
 
@@ -928,7 +934,7 @@ is there at once.
   cubes tall. `tests/letters.test.js` reads every PNG's header against the table.
 - **The heading is text.** The `<h1>` holds "Optimising the Rail Cube" visually hidden, and
   the letters are `aria-hidden` with empty `alt`, so a screen reader hears one heading.
-- **A ">" button sends it away, and so does the right arrow, by zooming into the O.** The
+- **A "Start" button sends it away, and so does the right arrow, by zooming into the O.** The
   O is the post's first track, `SIOSLLSOISLL`, snapped from above unturned (`O_TRACK` in
   `letters.js`, its outline under test). Every other letter and the button (a `Gate`) fade (0.4 s),
   and `onnext` is handed the O's box on screen. `/post` mounts `TitleZoom` there — a
@@ -953,7 +959,7 @@ is there at once.
   pull-to-refresh with it. A page that cannot scroll also makes a reload land on the
   splash at the top, whatever scroll SvelteKit restores. Under reduced motion there is no zoom: the splash goes and the
   page is at the top at once. `TitleZoom` sits after the section in the page so that,
-  once the splash is gone, the scrolly is `main`'s first child, which is why the layout's
+  once the splash is gone, the stepped section is `main`'s first child, which is why the layout's
   no-top-padding rule matches either.
 - **The fade's end is read off the gate's own transition.** The title's 0.8 s fade-in is on
   the wrapper round the gate, not the gate: an animation filled `both` holds its element's

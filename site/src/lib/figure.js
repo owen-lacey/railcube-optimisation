@@ -2,7 +2,7 @@
 //
 // A figure (TrackFigure, TrainCoordinates, KnownTracks) draws through `Frame`,
 // handing it a `view` — what to draw — and a `footer`, its caption and controls.
-// Used on its own, the Frame is a card and a viewer of its own. Used as a scrolly
+// Used on its own, the Frame is a card and a viewer of its own. Used as a stepped
 // section's step, it is hosted: the section owns the one viewer every step shares,
 // and the Frame hands it the view and renders only the footer. So a figure is used
 // the same way either side, and a section changes only the footer between steps.

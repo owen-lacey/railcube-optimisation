@@ -1,7 +1,7 @@
 <script>
 	// The poses a layout takes, ticked off as the train drives it: a slider for which
 	// piece it is on, and the 24 poses as chips underneath. A figure — see
-	// `$lib/figure.js`. Standalone only: its footer is taller than a scrolly
+	// `$lib/figure.js`. Standalone only: its footer is taller than a stepped
 	// section's.
 	import Frame from "./Frame.svelte";
 	import PoseChips from "./PoseChips.svelte";

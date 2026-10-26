@@ -6,17 +6,16 @@
 	// first draft and is not to be edited here.
 	import Highlight from "$lib/components/Highlight.svelte";
 	import KnownTracks from "$lib/components/KnownTracks.svelte";
-	import ScrollySection from "$lib/components/ScrollySection.svelte";
+	import StepSection from "$lib/components/StepSection.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 
-	let { scrolly = $bindable() } = $props();
+	let { section = $bindable(), locked, onaboard } = $props();
 
 	const steps = [
 		{
 			body: intro,
 			figure: TrackFigure,
-			props: { shape: "SIOSLLSOISLL" },
-			cue: "Scroll down"
+			props: { shape: "SIOSLLSOISLL" }
 		},
 		{
 			body: instead,
@@ -64,4 +63,4 @@
 	</p>
 {/snippet}
 
-<ScrollySection bind:this={scrolly} {steps} />
+<StepSection bind:this={section} {steps} {locked} {onaboard} />

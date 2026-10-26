@@ -1,7 +1,7 @@
 <script>
 	// A chapter of the post: a section, under its own heading, and the post's prose
 	// typography for whatever the chapter writes directly. Prose inside a figure or a
-	// scrolly section's steps is styled where it is laid out.
+	// stepped section's steps is styled where it is laid out.
 	let { id, children } = $props();
 </script>
 

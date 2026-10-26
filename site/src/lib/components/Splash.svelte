@@ -132,7 +132,7 @@
 	{#if landed}
 		<div class="next">
 			<Gate
-				label="Start reading"
+				label="Start"
 				onleave={() => (leaving = true)}
 				onopen={next}
 			/>

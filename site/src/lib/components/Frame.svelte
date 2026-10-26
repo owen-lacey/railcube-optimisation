@@ -1,7 +1,7 @@
 <script>
   // What a figure draws through: the view it wants drawn and its footer. On its own
   // that is a card and a viewer of its own, which can be handled; hosted by a
-  // scrolly section, the section draws the view and this is only the footer. See
+  // stepped section, the section draws the view and this is only the footer. See
   // `$lib/figure.js`.
   import { getContext } from 'svelte';
   import LayoutViewer from './LayoutViewer.svelte';

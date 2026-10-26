@@ -4,8 +4,8 @@
 </script>
 
 <script>
-	// The post's ">": the only way on past a point the reader cannot scroll beyond.
-	// The splash ends on one, and so does any chapter the next is held behind.
+	// A button reading `label`: the only way on past a point the reader cannot scroll
+	// beyond. The splash ends on one, reading "Start".
 	//
 	// Pressed, or sent the right arrow while it is mostly in view, it says so through
 	// `onleave`, fades, and then hands over through `onopen` — at once under reduced
@@ -14,7 +14,6 @@
 	// It has no fade-in of its own: an animation filled `both` holds its opacity, and
 	// the fade's end is read off this element's own transition.
 	import { onMount } from "svelte";
-	import ChevronRight from "@lucide/svelte/icons/chevron-right";
 	import { claimKeys } from "$lib/keys.js";
 
 	let { label, onleave = () => {}, onopen } = $props();
@@ -55,25 +54,30 @@
 	bind:this={button}
 	onclick={leave}
 	ontransitionend={faded}
-	aria-label={label}
-	title={label}
 	style:--fade="{FADE}s"
 >
-	<ChevronRight aria-hidden="true" />
+	{label}
 </button>
 
 <style>
 	button {
+		/* Outlined and rounded like the viewer's tool buttons and the opening's. */
 		display: grid;
 		place-items: center;
-		width: 44px;
 		height: 44px;
-		padding: 0;
+		padding: 0 2rem;
 		border: 2px solid var(--card-border);
-		border-radius: 50%;
-		background: var(--page);
+		border-radius: 0.5rem;
+		background: var(--card-footer);
 		color: var(--ink);
+		font: inherit;
+		font-weight: 600;
 		cursor: pointer;
+		transition: background-color 0.15s ease-out;
+	}
+
+	button:active {
+		background: var(--card-border);
 	}
 
 	.leaving {
