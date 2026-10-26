@@ -9,7 +9,7 @@
 	import StepSection from "$lib/components/StepSection.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 
-	let { section = $bindable(), locked, onaboard } = $props();
+	let { section = $bindable(), onaboard } = $props();
 
 	const steps = [
 		{
@@ -63,4 +63,4 @@
 	</p>
 {/snippet}
 
-<StepSection bind:this={section} {steps} {locked} {onaboard} />
+<StepSection bind:this={section} {steps} {onaboard} />

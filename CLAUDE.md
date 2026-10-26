@@ -863,8 +863,9 @@ rest), the prose under it, and the buttons sticky along the bottom; from 900px t
 widens past the post's column, the viewer stands the screen's height on the right, and the
 prose and buttons are centred on the left. Every step's prose sits in one grid cell with only
 the current one shown, so the text is always the tallest step's height and the buttons never
-move between steps — no measuring. On the last step forwards is **"All aboard!"**, which calls
-`onaboard`. A step is `{ body, figure, props }` — a snippet of prose, and a figure component
+move between steps — no measuring. On the last step forwards is **"All aboard!"**, which fades
+the section out (`--words`, 0.4 s; at once under reduced motion) and then calls `onaboard`.
+While a stepped section is up the layout holds the page to one screen. A step is `{ body, figure, props }` — a snippet of prose, and a figure component
 with its own props.
 
 **A figure is the same component standalone or as a step** — Owen's call: being usable as a
@@ -904,10 +905,10 @@ is Owen's notes.md, word for word.
 
 **Two gates: the splash, then the opening's "All aboard!"** — Owen's calls. Chapter gates and
 later sections like the opening were removed as bad UX, so past the opening the post is plain
-prose and standalone figures. The chapters are not rendered until "All aboard!" is pressed
-(`aboard`); until then the section is `locked` and the layout holds the page to one screen,
-as it does for the splash. Pressed, the chapters mount and the page smooth-scrolls to
-`#coordinates`, the opening left above; pressing it again scrolls there again. `Gate`
+prose and standalone figures. "All aboard!" is a second splash: pressed, the opening fades
+and is *replaced* by the chapters (`aboard`), the page at the top — not scrolled down to them
+with the opening left above, which Owen tried and rejected. Until then the chapters are not
+rendered, and the page is held to the opening's one screen as it is to the splash's. `Gate`
 (`$lib/components/`) is the splash's "Start" button, its corners and fill the same as the viewer's tool buttons: pressed, or sent the right arrow while it is mostly
 in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, fades (`FADE`,
 0.4 s) and then `onopen` — at once under reduced motion.

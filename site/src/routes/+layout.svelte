@@ -35,11 +35,11 @@
     padding-top: 0;
   }
 
-  /* While the splash, or a locked stepped section, is up the page is one screen
-     tall, so its buttons and the arrows are the only ways on. The rest is clipped
-     rather than the page's scrolling turned off, which would take pull-to-refresh
-     with it, and only downwards, so the splash can still reach the screen's edges. */
-  main:has(> :global(:is(.splash, .stepped.locked))) {
+  /* While the splash or a stepped section is up the page is one screen tall, so
+     its buttons and the arrows are the only ways on. The rest is clipped rather
+     than the page's scrolling turned off, which would take pull-to-refresh with
+     it, and only downwards, so the splash can still reach the screen's edges. */
+  main:has(> :global(:is(.splash, .stepped))) {
     height: 100svh;
     padding-bottom: 0;
     overflow: visible clip;

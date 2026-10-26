@@ -1,8 +1,8 @@
 <script>
 	// The post, chapter by chapter. The splash is a gate: the reader is held on it
 	// until they choose to go on. The opening stays mounted under it, because the
-	// title zooms into its viewer. The opening is the second gate: the chapters are
-	// only there once its "All aboard!" is pressed.
+	// title zooms into its viewer. The opening is the second gate: its "All aboard!"
+	// replaces it with the chapters, from the top.
 	import Splash from "$lib/components/Splash.svelte";
 	import TitleZoom from "$lib/components/TitleZoom.svelte";
 	import Opening from "./Opening.svelte";
@@ -48,9 +48,7 @@
 	async function board() {
 		aboard = true;
 		await tick();
-		document
-			.getElementById("coordinates")
-			.scrollIntoView({ behavior: reduced() ? "instant" : "smooth" });
+		window.scrollTo(0, 0);
 	}
 </script>
 
@@ -62,7 +60,9 @@
 	<Splash onnext={open} />
 {/if}
 
-<Opening bind:section={opening} locked={!aboard} onaboard={board} />
+{#if !aboard}
+	<Opening bind:section={opening} onaboard={board} />
+{/if}
 
 <!-- After the opening, so its section is still the page's first child once the
      splash has gone (see the layout's padding rule). -->

@@ -34,6 +34,11 @@ html {
 
   /* Under the title's words as they fall onto the page. */
   --drop-shadow: rgb(0 0 0 / 0.45);
+
+  /* Text arriving is faded up from this far below, one block after another this
+     far apart: the opening's prose and buttons, and a chapter's heading and body. */
+  --arrive-rise: 1.5rem;
+  --arrive-stagger: 0.2s;
 }
 
 body {

@@ -15,7 +15,9 @@
 	// the section's and is never remounted, a step change swaps only the figure's
 	// footer, and the camera eases to the new step's frame.
 	//
-	// On the last step, forwards is "All aboard!", which calls `onaboard`.
+	// On the last step, forwards is "All aboard!": the section fades away, then calls
+	// `onaboard` — at once under reduced motion. Removing it is the page's business.
+	// Until then the layout holds the page to this one screen.
 	import { onMount } from "svelte";
 	import { Tween, prefersReducedMotion } from "svelte/motion";
 	import { cubicOut } from "svelte/easing";
@@ -40,9 +42,7 @@
 	// `transition` is how one step's picture becomes the next's, a TrackViewer kind:
 	// `move` carries the cubes over while the camera pans; `steps` fades the old
 	// picture out and the new one in, a group at a time, and moves only within a step.
-	// `locked` marks the section as the page's last screen, which the layout holds the
-	// page to.
-	let { steps = [], transition = "move", onaboard, locked = false } = $props();
+	let { steps = [], transition = "move", onaboard } = $props();
 
 	let active = $state(0);
 	let section = $state();
@@ -55,6 +55,8 @@
 	let held = $state(false);
 	let settling = $state(false);
 
+	// Fading away, once "All aboard!" is pressed.
+	let leaving = $state(false);
 	/** @type {import('$lib/figure.js').FigureView | undefined} */
 	let view = $state();
 	// How much of the footer is showing, 0 to 1: all of it when the step's figure has
@@ -87,8 +89,13 @@
 	}
 
 	function forwards() {
-		if (last) onaboard();
-		else active += 1;
+		if (!last) active += 1;
+		else if (prefersReducedMotion.current) onaboard();
+		else leaving = true;
+	}
+
+	function faded(event) {
+		if (event.target === section && event.propertyName === "opacity") onaboard();
 	}
 
 	// The title's O is the first step's track, and a page zooms from it into this
@@ -137,7 +144,7 @@
 
 	onMount(() =>
 		claimKeys(section, (event) => {
-			if (held) return;
+			if (held || leaving) return;
 			if (event.key === "ArrowLeft") back();
 			else if (event.key === "ArrowRight") forwards();
 			else return;
@@ -148,11 +155,12 @@
 
 <section
 	class="stepped"
-	class:locked
 	class:held
 	class:settling
 	bind:this={section}
+	class:leaving
 	style:--settle="{SETTLE}s"
+	ontransitionend={faded}
 	style:--words="{WORDS}s"
 >
 	<div class="stage" bind:this={stage}>
@@ -225,6 +233,12 @@
 	}
 
 	.held {
+	.leaving {
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--words) ease-out;
+	}
+
 		visibility: hidden;
 	}
 
@@ -240,8 +254,21 @@
 			background-color var(--settle) ease-out;
 	}
 
-	.text {
-		transition: opacity var(--words) ease-out var(--settle);
+	/* The prose, then the buttons, each faded up from a little below, as a chapter's
+	   heading and then its body arrive. */
+	.steps,
+	.nav {
+		transition:
+			opacity var(--words) ease-out var(--delay),
+			transform var(--words) ease-out var(--delay);
+	}
+
+	.steps {
+		--delay: var(--settle);
+	}
+
+	.nav {
+		--delay: calc(var(--settle) + var(--arrive-stagger));
 	}
 
 	.settling .box :global(.card) {
@@ -253,9 +280,10 @@
 		background-color: transparent;
 	}
 
-	.settling .text {
+	.settling :is(.steps, .nav) {
 		opacity: 0;
 	}
+		transform: translateY(var(--arrive-rise));
 
 	.stage {
 		flex: 0 1 50svh;
