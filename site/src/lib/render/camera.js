@@ -9,6 +9,7 @@
 // It is `stage.js` that binds it, exactly once per viewer.
 
 import { Matrix4, Vector3 } from 'three';
+import { growEase } from '../grow.js';
 
 // Every camera in the scene catalogue — the auto-framed ones and the hand-tuned
 // ones alike — was calibrated against the old spike's fixed 900px-wide canvas.
@@ -94,34 +95,85 @@ export function describedZoom(pixelsPerUnit, width, height) {
   return pixelsPerUnit / ((fit / REFERENCE_WIDTH) * MARGIN);
 }
 
+// The viewer's own buttons, in its right-hand corners. Unlike a box a host lays
+// over the viewer, a button is cleared by the shot's own frame — the reference
+// 9:7 it is described in, at the margin — not by the region around it: the frame
+// slides the way it has room to, and is drawn smaller only if that is not enough.
+// On a region wider than the frame that is to the left, beside them; on a
+// narrower one, up or down, past them.
+const BUTTONS = new Set(['top-right', 'bottom-right']);
+const RATIO = REFERENCE_WIDTH / REFERENCE_HEIGHT;
+
 /**
  * The part of a `width`×`height` viewer a shot is framed in, `{ left, top, width,
- * height }` in CSS pixels: all of it, or, with `reserved` (`{ width, height }`, a
- * box that something is laid over), the band clear of it. A box in the top left
- * leaves the band beside it or the band under it — whichever a shot fits in
- * larger. A box along the bottom edge (`edge: 'bottom'`, its `height` measured
- * up from that edge) leaves the band above it.
+ * height }` in CSS pixels: all of it, or the part clear of `boxes`, things laid
+ * over it — `{ edge, width, height }` each, one to an edge. A box in the top left
+ * is cleared by the band beside it or the band under it; a box along the bottom
+ * (`edge` 'bottom', its `height` measured up from that edge) by the band above it.
+ * A button in a right-hand corner ('top-right', 'bottom-right') is cleared by the
+ * shot's frame standing beside it or past it. `choice` says which, for the
+ * top-left box and for the buttons: by default `bandFor`'s.
  */
-export function freeRegion(width, height, reserved, side = bandFor(width, height, reserved)) {
-  const whole = { left: 0, top: 0, width, height };
-  if (!reserved) return whole;
-  const bands = {
-    beside: { left: reserved.width, top: 0, width: width - reserved.width, height },
-    under: { left: 0, top: reserved.height, width, height: height - reserved.height },
-    above: { left: 0, top: 0, width, height: height - reserved.height },
-  };
-  return bands[side];
+export function freeRegion(width, height, boxes = [], choice = bandFor(width, height, boxes)) {
+  let [left, top, bottom] = [0, 0, height];
+  const under = choice['top-left'] === 'under';
+  for (const box of boxes) {
+    if (box.edge === 'bottom') bottom = Math.min(bottom, height - box.height);
+    if (box.edge === 'top-left' && under) top = Math.max(top, box.height);
+    if (box.edge === 'top-left' && !under) left = Math.max(left, box.width);
+  }
+  const region = { left, top, width: width - left, height: bottom - top };
+  return clearOfButtons(region, boxes.filter(box => BUTTONS.has(box.edge)), choice, width, height);
+}
+
+const nearest = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+/**
+ * `region` moved and, if it must be, drawn smaller, so that the frame a shot in it
+ * is described in reaches none of `buttons`: the largest frame that fits beside or
+ * past each, as `choice` says, as near the region's middle as it can be.
+ */
+function clearOfButtons(region, buttons, choice, width, height) {
+  const frameW = Math.min(region.width, region.height * RATIO) * MARGIN;
+  const frameH = frameW / RATIO;
+  let [left, right, top, bottom] = [region.left, region.left + region.width, region.top, region.top + region.height];
+  for (const box of buttons) {
+    if (choice.buttons !== 'past') right = Math.min(right, width - box.width);
+    else if (box.edge === 'top-right') top = Math.max(top, box.height);
+    else bottom = Math.min(bottom, height - box.height);
+  }
+  const scale = Math.max(0, Math.min(1, (right - left) / frameW, (bottom - top) / frameH));
+  const [halfW, halfH] = [scale * frameW / 2, scale * frameH / 2];
+  const cx = nearest(region.left + region.width / 2, left + halfW, right - halfW);
+  const cy = nearest(region.top + region.height / 2, top + halfH, bottom - halfH);
+  const [w, h] = [region.width * scale, region.height * scale];
+  return { left: cx - w / 2, top: cy - h / 2, width: w, height: h };
 }
 
 /**
- * Which band `freeRegion` frames in when not told: for a box in the top left,
- * 'beside' it or 'under' it; for one along the bottom, 'above' it.
+ * How `freeRegion` clears the boxes when not told, `{ 'top-left': 'beside' |
+ * 'under', buttons: 'beside' | 'past' }`: the top-left box by whichever band draws
+ * a shot larger, beside winning a tie; the buttons the way the frame has room to
+ * slide in what that leaves.
  */
-export function bandFor(width, height, reserved) {
-  if (!reserved) return 'beside';
-  if (reserved.edge === 'bottom') return 'above';
-  const fit = (w, h) => Math.min(w, h * (REFERENCE_WIDTH / REFERENCE_HEIGHT));
-  return fit(width - reserved.width, height) >= fit(width, height - reserved.height) ? 'beside' : 'under';
+export function bandFor(width, height, boxes = []) {
+  // Only what is there is chosen for: a box that arrives is not a change of mind.
+  const top = boxes.find(box => box.edge === 'top-left');
+  const buttons = boxes.some(box => BUTTONS.has(box.edge));
+  const bottom = boxes.find(box => box.edge === 'bottom')?.height ?? 0;
+  const choices = (top ? ['beside', 'under'] : [null]).map(side => {
+    const across = side === 'beside' ? width - top.width : width;
+    const down = height - bottom - (side === 'under' ? top.height : 0);
+    return {
+      ...(side && { 'top-left': side }),
+      ...(buttons && { buttons: across / down > RATIO ? 'beside' : 'past' }),
+    };
+  });
+  const fit = choice => {
+    const region = freeRegion(width, height, boxes, choice);
+    return Math.min(region.width, region.height * RATIO);
+  };
+  return choices.reduce((best, choice) => (fit(choice) > fit(best) + 1e-9 ? choice : best));
 }
 
 /**
@@ -237,29 +289,60 @@ export function polyView(camera, description, width, height, region = freeRegion
  * Bind camera handling to a three camera. `size()` is the viewer's size in CSS
  * pixels, read afresh on every application; `onApply` is told after each one.
  */
-export function createCamera(camera, size, onApply) {
+export function createCamera(camera, size, onApply, { onBlend, instant = false } = {}) {
   let described = {};
   let view = null;
-  let reserved = null;
-  let share = 1;
-  let side = 'beside';
+  let reserved = [];
+  let choice = null;
+  // The region last framed in, as shares of the viewer, and — while shots ease from
+  // one way of clearing the boxes to another — where the ease set off from, in the
+  // same shares, and how much of it is left, 1 to 0.
+  let shown = null;
+  let leaving = null;
 
   /**
    * The part of the viewer shots are framed in now: the region clear of the
-   * reserved box, `share` of the way there from the whole viewer — see `freeRegion`.
+   * reserved boxes, each `share` of the way to clear of it from not at all — see
+   * `freeRegion`. A box part way is cleared as if it were that share of its size.
    *
-   * The band is chosen afresh only while shots are wholly clear of the box. Part
-   * way, it is the one they are easing from or to: a card growing to full screen
-   * changes shape as it goes, and the band it fits better would flip mid-ease and
-   * jump the track across.
+   * The way each box is cleared is chosen afresh every time, and when the best way
+   * changes — a card growing to full screen changes shape as it goes — shots ease
+   * over to it rather than jumping (`onBlend` is told, and `stepBlend` moves it
+   * on), or go at once when `instant`. An ease sets off from wherever shots are
+   * framed, so a change part way through another turns it without a jump. A box
+   * new to the choice is not a change.
    */
   function region() {
     const { width, height } = size();
     const [w, h] = [width || REFERENCE_WIDTH, height || REFERENCE_HEIGHT];
-    if (share === 1) side = bandFor(w, h, reserved);
-    const whole = freeRegion(w, h);
-    const clear = freeRegion(w, h, reserved, side);
-    return Object.fromEntries(Object.keys(whole).map(k => [k, whole[k] + (clear[k] - whole[k]) * share]));
+    const boxes = reserved.filter(box => box.share > 0)
+      .map(({ edge, width: bw, height: bh, share }) => ({ edge, width: bw * share, height: bh * share }));
+    choose(bandFor(w, h, boxes));
+    const to = freeRegion(w, h, boxes, choice);
+    const t = leaving ? growEase(1 - leaving.left) : 1;
+    const from = leaving && { left: leaving.from.left * w, top: leaving.from.top * h, width: leaving.from.width * w, height: leaving.from.height * h };
+    const now = leaving ? Object.fromEntries(Object.keys(to).map(k => [k, from[k] + (to[k] - from[k]) * t])) : to;
+    shown = { left: now.left / w, top: now.top / h, width: now.width / w, height: now.height / h };
+    return now;
+  }
+
+  /** Take `best` as the way to clear the boxes, easing over to it from where shots are if it is a change. */
+  function choose(best) {
+    const change = choice && shown && Object.keys(best).some(edge => edge in choice && best[edge] !== choice[edge]);
+    if (change && !instant) {
+      leaving = { from: shown, left: 1 };
+      onBlend?.();
+    }
+    choice = best;
+  }
+
+  /** Move an ease between ways of clearing on by `part` of its length; say if one is still under way. */
+  function stepBlend(part) {
+    if (!leaving) return false;
+    leaving.left = Math.max(0, leaving.left - part);
+    if (leaving.left === 0) leaving = null;
+    applyCamera();
+    return Boolean(leaving);
   }
   let applied = { ...CAMERA, zoom: appliedZoom(CAMERA.zoom, REFERENCE_WIDTH, REFERENCE_HEIGHT) };
 
@@ -274,15 +357,13 @@ export function createCamera(camera, size, onApply) {
   }
 
   /**
-   * Keep shots clear of a box in the viewer's top left, `{ width, height }` in CSS
-   * pixels, or along the bottom, `{ edge: 'bottom', width, height }` (see
-   * `freeRegion`), or null to frame them in the whole viewer. `part` (0–1) frames them
-   * that share of the way from the whole viewer to clear of the box, so a stage
-   * can ease between the two.
+   * Keep shots clear of boxes laid over the viewer, `{ edge, width, height, share }`
+   * each in CSS pixels (see `freeRegion`); none frames them in the whole viewer.
+   * `share` (0–1) frames them that share of the way from not clearing the box to
+   * clearing it, so a stage can ease between the two.
    */
-  function reserve(box, part = 1) {
-    reserved = box;
-    share = part;
+  function reserve(boxes) {
+    reserved = boxes;
     applyCamera();
   }
 
@@ -304,8 +385,17 @@ export function createCamera(camera, size, onApply) {
    */
   const currentView = () => view ?? untouched();
 
-  /** Put a hand-moved view on the camera. */
+  /**
+   * Put a hand-moved view on the camera. One that changes nothing — a tap, a
+   * gesture that never moved — leaves the camera untouched.
+   */
   function adjust(next) {
+    const now = currentView();
+    // The turn the same way round: a drag that never moved still writes it in 0–360.
+    const turned = (((next.rotY - now.rotY) % 360) + 360) % 360;
+    const same = next.rotX === now.rotX && Math.min(turned, 360 - turned) < 1e-9 && next.zoomBy === now.zoomBy
+      && next.offset.every((v, a) => v === now.offset[a]);
+    if (same) return;
     view = next;
     applyCamera();
   }
@@ -317,7 +407,7 @@ export function createCamera(camera, size, onApply) {
   }
 
   return {
-    frameTo, applyCamera, reserve, region, view: currentView, untouched, adjust, reset, touched: () => view !== null,
+    frameTo, applyCamera, reserve, region, stepBlend, view: currentView, untouched, adjust, reset, touched: () => view !== null,
     applied: () => applied,
   };
 }

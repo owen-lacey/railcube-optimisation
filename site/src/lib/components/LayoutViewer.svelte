@@ -2,9 +2,8 @@
   // A layout from its shape string: a viewing pane, and a caption under it for
   // whatever the figure says or offers about what is in the pane.
   //
-  // In the page it is never handled, so a drag over it scrolls the page. A button
-  // opens it full screen (`ExpandingCard`), and only there can it be turned,
-  // zoomed and panned.
+  // In the page a drag over it scrolls the page until the hand is on; full screen
+  // (`ExpandingCard`) it is always handled — turned, zoomed and panned.
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
   import { attachControls } from '$lib/render/controls.js';
@@ -24,9 +23,6 @@
     // The train's callbacks, or null for no train — see `train` in TrackViewer.
     // There is only ever a train on a route that closes.
     train = {},
-    // Handling full screen, or null for a viewer that cannot be opened full screen
-    // — see TrackViewer. In the page it is never handled.
-    controls = attachControls,
     // Hold the train where it is, and anything else moving.
     paused = false,
     // The card's footer, given the scene, or undefined while there is nothing drawn.
@@ -60,18 +56,21 @@
   // Laid out full screen, which outlasts being handled: on the way back the view
   // eases home while the card shrinks.
   let expanded = $state(false);
+  let full = $state(false);
   let handled = $state(false);
+  // The hand's corner, which the dock stops short of.
+  let cornerWidth = $state(0);
 
   // The overlay's corner of the pane, to its far edges, so the track is framed
   // clear of it in the page. Full screen there is room enough, and the track is
-  // centred again. Read off `handled` rather than `expanded`, which holds until
-  // the card has shrunk back: the track sets off for its place in the page as the
+  // centred again. Read off `full` rather than `expanded`, which holds until the
+  // card has shrunk back: the track sets off for its place in the page as the
   // card does.
   let overlaid = $state(null);
   let overlayWidth = $state(0);
   let overlayHeight = $state(0);
-  const overlayBox = $derived(overlaid && overlayWidth && !handled
-    ? { width: overlaid.offsetLeft + overlayWidth, height: overlaid.offsetTop + overlayHeight }
+  const overlayBox = $derived(overlaid && overlayWidth && !full
+    ? { edge: 'top-left', width: overlaid.offsetLeft + overlayWidth, height: overlaid.offsetTop + overlayHeight }
     : null);
 
   // The dock, down to the bottom edge, so the track is framed clear of it, full
@@ -83,7 +82,14 @@
     ? { edge: 'bottom', width: dockWidth, height: dockHeight + parseFloat(getComputedStyle(docked).bottom) }
     : null);
 
-  const reserved = $derived(overlayBox ?? dockBox);
+  const reserved = $derived([overlayBox, dockBox].filter(Boolean));
+
+  let track = $state(null);
+
+  /** The part of the pane shots are framed in — see `region` in TrackViewer. */
+  export function region() {
+    return track?.region() ?? null;
+  }
 </script>
 
 {#snippet footer()}
@@ -92,21 +98,21 @@
 
 <!-- The footer is there whether or not anything is drawn: a figure in it may be
      what says what to draw. -->
-<ExpandingCard footer={caption ? footer : undefined} label="The layout {letters}, full screen" bind:expanded bind:handled>
-  {#snippet children(toggle)}
+<ExpandingCard footer={caption ? footer : undefined} label="The layout {letters}, full screen" bind:expanded bind:full bind:handled>
+  {#snippet children(toggle, hand)}
     {#if result.state === 'ok'}
-      {#if controls}{@render toggle()}{/if}
       {#if overlay}
         <div class="overlay" bind:this={overlaid} bind:offsetWidth={overlayWidth} bind:offsetHeight={overlayHeight}>
           {@render overlay(result.scene)}
         </div>
       {/if}
       {#if dock}
-        <div class="dock" bind:this={docked} bind:offsetWidth={dockWidth} bind:offsetHeight={dockHeight}>
+        <div class="dock" style:--corner-width="{cornerWidth}px" bind:this={docked} bind:offsetWidth={dockWidth} bind:offsetHeight={dockHeight}>
           {@render dock(result.scene)}
         </div>
       {/if}
       <TrackViewer
+        bind:this={track}
         pieces={result.scene.pieces}
         camera={result.scene.camera}
         grid={result.scene.grid ?? null}
@@ -119,7 +125,10 @@
         {transition}
         alarm={result.scene.offender?.id ?? null}
         highlight={result.scene.highlight ?? null}
-        controls={handled ? controls : null}
+        controls={handled ? attachControls : null}
+        tools={toggle}
+        cornerTools={hand}
+        bind:cornerWidth
         aspect={expanded ? 'auto' : aspect}
         {paused}
         {reserved}
@@ -140,8 +149,7 @@
 </ExpandingCard>
 
 <style>
-  /* Clear of the reset button (top right) and the toggle (bottom right). It never
-     takes a drag from the viewer under it. */
+  /* Clear of the toolbar (top right). It never takes a drag from the viewer under it. */
   .overlay {
     position: absolute;
     top: 0.5rem;
@@ -150,11 +158,11 @@
     pointer-events: none;
   }
 
-  /* Clear of the toggle (bottom right, 36px, 0.5rem in from the edge). */
+  /* Short of the hand, and a gap, while there is one. */
   .dock {
     position: absolute;
     left: 0.5rem;
-    right: calc(1rem + 36px);
+    right: calc(0.5rem + var(--corner-width) + min(var(--corner-width), 0.5rem));
     bottom: 0.5rem;
     z-index: 1;
   }

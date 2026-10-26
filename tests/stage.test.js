@@ -2065,16 +2065,17 @@ test('a reserved corner is taken at once the first time, then eased away from an
   const { stage } = staged();
   stage.frameTo({ zoom: 2, target: '0,0,0' });
   const whole = stage.zoom();
+  const box = { edge: 'top-left', width: 300, height: 200 };
 
   // The first box arrives once measured, after the first paint: no slide in.
-  stage.reserve({ width: 300, height: 200 });
+  stage.reserve([box]);
   const clear = stage.zoom();
   assert.ok(clear < whole, 'framed smaller, clear of the box');
   clock.run(0.1);
   assert.equal(stage.zoom(), clear, 'the first box is not eased');
 
   stage.setPaused(true);
-  stage.reserve(null);
+  stage.reserve([]);
   clock.run(0.19);
   const midway = stage.zoom();
   assert.ok(midway > clear && midway < whole, `not eased: ${midway}`);
@@ -2082,10 +2083,10 @@ test('a reserved corner is taken at once the first time, then eased away from an
   assert.equal(stage.zoom(), whole, 'framed in the whole viewer once there');
   assert.equal(clock.running(), false, 'a settled camera stops asking for frames');
 
-  stage.reserve({ width: 300, height: 200 });
+  stage.reserve([box]);
   clock.run(0.5);
   assert.equal(stage.zoom(), clear, 'back clear of the box');
 
-  stage.reserve(null, { instant: true });
+  stage.reserve([], { instant: true });
   assert.equal(stage.zoom(), whole, 'an instant reserve is there at once');
 });

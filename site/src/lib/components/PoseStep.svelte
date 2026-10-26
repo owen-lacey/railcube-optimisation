@@ -7,7 +7,7 @@
 	// A press picks a piece or a pose; it never carries the train on.
 	import { Tabs } from "bits-ui";
 	import TrackViewer from "./TrackViewer.svelte";
-	import LayoutCard from "./LayoutCard.svelte";
+	import ExpandingCard from "./ExpandingCard.svelte";
 	import OrientationStepper from "./OrientationStepper.svelte";
 	import {
 		PIECES,
@@ -17,6 +17,7 @@
 		trackCell
 	} from "$lib/catalogue.js";
 	import { pieceMove } from "$lib/scenes.js";
+	import { attachControls } from "$lib/render/controls.js";
 
 	let {
 		initial = "DF",
@@ -30,6 +31,8 @@
 
 	let pose = $state(initial);
 	let active = $state(initialPiece);
+	let expanded = $state(false);
+	let handled = $state(false);
 
 	const piece = $derived(PIECES.find((p) => p.type === active));
 	// Laid from the start, so the piece's cube is the origin whatever the pose.
@@ -52,22 +55,27 @@
 </script>
 
 <Tabs.Root bind:value={active} class="pose-step">
-	<LayoutCard footer={keys}>
-		<Tabs.Content value={active}>
-			<TrackViewer
-				pieces={scene.pieces}
-				{camera}
-				grid={scene.grid}
-				outlines={scene.outlines}
-				{notes}
-				{aspect}
-				blueprint
-				label="The {piece.name.toLowerCase()} entered {describePose(
-					pose
-				)}, leaving the train {describePose(scene.after.pose)}"
-			/>
-		</Tabs.Content>
-	</LayoutCard>
+	<ExpandingCard footer={keys} label="The {piece.name.toLowerCase()} entered {describePose(pose)}, full screen" bind:expanded bind:handled>
+		{#snippet children(toggle, hand)}
+			<Tabs.Content value={active} class="panel">
+				<TrackViewer
+					pieces={scene.pieces}
+					{camera}
+					grid={scene.grid}
+					outlines={scene.outlines}
+					{notes}
+					controls={handled ? attachControls : null}
+					tools={toggle}
+					cornerTools={hand}
+					aspect={expanded ? "auto" : aspect}
+					blueprint
+					label="The {piece.name.toLowerCase()} entered {describePose(
+						pose
+					)}, leaving the train {describePose(scene.after.pose)}"
+				/>
+			</Tabs.Content>
+		{/snippet}
+	</ExpandingCard>
 </Tabs.Root>
 
 {#snippet keys()}
@@ -90,6 +98,11 @@
 <style>
 	:global(.pose-step) {
 		margin: 0 0 1.25rem;
+	}
+
+	/* Full screen, the panel passes the pane's height on to the viewer. */
+	:global(.pose-step .panel) {
+		height: 100%;
 	}
 
 	/* The builder's keys: a square per piece in its colour, filled when selected.

@@ -9,9 +9,9 @@
   // piece leaves it. Only the end has a callout, on its cube, picking out whatever
   // the last piece changed.
   //
-  // In the page it cannot be handled, so a drag over it scrolls the page: turning,
-  // zooming and panning are full screen's, behind `ExpandingCard`'s button. The
-  // buttons and the keys work either way.
+  // In the page a drag over it scrolls the page until the hand is on: turning,
+  // zooming and panning are the hand's and full screen's, behind `ExpandingCard`'s
+  // buttons. The piece buttons and the keys work either way.
   import { onMount } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
@@ -109,13 +109,14 @@
     bind:expanded
     bind:handled
   >
-    {#snippet children(toggle)}
-      {@render toggle()}
+    {#snippet children(toggle, hand)}
       <TrackViewer
         pieces={view.pieces}
         transition={{ kind: 'grow', arrival: 'fade', start: pose }}
         alarm={view.offender?.id ?? null}
         controls={handled && !empty ? attachControls : null}
+        tools={toggle}
+        cornerTools={hand}
         aspect={expanded ? 'auto' : aspect}
         blueprint
         grid={empty ? null : grid}

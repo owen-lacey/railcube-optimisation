@@ -4,11 +4,18 @@
   // if it were not there, then opened modally. So whatever the card holds — a
   // train, a paused state, a half-built track — carries on as it was.
   //
-  // The card's pane is `children`, handed the toggle button to place, or not, in
-  // it. `expanded` (laid out full screen) and `handled` (open for handling) are
-  // bound out, for the pane and the footer to read. `onkeydown` has the keys while
-  // it is full screen: focus cannot leave a modal dialog, and the dialog itself
-  // takes it when anything else in it is clicked.
+  // In the page a drag over the card scrolls the page, unless the hand is on: then,
+  // as full screen, it turns, zooms and pans the view. Closing full screen turns the
+  // hand off again.
+  //
+  // The card's pane is `children`, handed the card's buttons to place, or not, in
+  // it: the full-screen toggle, for `TrackViewer`'s `tools`, and the hand, in the
+  // page only, for its `cornerTools`. `expanded` (laid out full screen), `full`
+  // (full screen and not on the way back) and `handled` (open for handling: full,
+  // or the hand on) are bound out, for the pane and the footer to read. `onkeydown` has the keys while it is
+  // full screen: focus cannot leave a modal dialog, and the dialog itself takes it
+  // when anything else in it is clicked.
+  import Hand from '@lucide/svelte/icons/hand';
   import Maximize2 from '@lucide/svelte/icons/maximize-2';
   import Minimize2 from '@lucide/svelte/icons/minimize-2';
   import LayoutCard from './LayoutCard.svelte';
@@ -19,6 +26,7 @@
     footer = undefined,
     label,
     expanded = $bindable(false),
+    full = $bindable(false),
     handled = $bindable(false),
     onkeydown = undefined,
   } = $props();
@@ -32,6 +40,9 @@
   // The room the card took in the page, kept while it is full screen so the page
   // does not close up under it and scroll.
   let room = $state(null);
+  let hand = $state(false);
+
+  $effect(() => { handled = full || hand; });
 
   // The card's box in the page, as keyframe values for the dialog's own box.
   function boxOf({ top, left, width, height }) {
@@ -60,7 +71,7 @@
     dialog.close();
     dialog.showModal();
     expanded = true;
-    handled = true;
+    full = true;
     if (!reduced) grow(boxOf(rect), FULL);
   }
 
@@ -68,7 +79,8 @@
   // gesture) lands in `closed` straight away.
   async function dismiss() {
     if (moving || !expanded) return;
-    handled = false;
+    full = false;
+    hand = false;
     if (!reduced) await grow(FULL, boxOf(space.getBoundingClientRect()));
     dialog.close();
   }
@@ -93,20 +105,35 @@
     moving?.cancel();
     dialog.show();
     expanded = false;
-    handled = false;
+    full = false;
+    hand = false;
     room = null;
     toggle?.focus({ preventScroll: true });
   }
 </script>
 
+{#snippet grip()}
+  {#if !full}
+    <button
+      type="button"
+      onpointerdown={event => event.stopPropagation()}
+      ontouchstart={event => event.stopPropagation()}
+      onclick={() => (hand = !hand)}
+      aria-pressed={hand}
+      aria-label={hand ? 'Stop turning the view' : 'Turn, zoom and pan the view'}
+      title={hand ? 'Stop turning the view' : 'Turn, zoom and pan the view'}
+    >
+      <Hand aria-hidden="true" />
+    </button>
+  {/if}
+{/snippet}
+
 {#snippet button()}
-  <!-- First in the card, so it is where focus lands either way. Its pointer-down
-       stops here, so a click is not also a drag. -->
   <button
     type="button"
-    class="toggle"
     bind:this={toggle}
     onpointerdown={event => event.stopPropagation()}
+    ontouchstart={event => event.stopPropagation()}
     onclick={() => (expanded ? dismiss() : expand())}
     aria-label={expanded ? 'Close the full-screen view' : 'Open full screen'}
     title={expanded ? 'Close the full-screen view' : 'Open full screen'}
@@ -121,7 +148,7 @@
   <dialog bind:this={dialog} open tabindex="-1" onclose={closed} onkeydown={keydown} aria-label={label}>
     <LayoutCard {footer}>
       <div class="pane">
-        {@render children(button)}
+        {@render children(button, grip)}
       </div>
     </LayoutCard>
   </dialog>
@@ -182,23 +209,5 @@
 
   dialog:modal .pane :global(.viewer) {
     height: 100%;
-  }
-
-  /* Matches the viewer's reset button, in the corner it leaves free. */
-  .toggle {
-    position: absolute;
-    right: 0.5rem;
-    bottom: 0.5rem;
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border: 2px solid var(--card-border);
-    border-radius: 0.5rem;
-    background: var(--card-footer);
-    color: inherit;
-    cursor: pointer;
   }
 </style>

@@ -1051,10 +1051,10 @@ backspace (Lucide's `delete` icon, from `@lucide/svelte`) in the footer of a car
 arrows as a d-pad (↑ straight, ← left curve, → right curve) and Backspace. `PoseBuilder` is
 the same with an orientation stepper and only the track's two ends read out.
 
-**Neither can be handled in the page** — Owen's call, because turning and zooming
+**Neither is handled in the page until asked** — Owen's call, because turning and zooming
 mid-read interrupts it. They sit in `ExpandingCard`, which is `LayoutViewer`'s full-screen
-card pulled out for all three, and only full screen do they take `attachControls`. The
-footer's buttons work either way, and so do the keys: in the page through `keys.js`, which
+card pulled out for all three, and they take `attachControls` full screen or once its hand
+button is on. The footer's buttons work either way, and so do the keys: in the page through `keys.js`, which
 gives them to whichever registered builder has the largest share of itself in view if that
 is more than half; full screen through the dialog's `keydown` — focus cannot leave a modal
 dialog, and the dialog is `tabindex="-1"` so a click on the canvas lands focus on it. A key
@@ -1096,6 +1096,40 @@ Once the view is touched, `TrackViewer` shows a reset button: `stage.reset()` ea
 back to `untouched()` over `HOME` (turning the short way round, zoom by ratio), re-reading
 the description each frame, and then drops it to null. It runs while paused, a gesture
 cancels it, and under reduced motion it is instant.
+
+**A viewer's buttons are a toolbar top right and a hand bottom right** (Owen's calls):
+`TrackViewer`'s reset, then whatever a host passes as `tools` — `ExpandingCard`'s
+full-screen toggle, so the toggle is in the corner — and `cornerTools`, the card's hand,
+shown while the card is not full screen (`full`), bottom right for a thumb on a phone. The
+reset keeps its slot hidden while there is nothing to undo, so nothing shifts under the
+pointer. Buttons stop their pointer-down and touch-start, so a tap is not a gesture on the
+viewer. The hand is Owen's: in the
+page a figure scrolls the page until it is pressed, then handles like full screen; letting
+go eases the view home (the controls' teardown), and closing full screen turns it off.
+`ExpandingCard` binds out `expanded`, `full` (full screen and not on the way back — what an
+overlay's reservation reads) and `handled` (`full` or the hand). Every `ExpandingCard`
+figure has it: the `LayoutViewer` ones, both builders, `PieceMoves`, `PoseStep`,
+`PoseCycle` and the front page. Piece cards and `TileStrip` tiles have neither.
+
+**Nothing laid over a viewer overlaps the track or each other.** `reserved` is a list of
+boxes, `{ edge, width, height }`, one to an edge — 'top-left' (an overlay), 'bottom' (a
+dock, which stops short of the hand by the bound `cornerWidth`), and 'top-right' and
+'bottom-right' (the toolbar and the hand, which `TrackViewer` measures and adds itself).
+`freeRegion` clears a host's boxes by bands: the top-left one beside or under it,
+whichever fits a shot larger, the dock above it. The buttons are cleared less zealously,
+by the shot's own frame — the 9:7 reference at the margin — sliding the way it has room
+(left on a region wider than 9:7, up or down on a narrower one) and shrinking only if
+that is not enough (`clearOfButtons`); on every card size in the post it only slides, at
+most 45px on a phone's 16:10 card. The stage eases each edge on its own, and a part-eased
+box is cleared as that share of its size. When the way of clearing changes (a card
+growing to full screen) the camera eases from wherever shots are framed (`stepBlend`,
+GROW long, at once under reduced motion) rather than locking the old way and jumping at
+the end. Callouts are clamped to the viewer and moved left clear of the buttons. The
+title zoom lands on `region()`, the framed part of the canvas, so it hands over without
+a jump. A gesture that changes nothing (a tap) leaves the camera untouched, so the reset
+button does not flicker. `TrackBuilder`'s inventory is not reserved (the track may pass
+under it), but it is capped short of the toolbar by the bound `toolsWidth`, and wraps its
+rows on a phone.
 
 **A camera description is still PolyCSS's `{ zoom, target, 'rot-x', 'rot-y' }`**, kept
 exactly so every camera in `scenes.js` frames the same shot. `polyView` puts an

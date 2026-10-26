@@ -50,8 +50,10 @@
     color: var(--muted);
   }
 
+  /* Wraps when the card is given less room than a row needs. */
   .boxes {
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
   }
 

@@ -2,9 +2,11 @@
   // What each piece does to the train: a piece on its own, its cube outlined where
   // the step starts and the cube the next piece would go in outlined where it ends,
   // and a button per piece type under it. Nothing moves — it is a picture of one step.
+  // The hand or full screen (`ExpandingCard`) turns, zooms and pans it.
   import { Tabs } from 'bits-ui';
   import TrackViewer from './TrackViewer.svelte';
-  import LayoutCard from './LayoutCard.svelte';
+  import ExpandingCard from './ExpandingCard.svelte';
+  import { attachControls } from '$lib/render/controls.js';
   import { PIECES, describeMove } from '$lib/catalogue.js';
   import { pieceMove } from '$lib/scenes.js';
 
@@ -14,24 +16,32 @@
 
   const piece = $derived(PIECES.find(p => p.type === active));
   const scene = $derived(pieceMove(active));
+
+  let expanded = $state(false);
+  let handled = $state(false);
 </script>
 
 <Tabs.Root bind:value={active} class="piece-moves">
-  <LayoutCard footer={keys}>
-    <!-- One panel whose value follows the tab, so there is one viewer and a tab
-         change redraws it rather than mounting another. -->
-    <Tabs.Content value={active}>
-      <TrackViewer
-        pieces={scene.pieces}
-        camera={scene.camera}
-        grid={scene.grid}
-        outlines={scene.outlines}
-        {aspect}
-        blueprint
-        label="The {piece.name.toLowerCase()}, with the cubes it starts and ends at outlined"
-      />
-    </Tabs.Content>
-  </LayoutCard>
+  <ExpandingCard footer={keys} label="The {piece.name.toLowerCase()}, full screen" bind:expanded bind:handled>
+    {#snippet children(toggle, hand)}
+      <!-- One panel whose value follows the tab, so there is one viewer and a tab
+           change redraws it rather than mounting another. -->
+      <Tabs.Content value={active} class="panel">
+        <TrackViewer
+          pieces={scene.pieces}
+          camera={scene.camera}
+          grid={scene.grid}
+          outlines={scene.outlines}
+          controls={handled ? attachControls : null}
+          tools={toggle}
+          cornerTools={hand}
+          aspect={expanded ? 'auto' : aspect}
+          blueprint
+          label="The {piece.name.toLowerCase()}, with the cubes it starts and ends at outlined"
+        />
+      </Tabs.Content>
+    {/snippet}
+  </ExpandingCard>
 </Tabs.Root>
 
 {#snippet keys()}
@@ -52,6 +62,11 @@
 <style>
   :global(.piece-moves) {
     margin: 0 0 1.25rem;
+  }
+
+  /* Full screen, the panel passes the pane's height on to the viewer. */
+  :global(.piece-moves .panel) {
+    height: 100%;
   }
 
   /* The builder's keys: a square per piece in its colour, filled when selected.

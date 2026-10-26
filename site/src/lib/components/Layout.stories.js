@@ -38,7 +38,6 @@ export default {
     transition: { table: { disable: true } },
     scene: { table: { disable: true } },
     train: { table: { disable: true } },
-    controls: { table: { disable: true } },
     caption: { table: { disable: true } },
   },
 };

@@ -14,9 +14,9 @@
   // The keyboard works too: the six letters, the arrows as a d-pad (forwards is a
   // straight, left and right the two flat curves), and Backspace.
   //
-  // In the page it cannot be handled, so a drag over it scrolls the page: turning,
-  // zooming and panning are full screen's, behind `ExpandingCard`'s button. The
-  // buttons and the keys work either way.
+  // In the page a drag over it scrolls the page until the hand is on: turning,
+  // zooming and panning are the hand's and full screen's, behind `ExpandingCard`'s
+  // buttons. The piece buttons and the keys work either way.
   import { onMount } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
@@ -78,6 +78,7 @@
 
   let expanded = $state(false);
   let handled = $state(false);
+  let toolsWidth = $state(0);
   // With no pieces there is nothing to turn about, so the viewer is a prompt only.
   const empty = $derived(!letters);
 
@@ -109,19 +110,21 @@
     bind:expanded
     bind:handled
   >
-    {#snippet children(toggle)}
-      {@render toggle()}
+    {#snippet children(toggle, hand)}
       <TrackViewer
         pieces={view.pieces}
         transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR }}
         alarm={view.offender?.id ?? null}
         train={view.closed ? {} : null}
         controls={handled && !empty ? attachControls : null}
+        tools={toggle}
+        cornerTools={hand}
+        bind:toolsWidth
         aspect={expanded ? 'auto' : shapeOfViewer}
         blueprint
         label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
       />
-      <div class="inventory"><InventoryCard {used} inventory={INVENTORY} /></div>
+      <div class="inventory" style:--tools-width="{toolsWidth}px"><InventoryCard {used} inventory={INVENTORY} /></div>
       {#if empty}<BuildPrompt />{/if}
     {/snippet}
   </ExpandingCard>
@@ -133,13 +136,15 @@
 {/snippet}
 
 <style>
-  /* Over the viewer's top-left corner, clear of the reset button and the toggle,
-     as `LayoutViewer`'s overlay is. It never takes a drag from the viewer under it. */
+  /* Over the viewer's top-left corner, as `LayoutViewer`'s overlay is, and never
+     wide enough to reach the toolbar: on a narrow viewer its rows wrap. It never
+     takes a drag from the viewer under it. */
   .inventory {
     position: absolute;
     top: 0.5rem;
     left: 0.5rem;
     z-index: 1;
+    max-width: calc(100% - var(--tools-width) - 1.5rem);
     pointer-events: none;
   }
 </style>

@@ -94,11 +94,20 @@
     outlines = [],
     // Hold everything where it is — see `setPaused` in stage.js.
     paused = false,
-    // A box in the viewer's top left, `{ width, height }` in CSS pixels, or along
-    // its bottom edge, `{ edge: 'bottom', width, height }`, that something is laid
-    // over: shots are framed clear of it. Null frames them in the whole viewer. See
-    // `freeRegion` in render/camera.js.
-    reserved = null,
+    // Boxes something is laid over, `{ edge, width, height }` each in CSS pixels —
+    // the edge 'top-left' or 'bottom' — that shots are framed clear of, as they are
+    // of the toolbar. See `freeRegion` in render/camera.js.
+    reserved = [],
+    // Buttons a host adds to the toolbar in the top-right corner, after the reset
+    // button: a snippet, or unset for none.
+    tools = undefined,
+    // Buttons a host puts in the bottom-right corner, in reach of a thumb: a
+    // snippet, or unset for none.
+    cornerTools = undefined,
+    // The toolbar's and the corner's widths in CSS pixels, bound out so a host can
+    // keep what it lays over the viewer clear of them. 0 while there is none.
+    toolsWidth = $bindable(0),
+    cornerWidth = $bindable(0),
     // Callouts on cells, `{ key, lines, cell, side, flash }` each: set outside what
     // is drawn with a leader line to the middle of `cell`, and kept there as the
     // camera moves. A line is an array of parts, `{ text, changed }`, and
@@ -192,6 +201,15 @@
     if (!ready || !shown) return;
     shownKey = null;
     show(shown);
+  }
+
+  /**
+   * The part of the viewer shots are framed in, `{ left, top, width, height }` in
+   * CSS pixels from its top left — clear of the toolbar, the hand and whatever a
+   * host lays over it (`freeRegion`) — or null before there is a stage.
+   */
+  export function region() {
+    return stage?.region() ?? null;
   }
 
   /**
@@ -509,6 +527,7 @@
         if (!live) return;
         stage = createStage(canvas, {
           theme: readTheme(host),
+          reduced,
           onTrainPiece: cube => train?.onPiece?.(cube),
           onTrainPose: pose => train?.onPose?.(pose),
           onCamera: () => {
@@ -520,7 +539,7 @@
           onChanging: share => { changingShare = share; },
         });
         stage.setPaused(paused);
-        stage.reserve(reserved, { instant: true });
+        stage.reserve(clearOf(), { instant: true });
         ready = true;
         // A tumble is framed once, here, and never again. A grow is framed by
         // `showGrown`, from the first paint.
@@ -588,7 +607,8 @@
     show(next);
   });
 
-  // Handling comes and goes: a figure is handled only while it is full screen. Let
+  // Handling comes and goes: a figure is handled only while it is full screen or its
+  // hand is on. Let
   // go of, the view eases home, so the page gets back the shot it was showing.
   $effect(() => {
     const attach = controls;
@@ -612,13 +632,29 @@
     stage.start();
   });
 
-  // Keyed on the box's sides, not the object, so an equal box handed over new
+  // The toolbar and the corner, out to the viewer's edges, so shots are framed
+  // clear of them like any box a host lays over the viewer.
+  let toolbar = $state(null);
+  let toolbarHeight = $state(0);
+  const toolbarBox = $derived(toolbar && toolsWidth
+    ? { edge: 'top-right', width: toolsWidth + 2 * toolbar.offsetTop, height: toolbarHeight + 2 * toolbar.offsetTop }
+    : null);
+  let corner = $state(null);
+  let cornerHeight = $state(0);
+  const cornerBox = $derived.by(() => {
+    if (!corner || !cornerWidth) return null;
+    const inset = 2 * parseFloat(getComputedStyle(corner).right);
+    return { edge: 'bottom-right', width: cornerWidth + inset, height: cornerHeight + inset };
+  });
+  const clearOf = () => [...reserved, toolbarBox, cornerBox].filter(Boolean);
+
+  // Keyed on the boxes' sides, not the objects, so an equal box handed over new
   // does not reframe.
-  const reservedKey = $derived(reserved && `${reserved.edge ?? 'corner'} ${reserved.width}x${reserved.height}`);
+  const reservedKey = $derived(clearOf().map(box => `${box.edge} ${box.width}x${box.height}`).join('|'));
   $effect(() => {
     reservedKey;
     if (!ready || !stage) return;
-    stage.reserve(reserved, { instant: reduced });
+    stage.reserve(clearOf(), { instant: reduced });
   });
 
   // The lattice. Keyed on the box's corners, not the object: an equal box handed
@@ -672,11 +708,14 @@
   let labelFrame = 0;
   const noteEls = {};
 
+  // Callouts are kept inside the viewer, and stand clear of its buttons.
   function calloutsFor(local, { width, height }) {
     const bounds = stage.outline();
     const shown = notesUp;
     if (!bounds || !shown.length) return [];
     const within = (v, size, room) => Math.min(Math.max(v, size + CALLOUT_GAP), room - CALLOUT_GAP);
+    const across = (v, size) => within(v, size, width);
+    const down = (v, size) => within(v, size, height);
     const { x: left, y: top } = local({ x: bounds.left, y: bounds.top });
     const bottom = local({ x: bounds.left, y: bounds.bottom }).y;
     const spots = stage.project(shown.map(n => toWorld(n.cell))).map(local);
@@ -685,17 +724,39 @@
     // Where each side puts a note `w` by `h` for the cell at `to`: the point on its
     // edge nearest the drawing, which is the leader's end.
     const PLACE = {
-      left: (w, h, to) => ({ x: within(left - CALLOUT_GAP, w, width), y: within(to.y + h / 2, h, height) - h / 2 }),
-      above: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(top - CALLOUT_GAP, h, height) }),
-      below: (w, h, to) => ({ x: within(to.x + w / 2, w, width) - w / 2, y: within(bottom + CALLOUT_GAP + h, h, height) - h }),
+      left: (w, h, to) => ({ x: across(left - CALLOUT_GAP, w), y: down(to.y + h / 2, h) - h / 2 }),
+      above: (w, h, to) => ({ x: across(to.x + w / 2, w) - w / 2, y: down(top - CALLOUT_GAP, h) }),
+      below: (w, h, to) => ({ x: across(to.x + w / 2, w) - w / 2, y: down(bottom + CALLOUT_GAP + h, h) - h }),
     };
     return shown.map(({ key, lines, flash, changing, side: pinned }, i) => {
       const side = pinned ?? (above.has(i) ? 'above' : 'below');
       const w = noteEls[key]?.offsetWidth ?? 0;
       const h = noteEls[key]?.offsetHeight ?? 0;
       const { x, y } = PLACE[side](w, h, spots[i]);
-      return { key, lines, flash, changing, side, x, y, to: spots[i], measured: Boolean(noteEls[key]) };
+      return { key, lines, flash, changing, side, x: dodge(side, x, y, w, h, width, height), y, to: spots[i], measured: Boolean(noteEls[key]) };
     });
+  }
+
+  // A note's box from where `PLACE` puts it, `[left, top, right, bottom]`: its
+  // anchor is the middle of its foot above, of its head below, of its right side to
+  // the left.
+  const NOTE_BOX = {
+    above: (x, y, w, h) => [x - w / 2, y - h, x + w / 2, y],
+    below: (x, y, w, h) => [x - w / 2, y, x + w / 2, y + h],
+    left: (x, y, w, h) => [x - w, y - h / 2, x, y + h / 2],
+  };
+
+  /** `x`, moved left as far as it takes the note to stand clear of the buttons. */
+  function dodge(side, x, y, w, h, width, height) {
+    const [left, top, right, bottom] = NOTE_BOX[side](x, y, w, h);
+    const buttons = [toolbarBox, cornerBox].filter(Boolean).map(box => ({
+      left: width - box.width,
+      right: width,
+      top: box.edge === 'top-right' ? 0 : height - box.height,
+      bottom: box.edge === 'top-right' ? box.height : height,
+    }));
+    const hit = buttons.filter(b => right > b.left && left < b.right && bottom > b.top && top < b.bottom);
+    return x - Math.max(0, ...hit.map(b => right - b.left + CALLOUT_GAP));
   }
 
   function placeLabels() {
@@ -876,18 +937,33 @@
     </span>
   {/each}
 
-  {#if controls && touched}
-    <!-- Its pointer-down stops here, so a click is not also a drag on the viewer. -->
-    <button
-      type="button"
-      class="reset"
-      onpointerdown={event => event.stopPropagation()}
-      onclick={() => stage?.reset({ instant: reduced })}
-      aria-label="Reset the view"
-      title="Reset the view"
-    >
-      <RotateCcw aria-hidden="true" />
-    </button>
+  {#if controls || tools}
+    <!-- Every button's pointer-down and touch-start stop at it, so a click or a tap
+         is not also a gesture on the viewer. The reset button keeps its place while
+         there is nothing to undo, so the others never shift under the pointer and the
+         toolbar's box holds. -->
+    <div class="tools" bind:this={toolbar} bind:offsetWidth={toolsWidth} bind:offsetHeight={toolbarHeight}>
+      <button
+        type="button"
+        onpointerdown={event => event.stopPropagation()}
+        ontouchstart={event => event.stopPropagation()}
+        class:idle={!(controls && touched)}
+        onclick={() => stage?.reset({ instant: reduced })}
+        aria-label="Reset the view"
+        title="Reset the view"
+        tabindex={controls && touched ? undefined : -1}
+        aria-hidden={controls && touched ? undefined : 'true'}
+      >
+        <RotateCcw aria-hidden="true" />
+      </button>
+      {@render tools?.()}
+    </div>
+  {/if}
+
+  {#if cornerTools}
+    <div class="tools corner" bind:this={corner} bind:offsetWidth={cornerWidth} bind:offsetHeight={cornerHeight}>
+      {@render cornerTools()}
+    </div>
   {/if}
 
   {#if failed}
@@ -1037,11 +1113,22 @@
     align-items: flex-end;
   }
 
-  /* Outlined like PlayPause, over a footer-coloured fill so it reads over the dots. */
-  .reset {
+  .tools {
     position: absolute;
     top: 0.5rem;
     right: 0.5rem;
+    z-index: 1;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .tools.corner {
+    top: auto;
+    bottom: 0.5rem;
+  }
+
+  /* Outlined like PlayPause, over a footer-coloured fill so it reads over the dots. */
+  .tools > :global(button) {
     display: grid;
     place-items: center;
     width: 36px;
@@ -1052,6 +1139,14 @@
     background: var(--card-footer);
     color: inherit;
     cursor: pointer;
+  }
+
+  .tools > :global(button[aria-pressed='true']) {
+    background: var(--card-border);
+  }
+
+  .tools > .idle {
+    visibility: hidden;
   }
 
   .failed {

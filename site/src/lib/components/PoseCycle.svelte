@@ -9,12 +9,15 @@
 	import { POSES } from "../../../../src/track.js";
 	import { describePose } from "$lib/catalogue.js";
 	import { poseCycle, poseGhost } from "$lib/scenes.js";
-	import LayoutCard from "./LayoutCard.svelte";
+	import { attachControls } from "$lib/render/controls.js";
+	import ExpandingCard from "./ExpandingCard.svelte";
 
 	let { aspect = "3 / 2" } = $props();
 
 	const scene = poseCycle();
 	let index = $state(POSES.indexOf("DF"));
+	let expanded = $state(false);
+	let handled = $state(false);
 	const pose = $derived(POSES[index]);
 
 	const turn = (by) => {
@@ -22,18 +25,23 @@
 	};
 </script>
 
-<LayoutCard footer={controls}>
-	<TrackViewer
-		pieces={scene.pieces}
-		camera={scene.camera}
-		grid={scene.grid}
-		origin={scene.origin}
-		ghosts={[poseGhost(pose)]}
-		{aspect}
-		blueprint
-		label="The train inside one cube, in each of its 24 orientations in turn"
-	/>
-</LayoutCard>
+<ExpandingCard footer={controls} label="The train inside one cube, full screen" bind:expanded bind:handled>
+	{#snippet children(toggle, hand)}
+		<TrackViewer
+			pieces={scene.pieces}
+			camera={scene.camera}
+			grid={scene.grid}
+			origin={scene.origin}
+			ghosts={[poseGhost(pose)]}
+			controls={handled ? attachControls : null}
+			tools={toggle}
+			cornerTools={hand}
+			aspect={expanded ? "auto" : aspect}
+			blueprint
+			label="The train inside one cube, in each of its 24 orientations in turn"
+		/>
+	{/snippet}
+</ExpandingCard>
 
 {#snippet controls()}
 	<div class="poses" role="group" aria-label="Orientation">

@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { OrthographicCamera, Vector3 } from 'three';
 import { orbit, zoomed, slid, ZOOM_BY } from '../site/src/lib/render/controls.js';
 import {
-  adjusted, appliedZoom, createCamera, freeRegion, polyView, offscreen, CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT,
+  adjusted, appliedZoom, bandFor, createCamera, freeRegion, polyView, offscreen, CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT,
 } from '../site/src/lib/render/camera.js';
 
 const still = { rotX: 65, rotY: 45, zoomBy: 1, offset: [0, 0, 0] };
@@ -102,6 +102,12 @@ test('a reset takes the hand off the camera, back to the shot as described', () 
   const start = camera.view();
   assert.equal(camera.touched(), false, 'nobody has moved it yet');
 
+  // A tap is a gesture that never moved: it leaves the camera untouched.
+  camera.adjust({ ...start, offset: [...start.offset] });
+  assert.equal(camera.touched(), false, 'a view that changes nothing is no touch');
+  camera.adjust(orbit(start, 0, 0));
+  assert.equal(camera.touched(), false, 'nor is a drag that never moved, its turn written in 0–360');
+
   camera.adjust({ ...start, rotX: 20, rotY: 100, zoomBy: 2, offset: [5, 0, 0] });
   assert.equal(camera.touched(), true);
 
@@ -139,19 +145,101 @@ test('an arrival sets off beyond the edge of the picture nearest where it is goi
 
 test('a reserved corner frames the shot in the band that fits it larger', () => {
   // A phone-wide 16/10 card: beside the box fits larger than under it.
-  assert.deepEqual(freeRegion(360, 225, { width: 180, height: 110 }), { left: 180, top: 0, width: 180, height: 225 });
+  assert.deepEqual(freeRegion(360, 225, [{ edge: 'top-left', width: 180, height: 110 }]), { left: 180, top: 0, width: 180, height: 225 });
   // A wide, tall card: under it does.
-  assert.deepEqual(freeRegion(400, 600, { width: 180, height: 110 }), { left: 0, top: 110, width: 400, height: 490 });
-  assert.deepEqual(freeRegion(360, 225, null), { left: 0, top: 0, width: 360, height: 225 });
+  assert.deepEqual(freeRegion(400, 600, [{ edge: 'top-left', width: 180, height: 110 }]), { left: 0, top: 110, width: 400, height: 490 });
+  assert.deepEqual(freeRegion(360, 225, []), { left: 0, top: 0, width: 360, height: 225 });
 });
 
 test('a reserved bottom edge frames the shot above it, whatever fits larger', () => {
-  assert.deepEqual(freeRegion(360, 225, { edge: 'bottom', width: 300, height: 60 }), { left: 0, top: 0, width: 360, height: 165 });
+  assert.deepEqual(freeRegion(360, 225, [{ edge: 'bottom', width: 300, height: 60 }]), { left: 0, top: 0, width: 360, height: 165 });
+});
+
+// The frame a shot in `region` is described in: the reference 9:7, at the margin.
+function frameOf(region) {
+  const fit = Math.min(region.width, region.height * REFERENCE_WIDTH / REFERENCE_HEIGHT) * 0.88;
+  const [w, h] = [fit, fit * REFERENCE_HEIGHT / REFERENCE_WIDTH];
+  const [cx, cy] = [region.left + region.width / 2, region.top + region.height / 2];
+  return { left: cx - w / 2, right: cx + w / 2, top: cy - h / 2, bottom: cy + h / 2 };
+}
+
+// A button's box on screen, in a `width`×`height` viewer.
+const buttonAt = (box, width, height) => ({
+  left: width - box.width,
+  right: width,
+  top: box.edge === 'top-right' ? 0 : height - box.height,
+  bottom: box.edge === 'top-right' ? box.height : height,
+});
+
+const overlaps = (a, b) => a.left < b.right - 1e-9 && b.left < a.right - 1e-9 && a.top < b.bottom - 1e-9 && b.top < a.bottom - 1e-9;
+
+// Clear of a button the given way: to its left, or below or above it.
+const clearBy = (way, f, b, edge) => (way === 'beside' ? f.right <= b.left + 1e-9 : edge === 'top-right' ? f.top >= b.bottom - 1e-9 : f.bottom <= b.top + 1e-9);
+
+const inside = (a, width, height) => a.left >= -1e-9 && a.top >= -1e-9 && a.right <= width + 1e-9 && a.bottom <= height + 1e-9;
+
+test('buttons in the right-hand corners move a shot\'s frame clear of them, and shrink it only if they must', () => {
+  const toolbar = { edge: 'top-right', width: 96, height: 52 };
+  const hand = { edge: 'bottom-right', width: 52, height: 52 };
+  for (const [width, height] of [[346, 346], [346, 216], [604, 403], [604, 378], [1252, 798], [346, 394], [300, 600], [900, 300], [200, 140]]) {
+    for (const buttons of [[toolbar], [hand], [toolbar, hand]]) {
+      const label = `${width}x${height} ${buttons.map(b => b.edge)}`;
+      const region = freeRegion(width, height, buttons);
+      const way = bandFor(width, height, buttons).buttons;
+      const frame = frameOf(region);
+      assert.ok(inside(frame, width, height), `${label}: the frame stays in the viewer`);
+      for (const box of buttons) assert.ok(!overlaps(frame, buttonAt(box, width, height)), `${label}: clear of ${box.edge}`);
+      // Beside the buttons on a card wider than the frame, past them on a narrower one.
+      assert.equal(way, width / height > REFERENCE_WIDTH / REFERENCE_HEIGHT ? 'beside' : 'past', `${label}: the way it has room`);
+      // No smaller than it must be: grown at all, wherever it stands clear that way,
+      // it would leave the viewer or reach a button.
+      const scale = region.width / width;
+      if (scale < 1) {
+        const bigger = { width: width * (scale + 0.01), height: height * (scale + 0.01) };
+        // Every place the bigger frame could stand in the viewer, 40 steps each way.
+        const size = frameOf({ left: 0, top: 0, ...bigger });
+        const [fw, fh] = [size.right - size.left, size.bottom - size.top];
+        const steps = Array.from({ length: 41 }, (_, i) => i / 40);
+        const fits = steps.some(u => steps.some(v => {
+          const f = { left: u * (width - fw), top: v * (height - fh) };
+          Object.assign(f, { right: f.left + fw, bottom: f.top + fh });
+          return inside(f, width, height) && buttons.every(box => clearBy(way, f, buttonAt(box, width, height), box.edge));
+        }));
+        assert.ok(!fits, `${label}: shrunk to ${scale.toFixed(3)} when a larger frame fits`);
+      }
+    }
+  }
+  // Too small to slide clear: drawn smaller.
+  assert.ok(freeRegion(200, 140, [toolbar, hand]).width < 200);
+  // A phone's 16:10 card: the toolbar is cleared by sliding the frame left, at full size.
+  const slid = freeRegion(346, 216, [toolbar, hand]);
+  assert.equal(slid.width, 346, 'not drawn smaller');
+  assert.ok(slid.left < 0, 'moved left, clear of the toolbar');
+  // A phone's square card: the frame reaches neither corner, so nothing moves.
+  assert.deepEqual(freeRegion(346, 346, [toolbar, hand]), { left: 0, top: 0, width: 346, height: 346 });
+});
+
+test('a top-left box is cleared beside or under it, and the buttons within what is left', () => {
+  const left = { edge: 'top-left', width: 180, height: 110 };
+  const toolbar = { edge: 'top-right', width: 96, height: 52 };
+  assert.equal(bandFor(900, 300, [left, toolbar])['top-left'], 'beside');
+  assert.equal(bandFor(400, 700, [left, toolbar])['top-left'], 'under');
+  const region = freeRegion(900, 300, [left, toolbar]);
+  assert.ok(region.left >= 180, 'beside the box');
+  assert.ok(!overlaps(frameOf(region), buttonAt(toolbar, 900, 300)), 'clear of the toolbar');
+});
+
+test('a bottom dock is cleared above it, and the buttons within what is left', () => {
+  const dock = { edge: 'bottom', width: 600, height: 80 };
+  const toolbar = { edge: 'top-right', width: 96, height: 52 };
+  const region = freeRegion(600, 400, [dock, toolbar]);
+  assert.ok(region.top + region.height <= 320 + 1e-9, 'above the dock');
+  assert.ok(!overlaps(frameOf(region), buttonAt(toolbar, 600, 400)), 'clear of the toolbar');
 });
 
 test('a shot framed in a region has its target in the middle of it, at the region\'s zoom', () => {
   const [width, height] = [360, 225];
-  const region = freeRegion(width, height, { width: 180, height: 110 });
+  const region = freeRegion(width, height, [{ edge: 'top-left', width: 180, height: 110 }]);
   for (const rotX of [0, 65, 90]) {
     for (const rotY of [-45, 100]) {
       const camera = new OrthographicCamera();
@@ -168,7 +256,7 @@ test('a shot framed in a region has its target in the middle of it, at the regio
 
 test('a point set off-screen from a region is off the whole viewer', () => {
   const [width, height] = [360, 225];
-  const region = freeRegion(width, height, { width: 180, height: 110 });
+  const region = freeRegion(width, height, [{ edge: 'top-left', width: 180, height: 110 }]);
   const description = { 'rot-x': 65, 'rot-y': -45, zoom: 3, target: '0,0,0' };
   const camera = new OrthographicCamera();
   polyView(camera, description, width, height, region);
@@ -178,17 +266,55 @@ test('a point set off-screen from a region is off the whole viewer', () => {
   }
 });
 
-test('part way to clear of a box, the band holds as the viewer changes shape', () => {
+test('when the best way of clearing a box changes, the shot eases over to it', () => {
   // A card growing to full screen on a phone: beside the box fits better at the
-  // start, under it by the end, and a band flipping mid-ease jumps the track.
+  // start, under it by the end, and a band flipping at once jumps the track.
   const size = { width: 360, height: 225 };
-  const camera = createCamera(new OrthographicCamera(), () => size);
-  const box = { width: 180, height: 110 };
-  camera.reserve(box, 1);
+  let blends = 0;
+  const camera = createCamera(new OrthographicCamera(), () => size, undefined, { onBlend: () => blends++ });
+  const box = { edge: 'top-left', width: 180, height: 110 };
+  camera.reserve([{ ...box, share: 1 }]);
   assert.equal(camera.region().left, 180, 'beside the box, to begin with');
+  assert.equal(blends, 0, 'the first choice is taken, not eased to');
   Object.assign(size, { width: 360, height: 700 });
-  camera.reserve(box, 0.5);
-  assert.deepEqual(camera.region(), { left: 90, top: 0, width: 270, height: 700 }, 'still easing from beside it');
-  camera.reserve(box, 1);
-  assert.deepEqual(camera.region(), { left: 0, top: 110, width: 360, height: 590 }, 'settled, it picks again');
+  const beside = { left: 180, top: 0, width: 180, height: 700 };
+  const under = { left: 0, top: 110, width: 360, height: 590 };
+  assert.deepEqual(camera.region(), beside, 'still beside it as the ease sets off');
+  assert.equal(blends, 1, 'the stage is told to run the ease');
+  camera.stepBlend(0.5);
+  const midway = camera.region();
+  assert.ok(midway.left < 180 && midway.left > 0 && midway.top > 0 && midway.top < 110, `part way: ${JSON.stringify(midway)}`);
+  assert.equal(camera.stepBlend(0.5), false, 'done');
+  assert.deepEqual(camera.region(), under, 'under it once there');
+  assert.equal(blends, 1);
+});
+
+test('a change of mind part way through an ease turns it from where it got to', () => {
+  const size = { width: 360, height: 225 };
+  let blends = 0;
+  const camera = createCamera(new OrthographicCamera(), () => size, undefined, { onBlend: () => blends++ });
+  camera.reserve([{ edge: 'top-left', width: 180, height: 110, share: 1 }]);
+  camera.region();
+  Object.assign(size, { width: 360, height: 700 });
+  camera.region();
+  camera.stepBlend(0.25);
+  const at = camera.region();
+  // Back at the old shape, beside the box is best again: it turns from where it is.
+  Object.assign(size, { width: 360, height: 225 });
+  const turned = camera.region();
+  assert.equal(blends, 2, 'a second ease');
+  const share = r => [r.left / size.width, r.top / size.height, r.width / size.width, r.height / size.height];
+  const was = [at.left / 360, at.top / 700, at.width / 360, at.height / 700];
+  share(turned).forEach((v, i) => assert.ok(Math.abs(v - was[i]) < 1e-9, 'no jump'));
+  camera.stepBlend(1);
+  assert.equal(camera.region().left, 180, 'beside it again once back');
+});
+
+test('under reduced motion a new way of clearing is taken at once', () => {
+  const size = { width: 360, height: 225 };
+  const camera = createCamera(new OrthographicCamera(), () => size, undefined, { instant: true });
+  camera.reserve([{ edge: 'top-left', width: 180, height: 110, share: 1 }]);
+  camera.region();
+  Object.assign(size, { width: 360, height: 700 });
+  assert.deepEqual(camera.region(), { left: 0, top: 110, width: 360, height: 590 });
 });

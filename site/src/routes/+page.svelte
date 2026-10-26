@@ -101,7 +101,6 @@
   <LayoutViewer
     {shape}
     transition={animate ? { kind: 'tumble', reach: config.sweep.question.box } : { kind: 'redraw' }}
-    controls={null}
     aspect={narrow.current ? '4 / 3' : '16 / 10'}
   />
 {/key}
