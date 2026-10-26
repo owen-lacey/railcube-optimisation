@@ -8,6 +8,7 @@
 	import PieceCardGrid from "$lib/components/PieceCardGrid.svelte";
 	import PieceMoves from "$lib/components/PieceMoves.svelte";
 	import PieceTag from "$lib/components/PieceTag.svelte";
+	import OrientationChip from "$lib/components/OrientationChip.svelte";
 	import PoseCycle from "$lib/components/PoseCycle.svelte";
 	import PoseStep from "$lib/components/PoseStep.svelte";
 	import PoseBuilder from "$lib/components/PoseBuilder.svelte";
@@ -54,7 +55,9 @@
 		Within the cell, the train can face in four different directions on any of
 		the six faces. We call this the train's "orientation" and is expressed as (f
 		d) where f is the face of the cube the train lies on, and d is the direction
-		it's facing in, reusing our x y z coordinates:
+		it's facing in, reusing our x y z coordinates, for example <OrientationChip
+			orientation="DF"
+		/>:
 	</p>
 
 	<PoseCycle />
@@ -101,7 +104,9 @@
 	<p>
 		The act of making a complete track can be thought of as adding two groups of
 		track pieces together such that it finishes where it started. Specifically,
-		we have a complete track if the groups add up to (0, 0, 0), facing (-z +y).
+		we have a complete track if the groups add up to (0, 0, 0), facing <OrientationChip
+			orientation="DF"
+		/>.
 		First we rotate, then join.
 	</p>
 	<TrackSum a="SILISL" b="IL" />
@@ -110,13 +115,13 @@
 		For this to apply to our situation appropriately, we need to handle the <PieceTag
 			letter="X"
 		/> piece appropriately: that is, the train needs to return to (0, 0, 0) but from
-		the (-z +x) orientation so it can cross over.
+		the <OrientationChip orientation="DL" /> orientation so it can cross over.
 	</p>
 	<TrackSum a="XSR" b="RRS" />
 
 	<p>
 		Similarly, the train then needs to travel the other half of the
-		figure-of-eight to return in our required (+y -z) orientation to give us a
+		figure-of-eight to return in our required <OrientationChip orientation="DF" /> orientation to give us a
 		complete track.
 	</p>
 	<TrackSum a="XSRRRSXSL" b="LLS" />
@@ -130,10 +135,14 @@
 		</li>
 		<li>
 			Do this many times, and pair up segments that would finish when it meets
-			the <PieceTag letter="X" /> for the first time at orientation (-z +x).
+			the <PieceTag letter="X" /> for the first time at orientation <OrientationChip
+				orientation="DL"
+			/>.
 		</li>
 		<li>
-			Similarly, do this again with segments that add up to (-z -x), giving the
+			Similarly, do this again with segments that add up to <OrientationChip
+				orientation="DR"
+			/>, giving the
 			other half of the figure-of-eight.
 		</li>
 		<li>

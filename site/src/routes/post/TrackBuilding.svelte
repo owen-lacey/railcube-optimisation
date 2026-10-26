@@ -6,6 +6,7 @@
 	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
 	import PieceTag from "$lib/components/PieceTag.svelte";
+	import OrientationChip from "$lib/components/OrientationChip.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import TrackSum from "$lib/components/TrackSum.svelte";
 </script>
@@ -32,8 +33,9 @@
 	</p>
 	<ol>
 		<li>
-			<b>Completeness:</b> The final track piece should enter (0,0,0), facing (−z
-			+y).
+			<b>Completeness:</b> The final track piece should enter (0,0,0), facing <OrientationChip
+				orientation="DF"
+			/>.
 		</li>
 		<li>
 			<b>Track collisions:</b>

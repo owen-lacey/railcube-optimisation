@@ -151,9 +151,11 @@ export const poseAxes = (pose) => [AXIS[pose[0]], AXIS[pose[1]]];
 /** A pose as the post writes it: `DF` is floor −z, heading +y, "−z +y". */
 export const poseLabel = (pose) => poseAxes(pose).join(" ");
 
-/** A pose as the post words it: `DL` is "down face, heading left (−z +x)". */
-export const describePose = (pose) =>
-	`${FACE_WORD[pose[0]]} face, heading ${HEADING_WORD[pose[1]]} (${poseLabel(pose)})`;
+/** A pose as the post words it: `DL` is "down face (−z), heading left (+x)". */
+export const describePose = (pose) => {
+	const [face, heading] = poseAxes(pose);
+	return `${FACE_WORD[pose[0]]} face (${face}), heading ${HEADING_WORD[pose[1]]} (${heading})`;
+};
 
 // ---- A position, in the reader's frame --------------------------------------
 

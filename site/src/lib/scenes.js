@@ -666,3 +666,19 @@ export function poseCycle() {
  * The straight itself is not drawn. Untinted, so the train is solid.
  */
 export const poseGhost = pose => ({ type: 'straight', cell: [0, 0, 0], pose });
+
+/**
+ * One orientation as a glyph: one cell, lattice only, its floor marked and an
+ * arrow on it along the heading — no train. Framed on the cell from the default
+ * angle, for `OrientationChip`'s pictures.
+ */
+export function orientationGlyph(pose) {
+  const grid = { lo: [0, 0, 0], hi: [0, 0, 0] };
+  return {
+    pieces: [],
+    drive: false,
+    grid,
+    orientations: [{ cell: [0, 0, 0], pose }],
+    camera: frameFit(cornersOf(grid)),
+  };
+}

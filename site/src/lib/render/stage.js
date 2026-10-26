@@ -36,7 +36,7 @@ import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js
 import { createLoop } from './loop.js';
 import { createCamera, viewBetween, adjusted, offscreen, REFERENCE_WIDTH, REFERENCE_HEIGHT } from './camera.js';
 import { sharedRenderer } from './renderer.js';
-import { cellBox, cellFace, cellEdges } from './grid.js';
+import { cellBox, cellFace, cellEdges, floorArrow } from './grid.js';
 import { backdropOf } from './blueprint.js';
 import { GROW, growEase } from '../grow.js';
 import { PROJ } from '../../../../src/track.js';
@@ -47,7 +47,7 @@ import { trainAt } from './rail.js';
 import { trainBody } from './train.js';
 
 /** The names the overlays' meshes carry, so a test can find them in the scene. */
-export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 'train-cell', piece: 'piece-cube', ghost: 'ghost' };
+export const OVERLAY = { grid: 'cell-grid', origin: 'origin-axes', trainCell: 'train-cell', piece: 'piece-cube', ghost: 'ghost', orientation: 'orientation' };
 
 // The overlays draw after the solids, and in this order among themselves. With
 // depth writes off that is what PolyCSS's painter's order came to, measured to the
@@ -813,6 +813,29 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     invalidate();
   }
 
+  // ---- Orientations -----------------------------------------------------------
+  //
+  // An orientation drawn without a train: its floor marked in the lattice's paint,
+  // as under a ghost, and an arrow lying on it along the heading, in the axes'
+  // solid paint. An overlay like the ghosts: `setOrientations([])` takes them down.
+
+  let orientations = [];
+
+  /** Replace the drawn orientations with these, `{ cell, pose }` each. */
+  function setOrientations(list) {
+    remove(orientations);
+    orientations = list.flatMap(({ cell, pose }) => [
+      fixedMesh(soupGeometry(cellFace(PROJ[pose[0]], TRAIN_CELL_INSET)), paint.fill, {
+        name: OVERLAY.orientation, order: ORDER.fill, at: toWorld(cell),
+      }),
+      fixedMesh(soupGeometry(floorArrow(PROJ[pose[0]], PROJ[pose[1]])), paint.origin, {
+        name: OVERLAY.orientation, at: toWorld(cell),
+      }),
+    ]);
+    for (const mesh of orientations) scene.add(mesh);
+    invalidate();
+  }
+
   // ---- Filled cells ---------------------------------------------------------
   //
   // Cells picked out whether or not a train is driving, in the train cell's own
@@ -896,6 +919,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     project,
     outline,
     setGhosts,
+    setOrientations,
     setFill,
     setOutlines,
     setOverlayOpacity,

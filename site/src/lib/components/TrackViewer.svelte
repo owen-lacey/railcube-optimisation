@@ -82,6 +82,9 @@
     lengths = null,
     // Trains that stand still, `{ type, cell, pose }` each. See `setGhosts` in stage.js.
     ghosts = [],
+    // Orientations drawn without a train, `{ cell, pose }` each: the floor marked
+    // and an arrow on it along the heading. See `setOrientations` in stage.js.
+    orientations = [],
     // Cells, `[x, y, z]` each, filled see-through in the train cell's paint whether
     // or not a train is driving. See `setFill` in stage.js.
     fill = [],
@@ -571,6 +574,7 @@
       cancelAnimationFrame(labelFrame);
       labelFrame = 0;
       stage?.setGhosts([]);
+      stage?.setOrientations([]);
       stage?.setFill([]);
       stage?.clear();
       stage = null;
@@ -772,6 +776,15 @@
     void ghosts;
     if (!ready || !stage || held()) return;
     showGhosts();
+  });
+
+  // The drawn orientations, keyed the same way.
+  let orientationsKey = null;
+  $effect(() => {
+    const key = orientations.map(({ cell, pose }) => `${cell}${pose}`).join('|');
+    if (!ready || !stage || key === orientationsKey) return;
+    stage.setOrientations(orientations);
+    orientationsKey = key;
   });
 
   // The filled cells, keyed the same way.

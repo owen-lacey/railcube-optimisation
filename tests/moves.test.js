@@ -48,11 +48,11 @@ test("the pose cycle stands the train in one cell in every pose, floor by floor"
 	);
 });
 
-test("a pose is worded as its face and heading, with its code", () => {
-	assert.equal(describePose("DF"), "down face, heading forwards (−z +y)");
-	assert.equal(describePose("UR"), "up face, heading right (+z −x)");
-	assert.equal(describePose("BD"), "back face, heading down (−y −z)");
-	assert.equal(describePose("LU"), "left face, heading up (+x +z)");
+test("a pose is worded as its face and heading, each with its axis", () => {
+	assert.equal(describePose("DF"), "down face (−z), heading forwards (+y)");
+	assert.equal(describePose("UR"), "up face (+z), heading right (−x)");
+	assert.equal(describePose("BD"), "back face (−y), heading down (−z)");
+	assert.equal(describePose("LU"), "left face (+x), heading up (+z)");
 });
 
 test("a move is written as the change from (x, y, z), in the reader's frame", () => {

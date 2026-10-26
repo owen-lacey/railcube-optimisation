@@ -17,7 +17,7 @@
 // it, which happens only on the box's own faces.
 
 import { CUBE, GRID_W } from './dimensions.js';
-import { toWorld, windToward } from './vec.js';
+import { cross, toWorld, windToward } from './vec.js';
 
 const HALF = GRID_W / 2 / CUBE; // half the line's thickness, in cells
 
@@ -139,4 +139,25 @@ export function cellFace(dir, inset) {
   const axis = dir.findIndex(v => v !== 0);
   const { vertices } = square([0, 0, 0], axis, dir[axis], 0.5 - inset / CUBE);
   return [{ vertices }, { vertices: [...vertices].reverse() }];
+}
+
+/** Where the arrow sits, in cells: how far towards the floor from the middle, and its outline along the heading and across it. */
+const ARROW = { off: 0.46, tail: -0.32, neck: 0.02, tip: 0.36, shaft: 0.07, head: 0.2 };
+
+/**
+ * A flat arrow lying on the floor of the cell centred on `[0, 0, 0]`, pointing
+ * along `heading` — both project-frame unit vectors, the floor the way out of the
+ * cell. It sits just inside `cellFace`, so a filled floor never covers it from
+ * inside. A shaft and a head, since a polygon here must be convex, each wound both
+ * ways like `cellFace`.
+ */
+export function floorArrow(floor, heading) {
+  const side = cross(floor, heading);
+  const at = (a, s) => toWorld([0, 1, 2].map(k => floor[k] * ARROW.off + heading[k] * a + side[k] * s));
+  const { tail, neck, tip, shaft, head } = ARROW;
+  const parts = [
+    [at(tail, shaft), at(neck, shaft), at(neck, -shaft), at(tail, -shaft)],
+    [at(neck, head), at(tip, 0), at(neck, -head)],
+  ];
+  return parts.flatMap(vertices => [{ vertices }, { vertices: [...vertices].reverse() }]);
 }
