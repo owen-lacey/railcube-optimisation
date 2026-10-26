@@ -7,10 +7,10 @@
 	// every letter. The length is the largest at which the widest row fits across the
 	// screen and every row fits down it.
 	//
-	// The title arrives a word at a time, in reading order, each dropping onto the page
-	// as seen from above: large, its shadow far off, shrinking as it falls. Every
-	// landing jolts the ground, the last hardest, and only once it is still does the
-	// gate appear, so the O's box is never read mid-drop.
+	// The title arrives in reading order: the first row fades in a word at a time, then
+	// the last row drops onto the page whole, as seen from above: large, its shadow far
+	// off, shrinking as it falls. Its landing jolts the ground, and only once that is
+	// still does the gate appear, so the O's box is never read mid-drop.
 	//
 	// The gate under it fades away every letter but the O with itself, and then the
 	// splash hands the page, through `onnext`, the O's box on screen: the O is the
@@ -26,30 +26,32 @@
 	let leaving = $state(false);
 	let landed = $state(false);
 
-	/** Seconds before the first word sets off, a word takes to fall, and between one
-	 *  word setting off and the next. */
+	/** Seconds before the first word sets off, a word takes to fade in, a row takes to
+	 *  fall, and between one arrival setting off and the next. */
 	const DELAY = 0.8;
+	const FADE_IN = 0.6;
 	const DROP = 0.6;
 	const STAGGER = 0.5;
-	/** A landing's jolt: how far, in cubes, and how long, in milliseconds. */
-	const THUD = { size: 0.15, ms: 400 };
-	const LAST_THUD = { size: 0.6, ms: 800 };
+	/** The landing's jolt: how far, in cubes, and how long, in milliseconds. */
+	const THUD = { size: 0.6, ms: 800 };
 
 	const TEXT = "Optimising the Rail Cube";
 	// Two rows on a wide screen. On a narrow one, a row that stacks puts each of its
-	// words on a row of its own.
+	// words on a row of its own. A row that drops arrives whole; any other fades in a
+	// word at a time.
 	const ROWS = [
-		{ words: ["OPTIMISING", "THE"], stacks: true },
-		{ words: ["RAIL", "CUBE"], stacks: false }
+		{ words: ["OPTIMISING", "THE"], stacks: true, drops: false },
+		{ words: ["RAIL", "CUBE"], stacks: false, drops: true }
 	];
 	const WIDE = ROWS.map((row) => row.words);
 	const NARROW = ROWS.flatMap((row) =>
 		row.stacks ? row.words.map((word) => [word]) : [row.words]
 	);
 
-	// Each row's first word's place in reading order, so every word has one.
-	const FIRST = ROWS.map((_, r) => ROWS.slice(0, r).reduce((n, row) => n + row.words.length, 0));
-	const LAST = ROWS.reduce((n, row) => n + row.words.length, 0) - 1;
+	// Each row's first arrival's place in reading order: a dropping row is one arrival,
+	// any other one a word.
+	const arrivals = (row) => (row.drops ? 1 : row.words.length);
+	const FIRST = ROWS.map((_, r) => ROWS.slice(0, r).reduce((n, row) => n + arrivals(row), 0));
 
 	const urls = import.meta.glob("../assets/letters/*.png", {
 		eager: true,
@@ -64,17 +66,17 @@
 		landed = matchMedia("(prefers-reduced-motion: reduce)").matches;
 	});
 
-	// A decaying jolt in the plane of the page, measured off a landed letter's cubes.
-	function thud(event, order) {
+	// A decaying jolt in the plane of the page, measured off a landed word's cubes.
+	function thud(event) {
 		if (event.target !== event.currentTarget) return;
-		const { size, ms } = order === LAST ? LAST_THUD : THUD;
+		const { size, ms } = THUD;
 		const a = (size * event.currentTarget.firstElementChild.getBoundingClientRect().height) / HEIGHT;
 		const at = (x, y) => ({ translate: `${x * a}px ${y * a}px` });
 		const jolt = letters.animate(
 			[at(0, 0), at(0.4, 1), at(-0.6, -0.8), at(0.5, 0.5), at(-0.3, -0.3), at(0.15, 0.1), at(0, 0)],
 			{ duration: ms, easing: "ease-out" }
 		);
-		if (order === LAST) jolt.finished.then(() => (landed = true));
+		jolt.finished.then(() => (landed = true));
 	}
 
 	function next() {
@@ -88,6 +90,7 @@
 	bind:this={splash}
 	style:--fade="{FADE}s"
 	style:--delay="{DELAY}s"
+	style:--fade-in="{FADE_IN}s"
 	style:--drop="{DROP}s"
 	style:--stagger="{STAGGER}s"
 	style:--letter-gap={GAPS.letter}
@@ -102,13 +105,15 @@
 		<span class="text">{TEXT}</span>
 		<span class="letters" aria-hidden="true" bind:this={letters}>
 			{#each ROWS as row, r}
-				<span class="row" class:stacks={row.stacks}>
+				<span
+					class="row"
+					class:stacks={row.stacks}
+					class:drops={row.drops}
+					style:--order={FIRST[r]}
+					onanimationend={row.drops ? thud : undefined}
+				>
 					{#each row.words as word, w}
-						<span
-							class="word"
-							style:--order={FIRST[r] + w}
-							onanimationend={(event) => thud(event, FIRST[r] + w)}
-						>
+						<span class="word" style:--order={FIRST[r] + w}>
 							{#each word as letter}
 								<img
 									class:fades={letter !== "O"}
@@ -136,8 +141,11 @@
 </section>
 
 <style>
-	/* Out of the page's column to the screen's edges, and a screen tall. */
+	/* Out of the page's column to the screen's edges, and a screen tall. Clipped there,
+	   so a row starting its drop three times its size runs off the screen rather than
+	   widening the page. */
 	.splash {
+		overflow: clip;
 		--gutter: 1.25rem;
 		--fit-across: var(--wide-across);
 		--fit-down: var(--wide-down);
@@ -203,10 +211,18 @@
 		align-items: center;
 	}
 
+	.drops {
+		animation: drop var(--drop) cubic-bezier(0.55, 0, 1, 0.45)
+			calc(var(--delay) + var(--order) * var(--stagger)) both;
+	}
+
 	.word {
 		display: flex;
 		column-gap: calc(var(--letter-gap) * var(--cube));
-		animation: drop var(--drop) cubic-bezier(0.55, 0, 1, 0.45)
+	}
+
+	.row:not(.drops) .word {
+		animation: fade-in var(--fade-in) ease-out
 			calc(var(--delay) + var(--order) * var(--stagger)) both;
 	}
 
@@ -257,6 +273,7 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.word,
+		.row,
 		.next {
 			animation: none;
 		}

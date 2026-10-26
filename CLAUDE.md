@@ -911,12 +911,13 @@ once under reduced motion. The page tracks only whether the splash is `passed`.
 A screen-filling title spelled in letters Owen built from track and saved from the
 `Snapshot` story (`site/src/lib/assets/letters/`, imported through Vite so the URLs carry
 `BASE_PATH`). The rows are Owen's: `OPTIMISING THE / RAIL CUBE`, with the first row's words
-stacking under 600px, and never wider than `--max-across` (56rem). The title arrives a word at a time in reading order, each
-dropping onto the page as seen from above (a CSS `drop`: large, faded and shadowed far
-off, ease-in to its place), and every landing jolts the letters (a WAAPI `thud` fired
-from the word's `animationend`), the last hardest. The gate is only mounted once the last
-thud has finished, so its key cannot fire and the O's box is never read mid-drop — Owen's
-calls. Under reduced motion there is no drop or thud and the gate is there at once.
+stacking under 600px, and never wider than `--max-across` (56rem). The title arrives in reading order: OPTIMISING then THE
+fade in, then RAIL CUBE drop onto the page together as one row, seen from above (a CSS
+`drop`: large, faded and shadowed far off, ease-in to its place), and only that landing
+jolts the letters (a WAAPI `thud` fired from the row's `animationend`). The gate is only
+mounted once the thud has finished, so its key cannot fire and the O's box is never read
+mid-drop — Owen's calls. Under reduced motion there is no fade, drop or thud and the gate
+is there at once.
 
 - **Everything is in cubes.** `site/src/lib/letters.js` holds each letter's width and the
   gaps (½ letter, 2 word, 1 row). Every image is sized `width × --cube` by `8 × --cube`, and
