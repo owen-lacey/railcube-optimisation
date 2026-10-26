@@ -861,8 +861,9 @@ changing what the viewer shows. It replaced a scrollama scrolly section, on Owen
 narrow screen the prose and buttons sit along the bottom at their own height (the tallest
 step's), and the viewer is square in the room left above them, centred down it (shorter
 than square only if that room is); from 900px the section
-widens past the post's column, the viewer stands the screen's height on the right, and the
-prose and buttons are centred on the left. Every step's prose sits in one grid cell with only
+widens past the post's column, the viewer is square on the right, centred down the screen, and the
+prose and buttons are on the left, the buttons level with the viewer's bottom edge (the
+column is the measured box's height) and each step's prose centred in the room above them. Every step's prose sits in one grid cell with only
 the current one shown, so the text is always the tallest step's height and the buttons never
 move between steps — no measuring. On the last step forwards is **"All aboard!"**, which fades
 the section out (`--words`, 0.4 s; at once under reduced motion) and then calls `onaboard`.

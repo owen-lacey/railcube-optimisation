@@ -170,6 +170,7 @@
 	ontransitionend={faded}
 	style:--settle="{SETTLE}s"
 	style:--words="{WORDS}s"
+	style:--box-height={height ? `${height}px` : undefined}
 >
 	<div class="stage" bind:this={stage}>
 		<div
@@ -401,9 +402,9 @@
 		font-weight: 600;
 	}
 
-	/* Side by side: the section widens past the post's column, the viewer stands the
-	   screen's height on the right, and the text is centred beside it with the
-	   buttons under it. */
+	/* Side by side: the section widens past the post's column, the viewer is square on
+	   the right, centred down the screen, and the text is beside it with the buttons
+	   level with its bottom edge. */
 	@media (min-width: 900px) {
 		.stepped {
 			--wide: min(72rem, 100vw - 2.5rem);
@@ -418,14 +419,20 @@
 			height: 100svh;
 		}
 
-		.box {
-			height: 100%;
-			aspect-ratio: auto;
-		}
-
+		/* The viewer's height, centred as it is, so the buttons end where it does. */
 		.text {
 			grid-area: 1 / 1;
-			justify-content: center;
+			align-self: center;
+			min-height: var(--box-height);
+		}
+
+		/* All the room above the buttons, each step's prose centred in it. */
+		.steps {
+			flex: 1 1 auto;
+		}
+
+		.step {
+			align-self: center;
 		}
 
 		.nav {
