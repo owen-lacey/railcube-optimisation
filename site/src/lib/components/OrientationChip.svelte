@@ -104,13 +104,14 @@
 		font-size: 0.875rem;
 		font-weight: 600;
 		white-space: nowrap;
-		z-index: 1;
+		/* bits-ui lifts this onto its wrapper. Over a viewer's buttons, which are 1. */
+		z-index: 2;
 	}
 
-	/* About three times the prose's size. */
+	/* The size the pictures were saved at, 120 CSS px. */
 	.orientation-tooltip img {
-		width: 3.5rem;
-		height: 3.5rem;
+		width: 7.5rem;
+		height: 7.5rem;
 	}
 
 	.visually-hidden {

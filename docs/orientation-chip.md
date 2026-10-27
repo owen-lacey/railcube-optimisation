@@ -36,7 +36,7 @@ labels. `tests/moves.test.js` pins the wording and changes with it.
 
 - **Pre-baked PNGs, one per orientation**, 24 in all, under
   `site/src/lib/assets/orientations/<CODE>.png`, imported through Vite so their URLs carry
-  `BASE_PATH`. `alt=""`, since the words follow it. Shown at about 3× prose size.
+  `BASE_PATH`. `alt=""`, since the words follow it. Shown at the size they were saved at, 120 CSS px.
 - **Drawn by three.js from the viewers' default camera** (`CAMERA` in
   `site/src/lib/render/camera.js`, rot-x 65, rot-y −45):
   - one lattice cell in `--grid-color` (`cellEdges` in `render/grid.js`);
