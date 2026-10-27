@@ -1,7 +1,8 @@
 <script>
-  // The leaderboard's best rows, and the reader's own wherever it ranks: rank, score
-  // and the track, which opens in the front page's builder. Notes are never shown —
-  // the Worker does not serve them.
+  // The leaderboard's best rows, and the reader's own wherever it ranks: rank, name,
+  // score and the track, which opens in the front page's builder. A track whose
+  // builder never signed it is "Unnamed". Notes are never shown — the Worker does
+  // not serve them.
   import { base } from '$app/paths';
 
   // `standings` is the Worker's `{ total, top, entry }`; `entry` is the reader's row.
@@ -15,14 +16,14 @@
 <table>
   <caption>{total.toLocaleString('en-GB')} {total === 1 ? 'track' : 'tracks'} submitted</caption>
   <thead>
-    <tr><th scope="col">Rank</th><th scope="col">Score</th><th scope="col">Track</th></tr>
+    <tr><th scope="col">Rank</th><th scope="col">Name</th><th scope="col">Score</th><th scope="col">Track</th></tr>
   </thead>
   <tbody>
     {#each top as row (row.id)}
       {@render line(row)}
     {/each}
     {#if below}
-      <tr class="gap" aria-hidden="true"><td colspan="3">⋯</td></tr>
+      <tr class="gap" aria-hidden="true"><td colspan="4">⋯</td></tr>
       {@render line(entry)}
     {/if}
   </tbody>
@@ -31,6 +32,7 @@
 {#snippet line(row)}
   <tr class:yours={row.id === entry?.id}>
     <td>{row.rank}</td>
+    <td class="name" class:unnamed={!row.name}>{row.name ?? 'Unnamed'}</td>
     <td>{row.score}</td>
     <td class="shape"><a href={linkOf(row.shape)}>{row.shape}</a></td>
   </tr>
@@ -71,6 +73,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: ui-monospace, monospace;
+  }
+
+  .name {
+    max-width: 10rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .unnamed {
+    color: var(--muted);
+    font-style: italic;
   }
 
   a {

@@ -35,6 +35,14 @@
     padding-top: 0;
   }
 
+  /* A page that is an app, such as the front page's builder, fills the screen
+     edge to edge rather than sitting in the post's column. */
+  main:has(> :global(.app)) {
+    max-width: none;
+    height: 100svh;
+    padding: 0;
+  }
+
   /* While the splash or a stepped section is up the page is one screen tall, so
      its buttons and the arrows are the only ways on. The rest is clipped rather
      than the page's scrolling turned off, which would take pull-to-refresh with

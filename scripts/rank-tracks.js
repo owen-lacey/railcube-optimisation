@@ -20,7 +20,7 @@ import { parseArgs } from 'node:util';
 import Database from 'better-sqlite3';
 
 import { auditRows } from './audit-rows.js';
-import { DB_PATH, random, weightingValuesOf } from './sweep-data.js';
+import { DB_PATH, legalRows, random, weightingValuesOf } from './sweep-data.js';
 import { knotOf } from '../site/src/lib/knots.js';
 import { scoreOf, WEIGHTS } from '../site/src/lib/weighting.js';
 
@@ -65,16 +65,10 @@ function rank(path) {
   const best = leaders((a, b) => a.score > b.score || (a.score === b.score && a.draw < b.draw));
   const worst = leaders((a, b) => a.score < b.score || (a.score === b.score && a.draw < b.draw));
   let legal = 0;
-  const query = db.prepare(`SELECT id, shape, mirrored, poses, close_calls, repeats, underground,
-    span_across, span_up, span_along, knot_over, knot_under FROM layouts WHERE +question_id = ? ORDER BY id`);
-  for (const r of query.iterate(QUESTION)) {
-    if (r.poses === null) throw new Error(`row ${r.id} has no readings: run hydrate-sweeps.js --readings`);
-    if (r.underground) continue;
+  for (const r of legalRows(db, QUESTION)) {
     legal += 1;
     if (r.mirrored === 1) continue;
-    const values = weightingValuesOf(r);
-    if (values.knotted === null) throw new Error(`row ${r.id} has its knot unread: run hydrate-sweeps.js --knots`);
-    const entry = { row: r, score: scoreOf(values, WEIGHTS), draw: next() };
+    const entry = { row: r, score: scoreOf(weightingValuesOf(r), WEIGHTS), draw: next() };
     best.offer(entry);
     worst.offer(entry);
   }

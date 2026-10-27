@@ -13,7 +13,7 @@
     }
   ],
   "vars": {
-    // The pages allowed to call it: the deployed post and the dev server.
-    "ALLOWED_ORIGINS": "https://owen-lacey.github.io,http://localhost:5173"
+    // The pages allowed to call it: the deployed post, the dev server and Storybook.
+    "ALLOWED_ORIGINS": "https://owen-lacey.github.io,http://localhost:5173,http://localhost:6006"
   }
 }

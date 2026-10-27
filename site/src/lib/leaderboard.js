@@ -3,19 +3,36 @@
 
 import { PUBLIC_LEADERBOARD_URL } from '$env/static/public';
 
+/** How many submissions the board needs before its scores are drawn as a histogram. */
+export const HISTOGRAM_FROM = 10;
+
 async function call(path, init) {
-  const response = await fetch(`${PUBLIC_LEADERBOARD_URL}${path}`, init);
+  let response;
+  try {
+    response = await fetch(`${PUBLIC_LEADERBOARD_URL}${path}`, init);
+  } catch {
+    // The browser's own words for this are "Failed to fetch".
+    throw new Error("Couldn't reach the leaderboard.");
+  }
   const body = await response.json();
   if (!response.ok) throw new Error(body.error);
   return body;
 }
 
-/** Sends a track's letters and notes: `{ id, rank, shape, score, readings, duplicate }`. */
-export const submit = (shape, notes) => call('/submissions', {
-  method: 'POST',
+const json = (method, body) => ({
+  method,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ shape, notes }),
+  body: JSON.stringify(body),
 });
 
-/** The best rows, and row `id` wherever it ranks: `{ total, top, entry }`. */
-export const standings = id => call(`/leaderboard?id=${id}`);
+/**
+ * Puts a closed track on the board: `{ id, rank, name, shape, score, readings,
+ * duplicate, token }`. `token` signs it, and comes only with a track new to the board.
+ */
+export const submit = shape => call('/submissions', json('POST', { shape }));
+
+/** Signs a submission with a public name and private notes, by its token. */
+export const sign = (id, token, name, notes) => call(`/submissions/${id}`, json('PATCH', { token, name, notes }));
+
+/** The best `limit` rows, row `id` wherever it ranks, and the scores' histogram. */
+export const standings = (id, limit = 10) => call(`/leaderboard?limit=${limit}${id === null ? '' : `&id=${id}`}`);

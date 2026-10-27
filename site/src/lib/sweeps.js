@@ -34,6 +34,7 @@ import sweep28 from './data/sweep-28.json' with { type: 'json' };
 import sweepCrossed from './data/sweep-crossed.json' with { type: 'json' };
 import sweepCrossedWeights from './data/sweep-crossed-weights.json' with { type: 'json' };
 import sweepCrossedRanked from './data/sweep-crossed-ranked.json' with { type: 'json' };
+import sweepCrossedScores from './data/sweep-crossed-scores.json' with { type: 'json' };
 import sweepCrossedSingles from './data/sweep-crossed-singles.json' with { type: 'json' };
 
 /** The 28-cube sweep: the question, the run, and every distinct layout it found. */
@@ -57,6 +58,14 @@ export const SWEEP_CROSSED_WEIGHTS = sweepCrossedWeights;
  * `scripts/rank-tracks.js` writes it.
  */
 export const SWEEP_CROSSED_RANKED = sweepCrossedRanked;
+
+/**
+ * How many of the crossed sweep's layouts score each score under the post's
+ * weights, as `[score, count]` pairs over the ranked file's population, for the
+ * verdict a builder's closed loop is shown against. `scripts/score-histogram.js`
+ * writes it.
+ */
+export const SWEEP_CROSSED_SCORES = sweepCrossedScores;
 
 /**
  * The crossed sweep's best layout on each metric alone: one per metric `weighting.js`

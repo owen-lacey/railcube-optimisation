@@ -219,6 +219,23 @@ export const weightingValuesOf = r => ({
 });
 
 /**
+ * Every legal row of a question in id order: one whose train never rides below the
+ * floor. Throws on a row whose readings or knot are unread, since a gap would be
+ * read as a value. rank-tracks.js and score-histogram.js both walk it, so their
+ * populations are one population.
+ */
+export function* legalRows(db, question) {
+  const query = db.prepare(`SELECT id, shape, mirrored, poses, close_calls, repeats, underground,
+    span_across, span_up, span_along, knot_over, knot_under FROM layouts WHERE +question_id = ? ORDER BY id`);
+  for (const r of query.iterate(question)) {
+    if (r.poses === null) throw new Error(`row ${r.id} has no readings: run hydrate-sweeps.js --readings`);
+    if (r.underground) continue;
+    if (r.knot_over === null) throw new Error(`row ${r.id} has its knot unread: run hydrate-sweeps.js --knots`);
+    yield r;
+  }
+}
+
+/**
  * Chain a logged shape, check it is what the log says it is, and return its
  * columns as `row`, with the chained `placed` its knot is read from.
  */

@@ -39,7 +39,8 @@ hollow), and nothing is said about that.
 
 `site/` is the SvelteKit app, plus the components it draws with, developed in Storybook
 (`.storybook/`, `npm run storybook`). Two routes: the front page is the post's
-`TrackBuilder` on its own, its track kept in the address as `?track=` (read in
+`TrackBuilder` filling the screen, with the leaderboard as a second tab, its track kept in
+the address as `?track=` and the tab as `?tab=leaderboard&id=N` (read in
 `afterNavigate`, since the page is prerendered and `replaceState` throws before the router
 is up), and the draft blog post lives at `/post`, one file per chapter. The crossed sweep
 outgrew a file the page imports whole and lives in `sweeps.db` (below); the site carries
@@ -706,9 +707,13 @@ itself weighing nothing.
 ### The leaderboard: `worker/` → Cloudflare Worker + D1
 
 The site is static, so submissions go to a Worker (`worker/index.js`) over one D1 table
-(`worker/migrations/`). Closing a loop in any `TrackBuilder` opens `SubmitDialog` (a native
-modal `<dialog>`, so it stacks over a full-screen builder), which sends the letters and
-optional artist's notes and then shows `Leaderboard`. Owen's calls, all of them:
+(`worker/migrations/`). Closing a loop in any `TrackBuilder` opens `SubmitDialog`, the
+verdict (a native modal `<dialog>`, so it stacks over a full-screen builder, animated in
+with `@starting-style`), and **submits the letters at once, unnamed**. The verdict shows the
+loop's score on two `ScoreHistogram`s — the crossed sweep's and the board's — then asks
+for a name and notes, and "Show full results" signs the row and calls the builder's
+`onresults(id)`: in the post a new tab on `/?tab=leaderboard&id=N`, on `/` a switch to that
+tab. Owen's calls, all of them:
 
 - **The Worker re-scores; a browser's score is never read.** `assess` in
   `site/src/lib/submission.js` re-chains the shape, checks it against the crossed sweep's
@@ -720,7 +725,21 @@ optional artist's notes and then shows `Leaderboard`. Owen's calls, all of them:
   `trackHash` from `scripts/sweep-data.js`, hex, so a submission can be looked up in
   `sweeps.db` by `hex(track_hash)`.
 - **Notes are private**: stored, never served. Critique happens off-site.
+- **Names are public and required**, but a row exists before it is named, so a dialog
+  dismissed unsigned leaves an "Unnamed" row. Only the POST's `token` may sign it (`PATCH
+  /submissions/:id`; stored as `token_hash`), so a track already on the board — which gets
+  no token — keeps its first submitter's name. Auto-submit means every closed loop a
+  builder makes goes on the public board.
+- **"Vs my solves" is a histogram** of every legal, unmirrored layout of the crossed sweep
+  at `WEIGHTS` (`site/src/lib/data/sweep-crossed-scores.json`, written by
+  `scripts/score-histogram.js` in ~30 s; `legalRows` in `sweep-data.js` is the population
+  it shares with `rank-tracks.js`, and `tests/score-histogram.test.js` checks the ends
+  match). The board's histogram is the Worker's `GROUP BY score`, shown only from
+  `HISTOGRAM_FROM` (10) submissions, the reader's own row taken out in the dialog.
 - Rank is one more than the rows scoring strictly higher; ties are listed earliest first.
+
+The front page passes `FillCard` as `TrackBuilder`'s `card`: `ExpandingCard`'s contract
+with no full-screen toggle or hand, always handled, filling the tab. The tabs are bits-ui's.
 
 `npm run worker` serves it locally on 8787 (its state in the gitignored `worker/.wrangler/`),
 after `npm run worker:migrate` once; `.env` points the site there. `ALLOWED_ORIGINS` in

@@ -23,7 +23,11 @@ export const INVENTORY = ranked.question.inventory;
 /** The longest artist's notes a submission may carry, in characters. */
 export const NOTES_LIMIT = 1000;
 
-async function sha256(text) {
+/** The longest name a submission may be signed with, in characters. */
+export const NAME_LIMIT = 40;
+
+/** Hex sha256 of a string: a track's key, or a submission's edit token. */
+export async function sha256(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }

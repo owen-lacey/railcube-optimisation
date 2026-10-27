@@ -16,10 +16,13 @@
   //
   // In the page a drag over it scrolls the page until the hand is on: turning,
   // zooming and panning are the hand's and full screen's, behind `ExpandingCard`'s
-  // buttons. The piece buttons and the keys work either way.
+  // buttons. The piece buttons and the keys work either way. A page that is the
+  // builder alone passes `FillCard` as its `card`, which has neither button and is
+  // always handled.
   //
-  // The piece that closes the loop offers it to the leaderboard (`SubmitDialog`),
-  // and a closed track keeps a button in the footer to offer it again.
+  // The piece that closes the loop puts it on the leaderboard and shows the
+  // verdict (`SubmitDialog`), and a closed track keeps a button in the footer to
+  // show it again.
   import { onMount } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
@@ -29,6 +32,7 @@
   import BuildPrompt from './BuildPrompt.svelte';
   import SubmitDialog from './SubmitDialog.svelte';
   import { attachControls } from '../render/controls.js';
+  import { base } from '$app/paths';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
   import { liveReadingsOf } from '$lib/score.js';
   import { scoreOf, WEIGHTS } from '$lib/weighting.js';
@@ -48,6 +52,11 @@
     speed = 1.2,
     // Handed the letters whenever they change, as the front page's address keeps them.
     onchange = undefined,
+    // What the builder sits in: `ExpandingCard`, or anything with its contract.
+    card: Card = ExpandingCard,
+    // Handed a submission's id when the reader asks for the full results. In the
+    // post they open beside it, on the front page's leaderboard.
+    onresults = id => window.open(`${base}/?tab=leaderboard&id=${id}`, '_blank'),
   } = $props();
 
   let letters = $state(seed(shape));
@@ -114,8 +123,8 @@
   }
 </script>
 
-<div bind:this={builder}>
-  <ExpandingCard
+<div class="builder" bind:this={builder}>
+  <Card
     footer={keys}
     label="Track builder: type S L R I O X or use the arrow keys to add a piece, Backspace to remove one"
     onkeydown={onKeydown}
@@ -139,23 +148,35 @@
       <div class="inventory" style:--tools-width="{toolsWidth}px"><InventoryCard {used} inventory={INVENTORY} /></div>
       {#if empty}<BuildPrompt />{/if}
     {/snippet}
-  </ExpandingCard>
+  </Card>
 </div>
 
 {#snippet keys()}
   <ScoreMaths {readings} />
   <PieceKeys disabled={done} {spent} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
   {#if view.closed}
-    <button class="submit" onclick={() => submission.offer()}>Submit to the leaderboard</button>
+    <div class="verdict">
+      <button class="submit" onclick={() => submission.offer()}>See the verdict</button>
+    </div>
   {/if}
 {/snippet}
 
-<SubmitDialog bind:this={submission} shape={letters} score={readings && scoreOf(readings, WEIGHTS)} />
+<SubmitDialog bind:this={submission} shape={letters} score={readings && scoreOf(readings, WEIGHTS)} {onresults} />
 
 <style>
+  /* Filling a page when its card does; in the post its height is its content's. */
+  .builder {
+    height: 100%;
+  }
+
+  /* A row of its own under the keys, so the keys stay centred as they were. */
+  .verdict {
+    display: flex;
+    flex-basis: 100%;
+    justify-content: center;
+  }
+
   .submit {
-    display: block;
-    margin: 0.75rem auto 0;
     padding: 0.5rem 1rem;
     border: 2px solid var(--card-border);
     border-radius: 0.5rem;
