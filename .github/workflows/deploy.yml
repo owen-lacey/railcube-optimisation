@@ -31,7 +31,6 @@ jobs:
           PUBLIC_LEADERBOARD_URL: ${{ vars.LEADERBOARD_URL }}
       - run: npm run build
         env:
-          BASE_PATH: /${{ github.event.repository.name }}
           PUBLIC_LEADERBOARD_URL: ${{ vars.LEADERBOARD_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:

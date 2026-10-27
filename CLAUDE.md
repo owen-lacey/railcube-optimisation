@@ -44,10 +44,10 @@ the address as `?track=` and the tab as `?tab=leaderboard&id=N` (read in
 `afterNavigate`, since the page is prerendered and `replaceState` throws before the router
 is up), and the draft blog post lives at `/post`, one file per chapter. The crossed sweep
 outgrew a file the page imports whole and lives in `sweeps.db` (below); the site carries
-a uniform sample of it. Deployed to GitHub Pages
-by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath URL and
-`PUBLIC_LEADERBOARD_URL` from the `LEADERBOARD_URL` repository variable (the build fails
-without it); `kit.paths.base` reads `BASE_PATH` and stays empty locally. The four
+a uniform sample of it. Deployed to GitHub Pages at `https://railcube.owenlacey.dev`
+(a Cloudflare CNAME to `owen-lacey.github.io`, served from the root, so no base path)
+by `.github/workflows/deploy.yml`, which sets `PUBLIC_LEADERBOARD_URL` from the
+`LEADERBOARD_URL` repository variable (the build fails without it). The four
 showcase pages that used to live here (overview, pieces, layouts, a live `/solve`) are gone;
 what survived is the renderer, two thin components over it, and fourteen stories —
 one per piece, one per piece's 24-orientation gallery, and a `Layout` story whose `shape` control
@@ -964,8 +964,7 @@ in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, 
 ### The title: `Splash`
 
 A screen-filling title spelled in letters Owen built from track and saved from the
-`Snapshot` story (`site/src/lib/assets/letters/`, imported through Vite so the URLs carry
-`BASE_PATH`). The rows are Owen's: `OPTIMISING THE / RAIL CUBE`, with the first row's words
+`Snapshot` story (`site/src/lib/assets/letters/`, imported through Vite). The rows are Owen's: `OPTIMISING THE / RAIL CUBE`, with the first row's words
 stacking under 600px, and never wider than `--max-across` (56rem). The title arrives in reading order: OPTIMISING then THE
 fade in, then RAIL CUBE drop onto the page together as one row, seen from above (a CSS
 `drop`: large, faded and shadowed far off, ease-in to its place), and only that landing

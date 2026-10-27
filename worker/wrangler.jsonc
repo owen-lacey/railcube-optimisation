@@ -14,6 +14,6 @@
   ],
   "vars": {
     // The pages allowed to call it: the deployed post, the dev server and Storybook.
-    "ALLOWED_ORIGINS": "https://owen-lacey.github.io,http://localhost:5173,http://localhost:6006"
+    "ALLOWED_ORIGINS": "https://railcube.owenlacey.dev,http://localhost:5173,http://localhost:6006"
   }
 }
