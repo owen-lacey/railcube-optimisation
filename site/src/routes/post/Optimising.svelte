@@ -123,7 +123,7 @@
 		There might be some additional things you care about, perhaps time spent
 		upside down is pleasing to you. The real magic happens when you combine
 		different objectives into something combined you can optimise for. The
-		metrics on their don't always guarantee a banger:
+		metrics on their own don't always guarantee a banger:
 	</p>
 
 	<SingleMetrics />

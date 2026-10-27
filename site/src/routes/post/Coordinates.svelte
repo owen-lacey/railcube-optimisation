@@ -94,7 +94,7 @@
 	<p>
 		Here, the final position of each group is given relative to the origin cube.
 		Now that the second group continues with the same orientation that the first
-		finishes on, we can add up their positions to get their combined pose. To be
+		finishes on, we can add up their positions to get the combined pose. To be
 		explicit, adding a track that finishes at (2, -3, -2) to a track finishing
 		at (-3, 4, 0) gives a combined track that finishes at (-1, 1, -2) so long as
 		they share the same orientation at the join.
