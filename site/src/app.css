@@ -39,6 +39,13 @@ html {
      far apart: the opening's prose and buttons, and a chapter's heading and body. */
   --arrive-rise: 1.5rem;
   --arrive-stagger: 0.2s;
+
+  /* A refusal in words, such as the leaderboard's: the rejected piece's red,
+     lightened to read as text on the dark page. */
+  --error-text: #f87171;
+
+  /* Behind a dialog asked of the reader over the page, such as a submission. */
+  --dialog-backdrop: rgb(0 0 0 / 0.6);
 }
 
 body {

@@ -10,7 +10,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "worker": "wrangler dev --config worker/wrangler.jsonc",
+    "worker:migrate": "wrangler d1 migrations apply railcube-leaderboard --local --config worker/wrangler.jsonc"
   },
   "dependencies": {
     "@lucide/svelte": "^1.48.0",
@@ -34,6 +36,7 @@
     "storybook": "^10.5.6",
     "svelte": "^5.56.8",
     "vite": "^7.1.5",
-    "vite-plugin-qrcode": "^0.4.1"
+    "vite-plugin-qrcode": "^0.4.1",
+    "wrangler": "^4.154.0"
   }
 }

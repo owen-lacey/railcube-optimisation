@@ -13,3 +13,6 @@ sweep-*.jsonl
 sweep-*.log
 sweeps.db*
 __pycache__/
+
+# The leaderboard Worker's local state (its local D1).
+.wrangler/

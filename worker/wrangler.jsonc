@@ -1,0 +1,19 @@
+// The leaderboard: a Worker over one D1 table. `npm run worker` serves it locally
+// with a local database; see worker/index.js.
+{
+  "name": "railcube-leaderboard",
+  "main": "index.js",
+  "compatibility_date": "2026-10-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "railcube-leaderboard",
+      "database_id": "833519df-3dd7-4851-af40-d2c7919df9bb",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // The pages allowed to call it: the deployed post and the dev server.
+    "ALLOWED_ORIGINS": "https://owen-lacey.github.io,http://localhost:5173"
+  }
+}

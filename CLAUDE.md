@@ -38,14 +38,15 @@ hollow), and nothing is said about that.
 | `src/solver/` | the CP-SAT model, behind the `solveTrack` facade |
 
 `site/` is the SvelteKit app, plus the components it draws with, developed in Storybook
-(`.storybook/`, `npm run storybook`). Two routes: the front page is a solve viewer — the
-28-cube sweep and a 1,000-layout sample of the crossed one (`site/src/lib/sweeps.js`),
-shuffle for a random layout — and the draft blog post lives at `/post`, deliberately
-unlinked from it, one file per chapter. The crossed sweep itself outgrew a file the page imports whole and lives
-in `sweeps.db` (below); the site carries a uniform sample of it. On narrow screens the
-front page gets a taller 4/3 viewer but the same sequencing as desktop. Deployed to GitHub Pages
-by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath URL;
-`kit.paths.base` reads it and stays empty locally. The four
+(`.storybook/`, `npm run storybook`). Two routes: the front page is the post's
+`TrackBuilder` on its own, its track kept in the address as `?track=` (read in
+`afterNavigate`, since the page is prerendered and `replaceState` throws before the router
+is up), and the draft blog post lives at `/post`, one file per chapter. The crossed sweep
+outgrew a file the page imports whole and lives in `sweeps.db` (below); the site carries
+a uniform sample of it. Deployed to GitHub Pages
+by `.github/workflows/deploy.yml`, which sets `BASE_PATH` for the repo-subpath URL and
+`PUBLIC_LEADERBOARD_URL` from the `LEADERBOARD_URL` repository variable (the build fails
+without it); `kit.paths.base` reads `BASE_PATH` and stays empty locally. The four
 showcase pages that used to live here (overview, pieces, layouts, a live `/solve`) are gone;
 what survived is the renderer, two thin components over it, and fourteen stories —
 one per piece, one per piece's 24-orientation gallery, and a `Layout` story whose `shape` control
@@ -680,7 +681,9 @@ plain sort of the file over every setting.
 on two sets, before any metric is named: the crossed sweep's top and bottom 10 under the
 post's `WEIGHTS`. WeightedTracks at its default sliders is not the same list — its ten are ten
 combinations, ties alphabetical, where these are ten layouts, ties drawn, so several can
-share a combination — and both are kept (Owen's call). `rank-tracks.js` reads every legal, unmirrored row of
+share a combination — and both are kept (Owen's call). The opening's last step teases
+`best[0]` before any metric exists, as "my best" with no score, and Optimising's "why do I
+love this one?" and its closing "beat my 42" call back to it. `rank-tracks.js` reads every legal, unmirrored row of
 question 1, scores it with `scoreOf` at `WEIGHTS`, breaks ties by a seeded draw, re-derives and re-reads the
 knot of every one kept, and writes `site/src/lib/data/sweep-crossed-ranked.json`
 (`SWEEP_CROSSED_RANKED`). It keeps 100 at each end (`--count 100 --seed 1`); the draw is
@@ -699,6 +702,30 @@ tests. `tests/ranked-tracks.test.js` re-chains and re-scores the file, checks th
 sums to each stored score, and checks its first best and first worst score what `ends`
 gives at `WEIGHTS`. `single-metrics.js` breaks its ties at `WEIGHTS` too, the metric
 itself weighing nothing.
+
+### The leaderboard: `worker/` → Cloudflare Worker + D1
+
+The site is static, so submissions go to a Worker (`worker/index.js`) over one D1 table
+(`worker/migrations/`). Closing a loop in any `TrackBuilder` opens `SubmitDialog` (a native
+modal `<dialog>`, so it stacks over a full-screen builder), which sends the letters and
+optional artist's notes and then shows `Leaderboard`. Owen's calls, all of them:
+
+- **The Worker re-scores; a browser's score is never read.** `assess` in
+  `site/src/lib/submission.js` re-chains the shape, checks it against the crossed sweep's
+  inventory, and scores it with the builder's own `liveReadingsOf` at `WEIGHTS`. The Worker
+  bundles that code, so it scores exactly as the page does.
+- **Any closed loop counts**: no full spend, no box, no floor. So a board score is not
+  like-for-like with the sweep's 42.
+- **One row per physical track, the first submitter's**: `track_hash` is UNIQUE, and it is
+  `trackHash` from `scripts/sweep-data.js`, hex, so a submission can be looked up in
+  `sweeps.db` by `hex(track_hash)`.
+- **Notes are private**: stored, never served. Critique happens off-site.
+- Rank is one more than the rows scoring strictly higher; ties are listed earliest first.
+
+`npm run worker` serves it locally on 8787 (its state in the gitignored `worker/.wrangler/`),
+after `npm run worker:migrate` once; `.env` points the site there. `ALLOWED_ORIGINS` in
+`worker/wrangler.jsonc` is the CORS list. `tests/leaderboard-worker.test.js` runs the real
+Worker through wrangler over a throwaway D1, ~3 s, in the fast tier.
 
 ### cpsat-js bug (still present in 1.2.0): `notEquals` does nothing
 

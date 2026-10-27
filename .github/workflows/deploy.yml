@@ -24,9 +24,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The leaderboard Worker's URL (worker/), a repository variable. Without it
+      # the builder would submit to the .env file's local Worker.
+      - run: test -n "$PUBLIC_LEADERBOARD_URL"
+        env:
+          PUBLIC_LEADERBOARD_URL: ${{ vars.LEADERBOARD_URL }}
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}
+          PUBLIC_LEADERBOARD_URL: ${{ vars.LEADERBOARD_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build

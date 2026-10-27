@@ -17,6 +17,9 @@
   // In the page a drag over it scrolls the page until the hand is on: turning,
   // zooming and panning are the hand's and full screen's, behind `ExpandingCard`'s
   // buttons. The piece buttons and the keys work either way.
+  //
+  // The piece that closes the loop offers it to the leaderboard (`SubmitDialog`),
+  // and a closed track keeps a button in the footer to offer it again.
   import { onMount } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
@@ -24,9 +27,11 @@
   import ScoreMaths from './ScoreMaths.svelte';
   import InventoryCard from './InventoryCard.svelte';
   import BuildPrompt from './BuildPrompt.svelte';
+  import SubmitDialog from './SubmitDialog.svelte';
   import { attachControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
   import { liveReadingsOf } from '$lib/score.js';
+  import { scoreOf, WEIGHTS } from '$lib/weighting.js';
   import { claimKeys } from '$lib/keys.js';
   import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
   import { LIMIT, seed, added, removed, keyAction, usedOf, spentOut } from '$lib/building.js';
@@ -41,12 +46,15 @@
     aspect = undefined,
     pace = 0.1,
     speed = 1.2,
+    // Handed the letters whenever they change, as the front page's address keeps them.
+    onchange = undefined,
   } = $props();
 
   let letters = $state(seed(shape));
 
   // The prop is the starting shape, not the shape: clicking takes over from it.
   $effect(() => { letters = seed(shape); });
+  $effect(() => { onchange?.(letters); });
 
   const view = $derived(letters
     ? openScene(letters)
@@ -87,8 +95,12 @@
   let builder = $state(null);
   onMount(() => claimKeys(builder, onKeydown));
 
+  let submission = $state(null);
+
   const add = letter => {
-    if (!done && !spent.has(letter)) letters = added(letters, letter);
+    if (done || spent.has(letter)) return;
+    letters = added(letters, letter);
+    if (view.closed) submission.offer();
   };
   const removeLast = () => { letters = removed(letters); };
 
@@ -133,9 +145,26 @@
 {#snippet keys()}
   <ScoreMaths {readings} />
   <PieceKeys disabled={done} {spent} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
+  {#if view.closed}
+    <button class="submit" onclick={() => submission.offer()}>Submit to the leaderboard</button>
+  {/if}
 {/snippet}
 
+<SubmitDialog bind:this={submission} shape={letters} score={readings && scoreOf(readings, WEIGHTS)} />
+
 <style>
+  .submit {
+    display: block;
+    margin: 0.75rem auto 0;
+    padding: 0.5rem 1rem;
+    border: 2px solid var(--card-border);
+    border-radius: 0.5rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
   /* Over the viewer's top-left corner, as `LayoutViewer`'s overlay is, and never
      wide enough to reach the toolbar: on a narrow viewer its rows wrap. It never
      takes a drag from the viewer under it. */
