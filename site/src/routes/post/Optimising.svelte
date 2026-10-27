@@ -20,10 +20,13 @@
 
 <Chapter id="optimising">
 	<h2>Optimising</h2>
-	<p>Enter subjectivity. Consider this set of layouts.</p>
+	<p>
+		Enter subjectivity. What makes one layout better than another? Consider
+		these:
+	</p>
 	<RankedTracks end="best" />
 
-	<p>Now these.</p>
+	<p>Now these:</p>
 	<RankedTracks end="worst" />
 
 	<p>
@@ -31,8 +34,10 @@
 		you prefer the latter, I can't help you. From here on I'll assume you're a
 		rational person and prefer the former like me. Good? Good.
 	</p>
-
-	<p>Now, why do I love this one?</p>
+	<p>
+		Here's my favourite from earlier. It tops the first set too. Now, why do I
+		love this one?
+	</p>
 	<TrackFigure
 		shape={SWEEP_CROSSED_RANKED.best[0].shape}
 		scene={lengthsScene}
@@ -140,8 +145,8 @@
 	<WeightedTracks />
 
 	<p>
-		Can you do better? Try build one yourself and see if you can beat my score
-		of 42 with the same pieces.
+		Back to the challenge I set you at the start: can you do better? Try build
+		one yourself and see if you can beat my score of 42 with the same pieces.
 	</p>
 
 	<TrackBuilder />

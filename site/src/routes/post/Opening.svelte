@@ -8,6 +8,7 @@
 	import KnownTracks from "$lib/components/KnownTracks.svelte";
 	import StepSection from "$lib/components/StepSection.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
+	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
 
 	let { section = $bindable(), onaboard } = $props();
 
@@ -27,7 +28,12 @@
 			figure: TrackFigure,
 			props: { shape: "ILSSXOSSSSSIISLRSISOORSOIRRSXIILSLSI" }
 		},
-		{ body: tiresome, figure: KnownTracks, props: { train: null } }
+		{ body: tiresome, figure: KnownTracks, props: { train: null } },
+		{
+			body: challenge,
+			figure: TrackFigure,
+			props: { shape: SWEEP_CROSSED_RANKED.best[0].shape }
+		}
 	];
 </script>
 
@@ -57,9 +63,20 @@
 		decrees that the existing structure is tiresome.
 	</p>
 	<p>
-		I am showing you a sample of the millions of Rail Cube layouts I've
-		generated. I'm going to show you how I did this, and how we might optimise
-		for different things.
+		I am showing you a sample of the ~27 million Rail Cube layouts I've
+		generated. That may sound like loads, but I reckon there are over <a
+			href="https://bsky.app/profile/owenlacey.dev/post/3mwlhlqenlc2r"
+			target="_blank">28 billion ways</a
+		> to build one using every piece.
+	</p>
+{/snippet}
+
+{#snippet challenge()}
+	<p>
+		This one is my favourite so far, isn't it beautiful? I have formalised this
+		affection in anticipation of someone improving on it. With 99.9% of layouts
+		unseen, I'm pretty confident there's a better one out there. Can you find
+		it?
 	</p>
 {/snippet}
 
