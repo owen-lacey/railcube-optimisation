@@ -14,10 +14,12 @@
 	import { dev } from "$app/environment";
 	import { page } from "$app/state";
 
+	// `?nointro` skips the splash and the opening, straight to the chapters, in dev only.
+	const nointro = dev && page.url.searchParams.has("nointro");
 	// Whether the reader has gone through the splash. `?nosplash` skips it, in dev only.
-	let passed = $state(dev && page.url.searchParams.has("nosplash"));
+	let passed = $state(nointro || (dev && page.url.searchParams.has("nosplash")));
 	// Whether the reader has gone on past the opening.
-	let aboard = $state(false);
+	let aboard = $state(nointro);
 	let opening = $state();
 	// The O's box on screen while the title zooms, and the zoom.
 	let zoomFrom = $state(null);
