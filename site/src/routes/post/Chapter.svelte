@@ -60,17 +60,17 @@
 		margin-top: 0;
 	}
 
-	.chapter > :global(:is(p, ul)) {
+	.chapter > :global(:is(p, ul, ol)) {
 		font-size: var(--prose-size);
 		line-height: var(--prose-leading);
 		margin: 0 0 1.25rem;
 	}
 
-	.chapter > :global(ul) {
+	.chapter > :global(:is(ul, ol)) {
 		padding-left: 1.25rem;
 	}
 
-	.chapter > :global(ul > li) {
+	.chapter > :global(:is(ul, ol) > li) {
 		margin-bottom: 0.375rem;
 	}
 </style>
