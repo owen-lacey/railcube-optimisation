@@ -7,7 +7,9 @@
 // keys are nobody's, and the arrows scroll the page as usual.
 //
 // Anything being typed into is left alone, so a text box elsewhere on the page
-// (Sketch's, say) keeps its own letters and its own Backspace.
+// (Sketch's, say) keeps its own letters and its own Backspace. And nothing behind
+// an open modal dialog has them, as focus cannot reach it either: a builder in a
+// dialog has the keys, not a button the dialog covers.
 
 // How much of an element must be in view before it can have the keys.
 export const MAJORITY = 0.5;
@@ -27,6 +29,14 @@ export function mostInView(ratios) {
   return best;
 }
 
+/**
+ * The candidates in `ratios` inside every one of `modals` (anything with
+ * `contains`), each with its share in view.
+ */
+export function inFront(ratios, modals) {
+  return new Map([...ratios].filter(([candidate]) => modals.every(modal => modal.contains(candidate))));
+}
+
 const editable = target => target instanceof Element
   && (target.isContentEditable || target.closest('input, textarea, select'));
 
@@ -36,7 +46,8 @@ let observer = null;
 
 function onKeydown(event) {
   if (event.defaultPrevented || editable(event.target)) return;
-  handlers.get(mostInView(ratios))?.(event);
+  const modals = [...document.querySelectorAll('dialog:modal')];
+  handlers.get(mostInView(inFront(ratios, modals)))?.(event);
 }
 
 /**

@@ -15,6 +15,7 @@
 	// the fade's end is read off this element's own transition.
 	import { onMount } from "svelte";
 	import { claimKeys } from "$lib/keys.js";
+	import GateButton from "./GateButton.svelte";
 
 	let { label, onleave = () => {}, onopen } = $props();
 
@@ -48,40 +49,12 @@
 	);
 </script>
 
-<button
-	type="button"
-	class:leaving
-	bind:this={button}
+<GateButton
+	bind:element={button}
+	fading={leaving}
 	onclick={leave}
 	ontransitionend={faded}
-	style:--fade="{FADE}s"
+	style="--fade: {FADE}s"
 >
 	{label}
-</button>
-
-<style>
-	button {
-		/* Outlined and rounded like the viewer's tool buttons and the opening's. */
-		display: grid;
-		place-items: center;
-		height: 44px;
-		padding: 0 2rem;
-		border: 2px solid var(--card-border);
-		border-radius: 0.5rem;
-		background: var(--card-footer);
-		color: var(--ink);
-		font: inherit;
-		font-weight: 600;
-		cursor: pointer;
-		transition: background-color 0.15s ease-out;
-	}
-
-	button:active {
-		background: var(--card-border);
-	}
-
-	.leaving {
-		opacity: 0;
-		transition: opacity var(--fade) ease-out;
-	}
-</style>
+</GateButton>

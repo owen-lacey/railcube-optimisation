@@ -2,14 +2,15 @@
 	// The post, chapter by chapter. The splash is a gate: the reader is held on it
 	// until they choose to go on. The opening stays mounted under it, because the
 	// title zooms into its viewer. The opening is the second gate: its "All aboard!"
-	// replaces it with the chapters, from the top.
+	// replaces it with the chapters, from the top. The last gate is Optimising's
+	// challenge: a track submitted or the challenge turned down, the conclusion follows.
 	import Splash from "$lib/components/Splash.svelte";
 	import TitleZoom from "$lib/components/TitleZoom.svelte";
 	import Opening from "./Opening.svelte";
 	import Coordinates from "./Coordinates.svelte";
 	import TrackBuilding from "./TrackBuilding.svelte";
 	import Optimising from "./Optimising.svelte";
-	import AuthorNotes from "./AuthorNotes.svelte";
+	import Conclusion from "./Conclusion.svelte";
 	import { tick } from "svelte";
 	import { dev } from "$app/environment";
 	import { page } from "$app/state";
@@ -20,6 +21,10 @@
 	let passed = $state(nointro || (dev && page.url.searchParams.has("nosplash")));
 	// Whether the reader has gone on past the opening.
 	let aboard = $state(nointro);
+	// Whether the challenge is over, so the conclusion is shown, and whether the
+	// reader submitted a track.
+	let concluded = $state(false);
+	let submitted = $state(false);
 	let opening = $state();
 	// The O's box on screen while the title zooms, and the zoom.
 	let zoomFrom = $state(null);
@@ -45,6 +50,15 @@
 		await zoom.zoomTo(opening.landing());
 		opening.land();
 		zoomFrom = null;
+	}
+
+	async function conclude(sent) {
+		submitted = sent;
+		concluded = true;
+		await tick();
+		document
+			.getElementById("conclusion")
+			.scrollIntoView({ behavior: reduced() ? "instant" : "smooth" });
 	}
 
 	async function board() {
@@ -75,6 +89,8 @@
 {#if aboard}
 	<Coordinates />
 	<TrackBuilding />
-	<Optimising />
-	<AuthorNotes />
+	<Optimising onconclude={conclude} />
+	{#if concluded}
+		<Conclusion {submitted} />
+	{/if}
 {/if}

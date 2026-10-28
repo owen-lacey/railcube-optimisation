@@ -57,6 +57,8 @@
     // Handed a submission's id when the reader asks for the full results. In the
     // post they open beside it, on the front page's leaderboard.
     onresults = id => window.open(`${base}/?tab=leaderboard&id=${id}`, '_blank'),
+    // What the verdict's button for that reads.
+    resultsLabel = undefined,
   } = $props();
 
   let letters = $state(seed(shape));
@@ -161,7 +163,7 @@
   {/if}
 {/snippet}
 
-<SubmitDialog bind:this={submission} shape={letters} score={readings && scoreOf(readings, WEIGHTS)} {onresults} />
+<SubmitDialog bind:this={submission} shape={letters} score={readings && scoreOf(readings, WEIGHTS)} {onresults} {resultsLabel} />
 
 <style>
   /* Filling a page when its card does; in the post its height is its content's. */

@@ -5,17 +5,20 @@
 	// The prose is a straight transcription of notes.md — the wording is Owen's
 	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
+	import Challenge from "$lib/components/Challenge.svelte";
 	import PoseTracker from "$lib/components/PoseTracker.svelte";
 	import RankedTracks from "$lib/components/RankedTracks.svelte";
 	import ScoredRanking from "$lib/components/ScoredRanking.svelte";
 	import ScoredTrack from "$lib/components/ScoredTrack.svelte";
 	import SingleMetrics from "$lib/components/SingleMetrics.svelte";
-	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import WeightedTracks from "$lib/components/WeightedTracks.svelte";
 	import { knotScene, lengthsScene, repeatsScene } from "$lib/scenes.js";
 	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
 	import PieceTag from "$lib/components/PieceTag.svelte";
+
+	// Called once the challenge is over, with whether a track was submitted.
+	let { onconclude } = $props();
 </script>
 
 <Chapter id="optimising">
@@ -149,13 +152,5 @@
 		one yourself and see if you can beat my score of 42 with the same pieces.
 	</p>
 
-	<TrackBuilder />
-
-	<p>
-		I'll leave you with my poor attempt of recreating RollerCoaster Tycoon. If
-		you've made it this far, <a
-			href="mailto:hello@owenlacey.dev?subject=friend%20request&body=let%27s%20be%20mates"
-			target="_blank">we should be mates</a
-		>. If you make a cool track, I'd love to see it. Happy optimising!
-	</p>
+	<Challenge {onconclude} />
 </Chapter>

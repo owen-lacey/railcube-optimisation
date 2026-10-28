@@ -4,10 +4,10 @@
 	// crossed sweep's layouts and against the board; then it asks for a name (public)
 	// and notes (only Owen reads them), and hands over to the full results.
 	//
-	// A native modal `<dialog>`, as `ExpandingCard`'s full screen is, so opened over a
-	// full-screen builder it stacks above it in the top layer. The sweep's histogram
-	// is drawn at once from the browser's score; the board's waits for the Worker,
-	// which scores with the same `assess`.
+	// A `Modal`, so opened over a full-screen builder it stacks above it in the top
+	// layer. The sweep's histogram is drawn at once from the browser's score; the
+	// board's waits for the Worker, which scores with the same `assess`.
+	import Modal from "./Modal.svelte";
 	import ScoreHistogram from "./ScoreHistogram.svelte";
 	import { submit, sign, standings, HISTOGRAM_FROM } from "$lib/leaderboard.js";
 	import { NAME_LIMIT, NOTES_LIMIT } from "$lib/submission.js";
@@ -15,8 +15,8 @@
 
 	// `shape` is the closed track's letters, `score` its score at the post's weights,
 	// and `onresults` is handed the submission's id once the reader asks for the
-	// full results.
-	let { shape, score, onresults } = $props();
+	// full results, by the button reading `resultsLabel`.
+	let { shape, score, onresults, resultsLabel = "Show full results" } = $props();
 
 	let dialog = $state(null);
 	// The track the verdict is for, so offering it again shows the same verdict.
@@ -84,7 +84,7 @@
 	}
 </script>
 
-<dialog bind:this={dialog} aria-labelledby="verdict-title">
+<Modal bind:dialog aria-labelledby="verdict-title">
 	<h2 id="verdict-title">It's... beautiful!</h2>
 	<!-- Placeholder wording: Owen's to replace. -->
 	<p class="panel">Your layout pleases the Rail Cube adjudication panel.</p>
@@ -121,7 +121,7 @@
 	<form onsubmit={results}>
 		{#if signable}
 			<label for="verdict-name"
-				>Name <span>(shown on the leaderboard)</span></label
+				>Name or handle <span>(shown on the leaderboard)</span></label
 			>
 			<input
 				id="verdict-name"
@@ -148,76 +148,14 @@
 				>
 			{:else}
 				<button type="submit" class="primary" disabled={!board || signing}>
-					{signing ? "Signing…" : "Show full results"}
+					{signing ? "Signing…" : resultsLabel}
 				</button>
 			{/if}
 		</div>
 	</form>
-</dialog>
+</Modal>
 
 <style>
-	dialog {
-		width: min(32rem, calc(100% - 2rem));
-		max-height: calc(100% - 2rem);
-		box-sizing: border-box;
-		padding: 1.25rem;
-		border: 1px solid var(--card-border);
-		border-radius: 0.75rem;
-		background: var(--card-footer);
-		color: var(--ink);
-		opacity: 0;
-		transform: translateY(var(--arrive-rise)) scale(0.96);
-		transition:
-			opacity 0.3s ease-out,
-			transform 0.3s ease-out,
-			overlay 0.3s allow-discrete,
-			display 0.3s allow-discrete;
-	}
-
-	dialog[open] {
-		opacity: 1;
-		transform: none;
-	}
-
-	/* It rises into place as it opens, and sinks away as it closes. */
-	@starting-style {
-		dialog[open] {
-			opacity: 0;
-			transform: translateY(var(--arrive-rise)) scale(0.96);
-		}
-	}
-
-	dialog::backdrop {
-		background: var(--dialog-backdrop);
-		opacity: 0;
-		transition:
-			opacity 0.3s ease-out,
-			overlay 0.3s allow-discrete,
-			display 0.3s allow-discrete;
-	}
-
-	dialog[open]::backdrop {
-		opacity: 1;
-	}
-
-	@starting-style {
-		dialog[open]::backdrop {
-			opacity: 0;
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		dialog,
-		dialog::backdrop {
-			transition: none;
-		}
-	}
-
-	h2 {
-		margin: 0;
-		font-size: 1.5rem;
-	}
-
 	.panel {
 		margin: 0.25rem 0 0;
 		color: var(--muted);
@@ -273,34 +211,5 @@
 	.error {
 		margin: 0.5rem 0 0;
 		color: var(--error-text);
-	}
-
-	.actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
-		margin-top: 1rem;
-	}
-
-	button {
-		padding: 0.5rem 1rem;
-		border: 2px solid var(--card-border);
-		border-radius: 0.5rem;
-		background: transparent;
-		color: inherit;
-		font: inherit;
-		cursor: pointer;
-	}
-
-	button:disabled {
-		cursor: progress;
-		opacity: 0.6;
-	}
-
-	.primary {
-		border-color: var(--ink);
-		background: var(--ink);
-		color: var(--page);
-		font-weight: 600;
 	}
 </style>

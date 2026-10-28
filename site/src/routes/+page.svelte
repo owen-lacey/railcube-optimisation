@@ -9,16 +9,25 @@
 	// The page is prerendered, so the address is read once the router is up, not at
 	// render: a prerendered page has no query to read, and `replaceState` throws
 	// before then. A leaderboard link to another track is a navigation too.
+	//
+	// The challenge's briefing opens by itself on a reader's first visit, and from
+	// the header after that.
+	import { onMount } from "svelte";
 	import { afterNavigate, replaceState } from "$app/navigation";
+	import CircleQuestionMark from "@lucide/svelte/icons/circle-question-mark";
 	import { Tabs } from "bits-ui";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import FillCard from "$lib/components/FillCard.svelte";
 	import Leaderboard from "$lib/components/Leaderboard.svelte";
 	import ScoreHistogram from "$lib/components/ScoreHistogram.svelte";
+	import ChallengeBriefing from "$lib/components/ChallengeBriefing.svelte";
 	import { standings, HISTOGRAM_FROM } from "$lib/leaderboard.js";
 
 	// The most rows the leaderboard tab lists: the Worker's cap.
 	const FULL = 100;
+
+	// Where this browser remembers it has been briefed.
+	const BRIEFED = "railcube:briefed";
 
 	let shape = $state("");
 	let letters = $state("");
@@ -27,6 +36,18 @@
 	let board = $state(null);
 	let error = $state(null);
 	let routed = $state(false);
+	let briefing = $state(null);
+
+	// Storage can be refused (a private window, blocked site data); then every
+	// visit is a first.
+	onMount(() => {
+		let briefed = false;
+		try {
+			briefed = localStorage.getItem(BRIEFED) !== null;
+			localStorage.setItem(BRIEFED, "1");
+		} catch {}
+		if (!briefed) briefing.open();
+	});
 
 	afterNavigate(({ to }) => {
 		const query = to.url.searchParams;
@@ -76,6 +97,15 @@
 	<Tabs.Root bind:value={tab}>
 		<header>
 			<h1>Rail Cube track builder</h1>
+			<button
+				type="button"
+				class="challenge"
+				onclick={() => briefing.open()}
+				aria-label="The challenge"
+				title="The challenge"
+			>
+				<CircleQuestionMark aria-hidden="true" />
+			</button>
 			<Tabs.List>
 				<Tabs.Trigger value="builder">Builder</Tabs.Trigger>
 				<Tabs.Trigger value="leaderboard">Leaderboard</Tabs.Trigger>
@@ -110,6 +140,8 @@
 	</Tabs.Root>
 </div>
 
+<ChallengeBriefing bind:this={briefing} onconfirm={() => (tab = "builder")} />
+
 <style>
 	.app {
 		height: 100%;
@@ -123,17 +155,32 @@
 		height: 100%;
 	}
 
+	/* On a phone the title takes a row, and the buttons the next. */
 	header {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
+		gap: 0.75rem 1rem;
 		margin-bottom: 0.75rem;
 	}
 
 	h1 {
 		margin: 0;
+		margin-right: auto;
 		font-size: 1.25rem;
+	}
+
+	/* Outlined like the tab list beside it, and as tall. */
+	.challenge {
+		display: grid;
+		place-items: center;
+		padding: 0.35rem;
+		border: 2px solid var(--card-border);
+		border-radius: 0.5rem;
+		background: var(--card-footer);
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
 	}
 
 	.app :global([data-tabs-list]) {
