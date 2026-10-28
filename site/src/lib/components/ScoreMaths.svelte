@@ -11,11 +11,14 @@
   // layout's from `$lib/readings.js`, a track being built's from `$lib/score.js`.
   // Null is no track yet, and every value is a dash. `onweigh(name, value)` is
   // handed a slider's new weight, from 0 to its `max`, an object by metric name;
-  // without it the weights are fixed.
+  // without it the weights are fixed. `onreset()`, beside the sliders, is a Reset
+  // button in the points-each header; unset, its place is kept but it is hidden,
+  // so the header never shifts.
   let {
     readings,
     weights = SWEEP_CROSSED_RANKED.weights,
     onweigh = undefined,
+    onreset = undefined,
     max = undefined,
   } = $props();
 
@@ -58,7 +61,23 @@
     <tr>
       <th scope="col">Metric</th>
       <th scope="col">Value</th>
-      <th scope="col">Points each</th>
+      {#if onweigh}
+        <th scope="col" class="weigh">
+          <div>
+            Points each
+            <button
+              type="button"
+              class:idle={!onreset}
+              onclick={() => onreset()}
+              aria-label="Reset the weights"
+              tabindex={onreset ? undefined : -1}
+              aria-hidden={onreset ? undefined : 'true'}
+            >Reset</button>
+          </div>
+        </th>
+      {:else}
+        <th scope="col">Points each</th>
+      {/if}
       <th scope="col">Points</th>
     </tr>
   </thead>
@@ -135,6 +154,25 @@
 
   .weigh span {
     min-width: 3ch;
+  }
+
+  /* The header's label, then its Reset at the far end, over the values. */
+  th.weigh div {
+    justify-content: space-between;
+  }
+
+  th.weigh button {
+    padding: 0 0.4rem;
+    border: 1px solid var(--card-border);
+    border-radius: 0.3rem;
+    background: var(--card-footer);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  th.weigh button.idle {
+    visibility: hidden;
   }
 
   thead th {

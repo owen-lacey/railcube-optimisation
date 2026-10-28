@@ -1,7 +1,7 @@
 // The ten best of every legal crossed layout in sweeps.db, by a weighting of
 // knots, poses, close calls, repeats and longest side. Drag a weight's slider in
 // the maths to change how many points it is worth; the tiles re-rank and the first is
-// picked.
+// picked. Reset, in the points-each header, puts back the post's weights.
 
 import WeightedTracks from './WeightedTracks.svelte';
 import { WEIGHTS } from '$lib/weighting.js';

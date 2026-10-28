@@ -34,13 +34,20 @@
     picked = 0;
   };
 
+  // Back to the post's weights, which is the only time Reset is hidden.
+  const changed = $derived(Object.keys(WEIGHTS).some(name => weights[name] !== WEIGHTS[name]));
+  const reset = () => {
+    weights = WEIGHTS;
+    picked = 0;
+  };
+
   // Narrow, the viewer is taller to leave the track room above the tiles.
   const wide = new MediaQuery('min-width: 40rem');
   const aspect = $derived(wide.current ? '16 / 10' : '4 / 3');
 </script>
 
 {#snippet maths()}
-  <ScoreMaths readings={row} {weights} onweigh={weigh} max={table.maxWeights} />
+  <ScoreMaths readings={row} {weights} onweigh={weigh} onreset={changed ? reset : undefined} max={table.maxWeights} />
 {/snippet}
 
 {#snippet tiles()}
