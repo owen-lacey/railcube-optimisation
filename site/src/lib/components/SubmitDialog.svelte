@@ -15,7 +15,8 @@
 
 	// `shape` is the closed track's letters, `score` its score at the post's weights,
 	// and `onresults` is handed the submission's id once the reader asks for the
-	// full results, by the button reading `resultsLabel`.
+	// full results, by the button reading "Submit" while the track is there to sign
+	// and `resultsLabel` once it is not.
 	let {
 		shape,
 		score,
@@ -91,8 +92,7 @@
 
 <Modal bind:dialog aria-labelledby="verdict-title">
 	<h2 id="verdict-title">It's... beautiful!</h2>
-	<!-- Placeholder wording: Owen's to replace. -->
-	<p class="panel">Your layout pleases the Rail Cube adjudication panel.</p>
+	<p class="panel">Your layout pleases the Rail Cube Adjudication Panel.</p>
 
 	<section>
 		<h3>vs generated layouts</h3>
@@ -150,14 +150,13 @@
 		{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="actions">
-			<button type="button" onclick={() => dialog.close()}>Not now</button>
 			{#if error && !sent}
 				<button type="button" class="primary" onclick={() => judge(judged)}
 					>Try again</button
 				>
 			{:else}
 				<button type="submit" class="primary" disabled={!board || signing}>
-					{signing ? "Signing…" : resultsLabel}
+					{signing ? "Signing…" : signable ? "Submit" : resultsLabel}
 				</button>
 			{/if}
 		</div>

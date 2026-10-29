@@ -89,7 +89,7 @@
 
 <Modal bind:dialog aria-labelledby="briefing-title">
 	<!-- Placeholder wording throughout: Owen's to replace. -->
-	<h2 id="briefing-title">Build your own</h2>
+	<h2 id="briefing-title">Build your own Rail Cube layout</h2>
 	<p>Build a complete Rail Cube track, optimising for the below:</p>
 	<ol>
 		{#each METRICS as [name, label, meaning, unit] (name)}

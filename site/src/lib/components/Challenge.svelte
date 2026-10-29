@@ -4,8 +4,8 @@
 	// challenge from the verdict; turning the briefing down ends it at once. Either
 	// way the button goes and `onconclude(submitted)` is called.
 	//
-	// The builder is mounted on the first confirm and kept, so closing it without
-	// submitting leaves the button, and the half-built track, as they were.
+	// Once in the builder, the way out without a submitted track is to give up:
+	// its close button, or Escape, ends the challenge there and then.
 	// "Bring it on" has the right arrow while it is mostly in view; nothing behind
 	// the builder or the briefing does.
 	import { onMount, tick } from "svelte";
@@ -38,6 +38,12 @@
 		arena.showModal();
 	}
 
+	// Escape closes the builder as the close button does: by giving up.
+	function giveUp(event) {
+		event.preventDefault();
+		conclude(false);
+	}
+
 	function conclude(submitted) {
 		arena?.close();
 		over = true;
@@ -52,10 +58,15 @@
 
 	<ChallengeBriefing bind:this={briefing} onconfirm={fight} ondecline={() => conclude(false)} />
 
-	<dialog bind:this={arena} class="arena" aria-label="The challenge's track builder">
+	<dialog
+		bind:this={arena}
+		class="arena"
+		aria-label="The challenge's track builder"
+		oncancel={giveUp}
+	>
 		{#if fighting}
 			<div class="bar">
-				<button type="button" class="close" aria-label="Close the builder" onclick={() => arena.close()}>
+				<button type="button" class="close" aria-label="Give up" onclick={giveUp}>
 					<X aria-hidden="true" />
 				</button>
 			</div>
