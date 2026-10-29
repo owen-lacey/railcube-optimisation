@@ -1,0 +1,20 @@
+{
+  "generatedBy": "scripts/meet-figure.js",
+  "id": 7932037,
+  "shape": "XRSSIROIRISSRLXSIISSOLOSOISILSSISSLS",
+  "reading": "XRSSIROIRISSRLXSIISSOLOSOISILSSISSLS",
+  "a": {
+    "segments": [
+      "XRSSIRO",
+      "IRISSRL"
+    ],
+    "heading": "DL"
+  },
+  "b": {
+    "segments": [
+      "XSIISSOLOSO",
+      "ISILSSISSLS"
+    ],
+    "heading": "DF"
+  }
+}

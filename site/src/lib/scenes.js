@@ -227,14 +227,15 @@ export function apartScene(at, { turned = false, states = SUM } = {}) {
 
 /**
  * The two groups of `apartScene` joined: the whole route, with only its two ends
- * outlined, in a tight shot of its own.
+ * outlined, in a tight shot of its own. `ends: false` leaves out the outlines and
+ * the callout but keeps the shot, so a step before the ends are shown frames the same.
  */
-export function joinedScene(letters) {
+export function joinedScene(letters, { ends = true } = {}) {
   const scene = openScene(letters);
   return {
     ...scene,
-    outlines: stepOutlines([0, 0, 0], trackCell(scene.head)),
-    notes: [endNote('joined', scene.head)],
+    outlines: ends ? stepOutlines([0, 0, 0], trackCell(scene.head)) : [],
+    notes: ends ? [endNote('joined', scene.head)] : [],
     camera: fitCells([...scene.pieces.flatMap(p => p.material), trackCell(scene.head)]),
   };
 }

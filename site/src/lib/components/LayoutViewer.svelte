@@ -35,6 +35,10 @@
     // drawn: unlike the overlay it takes clicks, and stays full screen. Unset,
     // nothing is.
     dock = undefined,
+    // Laid over the middle of the pane, given the scene, while there is one drawn.
+    // It takes clicks, and shots are not framed clear of it, so it is for a pane
+    // with nothing drawn under it yet. Unset, nothing is.
+    centre = undefined,
   } = $props();
 
   const letters = $derived(shape.trim().toUpperCase());
@@ -111,6 +115,9 @@
           {@render dock(result.scene)}
         </div>
       {/if}
+      {#if centre}
+        <div class="centre">{@render centre(result.scene)}</div>
+      {/if}
       <TrackViewer
         bind:this={track}
         pieces={result.scene.pieces}
@@ -165,6 +172,14 @@
     right: calc(0.5rem + var(--corner-width) + min(var(--corner-width), 0.5rem));
     bottom: 0.5rem;
     z-index: 1;
+  }
+
+  .centre {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 1;
+    transform: translate(-50%, -50%);
   }
 
   .empty {
