@@ -130,14 +130,13 @@
 		margin-bottom: 0.375rem;
 	}
 
-	/* Set apart from the briefing, in the lattice's blue, with the score to beat
-	   standing out of it. */
+	/* Set apart from the briefing by a bar of the lattice's blue down its left,
+	   with the score to beat standing out of it. Not a box: a rounded box round a
+	   line of text, filled or outlined, reads as a text field. */
 	.cta {
 		margin-top: 1rem;
-		padding: 0.75rem 1rem;
-		border: 2px solid var(--grid-color);
-		border-radius: 0.5rem;
-		background: var(--page);
+		padding-left: 0.75rem;
+		border-left: 4px solid var(--grid-color);
 	}
 
 	.cta strong {
