@@ -14,7 +14,7 @@
 	// the header after that.
 	import { onMount } from "svelte";
 	import { afterNavigate, replaceState } from "$app/navigation";
-	import CircleQuestionMark from "@lucide/svelte/icons/circle-question-mark";
+	import { Icon } from "@lucide/svelte";
 	import { Tabs } from "bits-ui";
 	import TrackBuilder from "$lib/components/TrackBuilder.svelte";
 	import FillCard from "$lib/components/FillCard.svelte";
@@ -28,6 +28,17 @@
 
 	// Where this browser remembers it has been briefed.
 	const BRIEFED = "railcube:briefed";
+
+	// Lucide has no bare question mark: circle-question-mark's strokes, without
+	// the circle, scaled 1.25× about the middle so it fills the button.
+	/** @type {import("@lucide/svelte").LucideIconData} */
+	const QUESTION_MARK = {
+		name: "question-mark",
+		node: [
+			["path", { d: "M8.36 8.25a3.75 3.75 0 0 1 7.29 1.25c0 2.5-3.75 3.75-3.75 3.75" }],
+			["path", { d: "M12 18.25h.01" }],
+		],
+	};
 
 	let shape = $state("");
 	let letters = $state("");
@@ -104,7 +115,7 @@
 				aria-label="The challenge"
 				title="The challenge"
 			>
-				<CircleQuestionMark aria-hidden="true" />
+				<Icon icon={QUESTION_MARK} aria-hidden="true" />
 			</button>
 			<Tabs.List>
 				<Tabs.Trigger value="builder">Builder</Tabs.Trigger>
