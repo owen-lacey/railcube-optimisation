@@ -1097,6 +1097,11 @@ backspace (Lucide's `delete` icon, from `@lucide/svelte`) in the footer of a car
 arrows as a d-pad (↑ straight, ← left curve, → right curve) and Backspace. `PoseBuilder` is
 the same with an orientation stepper and only the track's two ends read out.
 
+**A new `shape` over a standing track is a move, not a rebuild** — Owen's call. Clicks are
+a grow, but a swap (a leaderboard link, the story's control) passes the grow `carry`, and
+`showCarried` in `TrackViewer` flies every cube to its new slot at once (`movePhase`) while
+the camera pans to the grow's frame. Over an empty builder it still builds piece by piece.
+
 **Neither is handled in the page until asked** — Owen's call, because turning and zooming
 mid-read interrupts it. They sit in `ExpandingCard`, which is `LayoutViewer`'s full-screen
 card pulled out for all three, and they take `attachControls` full screen or once its hand

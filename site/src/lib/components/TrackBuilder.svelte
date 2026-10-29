@@ -23,7 +23,7 @@
   // The piece that closes the loop puts it on the leaderboard and shows the
   // verdict (`SubmitDialog`), and a closed track keeps a button in the footer to
   // show it again.
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
   import PieceKeys from './PieceKeys.svelte';
@@ -62,9 +62,19 @@
   } = $props();
 
   let letters = $state(seed(shape));
+  // Whether the last change replaced a track that was standing, which carries its
+  // cubes over to the new one rather than building it afresh. A click is never one.
+  let carrying = $state(false);
 
   // The prop is the starting shape, not the shape: clicking takes over from it.
-  $effect(() => { letters = seed(shape); });
+  $effect(() => {
+    const next = seed(shape);
+    untrack(() => {
+      if (next === letters) return;
+      carrying = Boolean(letters);
+      letters = next;
+    });
+  });
   $effect(() => { onchange?.(letters); });
 
   const view = $derived(letters
@@ -110,10 +120,14 @@
 
   const add = letter => {
     if (done || spent.has(letter)) return;
+    carrying = false;
     letters = added(letters, letter);
     if (view.closed) submission.offer();
   };
-  const removeLast = () => { letters = removed(letters); };
+  const removeLast = () => {
+    carrying = false;
+    letters = removed(letters);
+  };
 
   /** The keyboard: a letter or an arrow adds a piece, Backspace takes one off. */
   function onKeydown(event) {
@@ -136,7 +150,7 @@
     {#snippet children(toggle, hand)}
       <TrackViewer
         pieces={view.pieces}
-        transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR }}
+        transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR, carry: carrying }}
         alarm={view.offender?.id ?? null}
         train={view.closed ? {} : null}
         controls={handled && !empty ? attachControls : null}

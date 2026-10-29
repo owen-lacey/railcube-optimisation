@@ -4,7 +4,7 @@
   import { createStage, together, deferred } from '../render/stage.js';
   import { readTheme } from '../render/renderer.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
-  import { movePhase, turnPhase, TURN } from '../render/move.js';
+  import { movePhase, turnPhase, TURN, MOVE } from '../render/move.js';
   import { fadeInPhase, fadeOutPhase, overlayFadePhase, changingFadePhase } from '../render/fade.js';
   import { gridLines } from '../render/grid.js';
   import { edgeLengths } from '../render/lengths.js';
@@ -33,10 +33,12 @@
     //           `{ pace, speed, handover, drop, reach }`.
     //   grow    the layout *extends* the one that is there: whatever the two have in
     //           common is left standing and only the rest arrives. The one kind whose
-    //           camera moves — see `showGrown`. `{ pace, speed, from, arrival, start }`,
+    //           camera moves — see `showGrown`. `{ pace, speed, from, arrival, start, carry }`,
     //           `arrival` a name in build.js's `ARRIVALS`, `start` the orientation
     //           the track starts in: a new one is the same track turned about the
-    //           origin cube, and is shown as that — see `showTurned`.
+    //           origin cube, and is shown as that — see `showTurned`. `carry` says
+    //           the new layout replaces the one standing rather than extending it:
+    //           its cubes are carried over, as a move carries them — see `showCarried`.
     //   move    every cube the two layouts share is carried over to its new slot, a
     //           cube with no slot fades out where it stands, and one with no cube
     //           comes in from beyond the edge of the picture. An outline or callout
@@ -286,6 +288,7 @@
     const turned = start !== shownStart;
     shownStart = start;
     if (turned && shown?.length && next.length && !reduced) return showTurned(next);
+    if (settings().carry && shown?.length && next.length && !reduced) return showCarried(next);
 
     const before = shown ?? [];
     let prefix = 0;
@@ -355,6 +358,26 @@
         // Every cube is home, so this touches none: it keeps a rejected piece pulsing.
         growPhase(stage, next, { ...grown(), instant: true }),
       )),
+    ]);
+  }
+
+  /**
+   * Another track in place of the one standing: its cubes carried over to the new
+   * slots all at once, as a move carries them, while the camera pans to the new
+   * frame. A cube whose ID the new track lacks fades out where it stands, and a slot
+   * with no cube is filled from beyond the frame's edge.
+   */
+  function showCarried(next) {
+    const keep = new Set(identify(next));
+    const leaving = [...stage.cubes.keys()].filter(id => !keep.has(id)).map(id => stage.detach(id));
+    const shot = grownShot(next);
+    const speed = Number(settings().speed);
+    stage.panTo(shot, MOVE / speed);
+    stage.run([
+      movePhase(stage, next, { leaving, frame: shot, speed }),
+      // Every cube is home, so this touches none: it drives the train once they
+      // have landed, and keeps a rejected piece pulsing.
+      deferred(() => growPhase(stage, next, { ...grown(), instant: true })),
     ]);
   }
 
