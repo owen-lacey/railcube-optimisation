@@ -21,7 +21,10 @@
     aspect = '4 / 3',
     label = '',
     // What a new layout looks like, `{ kind, ...that kind's settings }` — see
-    // `CHANGES`. Its kind is read once, at mount; its settings when a layout is shown.
+    // `CHANGES`. Read when a layout is shown, and a new kind shows the layout again,
+    // so the same pieces can be built in one step and carried over in the next. A
+    // tumble is the exception: its physics is loaded at mount, so a viewer that
+    // mounts as one stays one, and one that mounts as anything else never becomes one.
     //
     //   redraw  drawn finished, off an emptied stage. `{ pan }`: seconds the camera
     //           takes to ease to a new frame; unset, it cuts.
@@ -180,8 +183,9 @@
   let moving = false;
   let bringing = false;
   let handle = null;
-  // This viewer's entry in `CHANGES`, fixed at mount.
-  let change = null;
+  // The kind this viewer mounted with — see `transition` for why a tumble cannot be
+  // switched into or out of. Not `$state`, for the same reason as `shown`.
+  let mountedKind = null;
 
   /**
    * What makes two `pieces` arrays the same layout drawn the same way.
@@ -195,6 +199,8 @@
    */
   const pieceKey = p => `${p.type}${p.pose}${p.cell}`;
   const keyOf = ps => ps.map(pieceKey).join('|');
+  // And under which kind of transition: the same pieces under a new kind are shown again.
+  const shownAs = ps => `${transition.kind}:${keyOf(ps)}`;
 
   /**
    * Show the layout again from the start, which for a build is assembling it anew.
@@ -253,18 +259,24 @@
     steps: { show: showStepped, frame: null },
   };
 
+  /** This viewer's entry in `CHANGES`, for the kind of transition it is given now. */
+  const change = () => CHANGES[transition.kind];
+
   /**
-   * Show a layout, by this viewer's kind of transition.
+   * Show a layout, by the kind of transition the viewer is given now.
    *
    * A new `train` shows it again even when the pieces are the same: its callbacks
    * are handed to the phase here, so a viewer whose figure changes under it (a
    * stepped section's next step) would otherwise keep driving the old one's.
    */
   function show(next) {
-    const key = keyOf(next);
+    const key = shownAs(next);
     if (key === shownKey && train === shownTrain) return;
+    if ((transition.kind === 'tumble') !== (mountedKind === 'tumble')) {
+      throw new Error(`a viewer mounted as a ${mountedKind} cannot be shown as a ${transition.kind}`);
+    }
 
-    change.show(next);
+    change().show(next);
 
     shown = next;
     shownKey = key;
@@ -398,7 +410,7 @@
    * puts them back up.
    */
   const held = () => turning
-    || (change === CHANGES.grow && Boolean(shown?.length) && !reduced && settings().start !== shownStart);
+    || (change() === CHANGES.grow && Boolean(shown?.length) && !reduced && settings().start !== shownStart);
 
   /** Draw it finished and drive it, off an emptied stage. */
   function showStatic(next) {
@@ -441,7 +453,7 @@
    * for its cubes, so nothing is drawn where they have yet to arrive.
    */
   const landing = () => moving
-    || (change === CHANGES.move && Boolean(shown) && !reduced && keyOf(pieces) !== shownKey);
+    || (change() === CHANGES.move && Boolean(shown) && !reduced && shownAs(pieces) !== shownKey);
 
   /**
    * Of `next`, what to put up, matched with what is `up` by `key`. While a move is
@@ -545,8 +557,8 @@
 
     (async () => {
       try {
-        change = CHANGES[transition.kind];
-        await change.load?.();
+        mountedKind = transition.kind;
+        await change().load?.();
         if (!live) return;
         stage = createStage(canvas, {
           theme: readTheme(host),
@@ -566,7 +578,7 @@
         ready = true;
         // A tumble is framed once, here, and never again. A grow is framed by
         // `showGrown`, from the first paint.
-        if (change.frame) stage.frameTo(change.frame());
+        if (change().frame) stage.frameTo(change().frame());
         show(pieces);
 
         // Animate only what is on screen. A page of viewers each running its own
@@ -626,6 +638,7 @@
   $effect(() => {
     const next = pieces;
     void train;
+    void transition.kind;
     if (!ready || !stage) return;
     show(next);
   });
@@ -909,12 +922,12 @@
   // A pan is picked up from wherever the camera has got to, so a new frame asked
   // for mid-pan turns towards it rather than finishing the old one first.
   $effect(() => {
-    if (!ready || !stage || !change.frame) return;
+    if (!ready || !stage || !change().frame) return;
     const { pan } = settings();
     if (pan && !reduced) {
-      stage.panTo(change.frame(), Number(pan));
+      stage.panTo(change().frame(), Number(pan));
       stage.start();
-    } else stage.frameTo(change.frame());
+    } else stage.frameTo(change().frame());
   });
 </script>
 

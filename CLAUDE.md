@@ -856,8 +856,11 @@ together with), `TumbleViewer.svelte` and `BuildViewer.svelte`. The stories are 
 files beside them.
 
 `TrackViewer` mounts a stage one way and shows a layout six, chosen by one `transition`
-object, `{ kind, ...that kind's settings }`, and looked up in its `CHANGES` table, which is
-why the wrappers stay thin rather than becoming copies of the plumbing. `redraw`: new pieces
+object, `{ kind, ...that kind's settings }`, and looked up in its `CHANGES` table on every
+show, which is why the wrappers stay thin rather than becoming copies of the plumbing. A new
+kind is a change even over the same pieces (`shownAs`), so one figure can build a track in
+one step and carry it over in the next; only `tumble` is fixed at mount, since its physics
+loads then, and switching into or out of it throws. `redraw`: new pieces
 are a redraw off an emptied stage. `build`: they are assembled from off the frame. `tumble`:
 they are a rearrangement — the old layout collapses and the new one is built out of what
 falls. `grow`: they are an *extension* — whatever the two layouts have in common is left
