@@ -1,10 +1,14 @@
 <script>
   // What a builder with no pieces shows: a line over the middle of its viewer
-  // pointing at the buttons below. Styled as the viewer's callouts are.
+  // pointing at the buttons below. Styled as the viewer's callouts are. Where
+  // there is a mouse there is most likely a keyboard, so the keys are named too.
+  import PieceTag from './PieceTag.svelte';
+  import { PIECES } from '$lib/catalogue.js';
+
   let { text = 'Select a track piece below' } = $props();
 </script>
 
-<p class="prompt">{text}</p>
+<p class="prompt">{text}<span class="keys">, or use {#each PIECES as { letter } (letter)}<PieceTag {letter} />{' '}{/each}keys</span></p>
 
 <style>
   .prompt {
@@ -22,5 +26,15 @@
     color: var(--grid-color);
     pointer-events: none;
     user-select: none;
+  }
+
+  .keys {
+    display: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .keys {
+      display: inline;
+    }
   }
 </style>
