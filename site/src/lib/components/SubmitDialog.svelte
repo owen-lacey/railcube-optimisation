@@ -16,7 +16,12 @@
 	// `shape` is the closed track's letters, `score` its score at the post's weights,
 	// and `onresults` is handed the submission's id once the reader asks for the
 	// full results, by the button reading `resultsLabel`.
-	let { shape, score, onresults, resultsLabel = "Show full results" } = $props();
+	let {
+		shape,
+		score,
+		onresults,
+		resultsLabel = "Show full results"
+	} = $props();
 
 	let dialog = $state(null);
 	// The track the verdict is for, so offering it again shows the same verdict.
@@ -104,7 +109,9 @@
 			<!-- Without this a track already on the board would lose its name field
 			     with no word of why. -->
 			{#if sent.duplicate}
-				<p class="quiet">Someone got there first: this track is already on the board.</p>
+				<p class="quiet">
+					Someone got there first: this track is already on the board.
+				</p>
 			{/if}
 			{#if board.total >= HISTOGRAM_FROM}
 				<ScoreHistogram
@@ -121,7 +128,7 @@
 	<form onsubmit={results}>
 		{#if signable}
 			<label for="verdict-name"
-				>Name or handle <span>(shown on the leaderboard)</span></label
+				>Name <span>(shown on the leaderboard)</span></label
 			>
 			<input
 				id="verdict-name"
@@ -129,15 +136,17 @@
 				maxlength={NAME_LIMIT}
 				required
 				autocomplete="nickname"
+				placeholder="e.g. The Smiler, but more awesome"
 			/>
 			<label for="verdict-notes"
-				>Artist's notes <span>(optional, only Owen reads them)</span></label
+				>Any other notes <span>(optional, not shown anywhere)</span></label
 			>
 			<textarea
 				id="verdict-notes"
 				bind:value={notes}
 				maxlength={NOTES_LIMIT}
-				rows="3"></textarea>
+				rows="3"
+				placeholder="e.g your handle, inspiration, hopes and dreams"></textarea>
 		{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="actions">
