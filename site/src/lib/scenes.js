@@ -240,6 +240,55 @@ export function joinedScene(letters, { ends = true } = {}) {
   };
 }
 
+/**
+ * One trial in a search for a loop's second segment, as `MeetFigure` stages it: the
+ * first segment (the letters before `at`) and a candidate (the rest), in one of four
+ * pictures — `'alone'`, the first segment by itself as `joinedScene` draws it, in the
+ * shot `'apart'` takes, so it clears the way for the candidate without reframing, and
+ * with no callout: its end's comes back with the candidate, once it has landed;
+ * `'apart'` and `'turned'`, as `apartScene` draws them; and `'joined'`, the two as
+ * one route, as `joinedScene` draws it. `judged`, the joined end's callout is marked
+ * with whether it meets `target`, the orientation the loop must come back to the
+ * cross in: `mark` is 'match' if it ends there, on the origin cube, else 'miss'.
+ *
+ * Each picture is in its own shot, unless `routes` is given: every first segment
+ * and candidate the trials show, and then the shot is fitted over all of them in
+ * every picture, so going from one to the next pans nothing.
+ */
+export function trialScene(at, { state, target, judged = false, routes = null }) {
+  const camera = routes && fitCells(routes.flatMap(route => trialCells(route, at)));
+  const pictures = {
+    alone: letters => ({ ...joinedScene(letters.slice(0, at)), notes: [], camera: apartScene(at)(letters).camera }),
+    apart: letters => apartScene(at)(letters),
+    turned: letters => apartScene(at, { turned: true })(letters),
+    joined: letters => {
+      const scene = joinedScene(letters);
+      const met = scene.head.pose === target && trackCell(scene.head).every(v => v === 0);
+      return {
+        ...scene,
+        pieces: scene.pieces.map((p, i) => ({ ...p, group: i < at ? 0 : 1 })),
+        notes: scene.notes.map(note => (judged ? { ...note, mark: met ? 'match' : 'miss' } : note)),
+      };
+    },
+  };
+  if (!(state in pictures)) throw new Error(`a trial has no picture ${state}`);
+  return letters => {
+    const picture = pictures[state](letters);
+    return { ...picture, closed: false, camera: camera ?? picture.camera };
+  };
+}
+
+/** Every cube a trial of `route` draws, in any of its pictures, and every cube an end is outlined at. */
+function trialCells(route, at) {
+  const { pictures } = groupsOf(route, at, SUM);
+  const joined = openScene(route);
+  return [
+    ...Object.values(pictures).flatMap(({ pieces, outlined }) => [...pieces.flatMap(p => p.material), ...outlined]),
+    ...joined.pieces.flatMap(p => p.material),
+    trackCell(joined.head),
+  ];
+}
+
 /** A shot fitted to the outline of `cells`. */
 const fitCells = cells => frameFit(cells.flatMap(c => cornersOf({ lo: c, hi: c })));
 

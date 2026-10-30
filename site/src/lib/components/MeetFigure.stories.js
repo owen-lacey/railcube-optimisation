@@ -8,8 +8,12 @@ export default {
   component: MeetFigure,
   argTypes: {
     aspect: { control: 'text' },
+    camera: { control: 'inline-radio', options: ['follow', 'fixed'] },
   },
 };
 
-/** The first segment built, then its finishing pose. */
+/** The first segment built, its finishing pose, then the search for its second. */
 export const Default = {};
+
+/** The same, the trials held in one shot rather than followed. */
+export const Fixed = { args: { camera: 'fixed' } };

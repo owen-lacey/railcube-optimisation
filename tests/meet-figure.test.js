@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { chainOpen, chainTrack, startCell } from '../src/track.js';
+import { chainOpen, chainTrack, overflowingPoolByType, startCell } from '../src/track.js';
 import { routeOf, trackKey } from '../src/layouts.js';
 
 const FILE = 'site/src/lib/data/meet-figure.json';
@@ -69,8 +69,26 @@ test('every segment is legal on its own', () => {
   }
 });
 
+test('each decoy joins the first segment cleanly and misses the cross', () => {
+  const [first, second] = a.segments;
+  assert.equal(a.decoys.length, 3);
+  assert.equal(new Set([...a.decoys, second]).size, 4, 'a decoy repeats, or is the real segment');
+  for (const decoy of a.decoys) {
+    assert.equal(decoy.length, second.length, decoy);
+    assert.doesNotMatch(decoy, /X/, decoy);
+    assert.deepEqual(chainOpen(routeOf(decoy)).faults, [], `${decoy} on its own`);
+    const route = routeOf(first + decoy);
+    const { placed, head, faults } = chainOpen(route);
+    assert.deepEqual(faults, [], `${decoy} joined`);
+    assert.ok(placed.every(p => p.material.every(c => c[1] >= 0)), `${decoy} goes below the floor`);
+    assert.equal(overflowingPoolByType(route, sample.question.inventory), null, `${decoy} overspends`);
+    const home = head.cell.every((v, k) => v === startCell('DF')[k]);
+    assert.ok(!(home && head.pose === a.heading), `${decoy} closes the loop`);
+  }
+});
+
 test('the script writes this file again', () => {
   const out = join(mkdtempSync(join(tmpdir(), 'meet-figure-')), 'meet-figure.json');
-  execFileSync('node', ['scripts/meet-figure.js', '--id', String(data.id), '--out', out]);
+  execFileSync('node', ['scripts/meet-figure.js', '--id', String(data.id), '--seed', String(data.seed), '--out', out]);
   assert.equal(readFileSync(out, 'utf8'), readFileSync(FILE, 'utf8'));
 });

@@ -1,6 +1,7 @@
 {
   "generatedBy": "scripts/meet-figure.js",
   "id": 7932037,
+  "seed": 1,
   "shape": "XRSSIROIRISSRLXSIISSOLOSOISILSSISSLS",
   "reading": "XRSSIROIRISSRLXSIISSOLOSOISILSSISSLS",
   "a": {
@@ -8,7 +9,12 @@
       "XRSSIRO",
       "IRISSRL"
     ],
-    "heading": "DL"
+    "heading": "DL",
+    "decoys": [
+      "IOLLSOO",
+      "LRRSLSI",
+      "LROLOLR"
+    ]
   },
   "b": {
     "segments": [
