@@ -1,6 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+  import Check from '@lucide/svelte/icons/check';
+  import X from '@lucide/svelte/icons/x';
   import { createStage, together, deferred } from '../render/stage.js';
   import { readTheme } from '../render/renderer.js';
   import { trackPhase, buildPhase, growPhase } from '../render/build.js';
@@ -113,11 +115,12 @@
     // keep what it lays over the viewer clear of them. 0 while there is none.
     toolsWidth = $bindable(0),
     cornerWidth = $bindable(0),
-    // Callouts on cells, `{ key, lines, cell, side, flash }` each: set outside what
-    // is drawn with a leader line to the middle of `cell`, and kept there as the
+    // Callouts on cells, `{ key, lines, cell, side, flash, mark }` each: set outside
+    // what is drawn with a leader line to the middle of `cell`, and kept there as the
     // camera moves. A line is an array of parts, `{ text, changed }`, and
     // a changed part is picked out each time `flash` changes. `side` pins it 'left',
-    // 'above' or 'below'; unset, it is chosen. See `calloutsFor`.
+    // 'above' or 'below'; unset, it is chosen. See `calloutsFor`. `mark`, 'match'
+    // or 'miss', puts a ✓ or a ✗ beside the lines, faded in as it arrives.
     notes = [],
     // The ID of a cube the model has rejected, `5L` say, or null. It is drawn where
     // it was asked to go and pulses there, whatever the transition — see `pulseFor`
@@ -764,12 +767,12 @@
       above: (w, h, to) => ({ x: across(to.x + w / 2, w) - w / 2, y: down(top - CALLOUT_GAP, h) }),
       below: (w, h, to) => ({ x: across(to.x + w / 2, w) - w / 2, y: down(bottom + CALLOUT_GAP + h, h) - h }),
     };
-    return shown.map(({ key, lines, flash, changing, side: pinned }, i) => {
+    return shown.map(({ key, lines, flash, mark, changing, side: pinned }, i) => {
       const side = pinned ?? (above.has(i) ? 'above' : 'below');
       const w = noteEls[key]?.offsetWidth ?? 0;
       const h = noteEls[key]?.offsetHeight ?? 0;
       const { x, y } = PLACE[side](w, h, spots[i]);
-      return { key, lines, flash, changing, side, x: dodge(side, x, y, w, h, width, height), y, to: spots[i], measured: Boolean(noteEls[key]) };
+      return { key, lines, flash, mark, changing, side, x: dodge(side, x, y, w, h, width, height), y, to: spots[i], measured: Boolean(noteEls[key]) };
     });
   }
 
@@ -842,7 +845,7 @@
   // `notesUp` is the ones placed, which a landing move may hold some of back.
   let notesKey = null;
   let notesUp = [];
-  const noteKey = n => `${n.key}${n.cell}${n.flash}${JSON.stringify(n.lines)}`;
+  const noteKey = n => `${n.key}${n.cell}${n.flash}${n.mark}${JSON.stringify(n.lines)}`;
   function showNotes() {
     const next = arriving(notesUp, notes, noteKey, { fade: true });
     const key = next.map(markedKey(noteKey)).join('|');
@@ -962,14 +965,21 @@
       {/each}
     </svg>
   {/if}
-  {#each noteSpots as { key, lines, flash, changing, side, x, y } (key)}
+  {#each noteSpots as { key, lines, flash, mark, changing, side, x, y } (key)}
     <span class="note {side}" class:changing style:left="{x}px" style:top="{y}px" aria-hidden="true" bind:this={noteEls[key]}>
-      <!-- Remade on each flash, so a changed part's animation starts again. -->
-      {#key flash}
-        {#each lines as line, i (i)}
-          <span>{#each line as { text, changed }, j (j)}<span class:changed>{text}</span>{/each}</span>
-        {/each}
-      {/key}
+      {#if mark}
+        <span class="mark {mark}">
+          {#if mark === 'match'}<Check />{:else}<X />{/if}
+        </span>
+      {/if}
+      <span class="lines">
+        <!-- Remade on each flash, so a changed part's animation starts again. -->
+        {#key flash}
+          {#each lines as line, i (i)}
+            <span>{#each line as { text, changed }, j (j)}<span class:changed>{text}</span>{/each}</span>
+          {/each}
+        {/key}
+      </span>
     </span>
   {/each}
 
@@ -1104,7 +1114,6 @@
     position: absolute;
     transform: translate(-50%, -100%);
     display: flex;
-    flex-direction: column;
     align-items: center;
     padding: 0.1em 0.4em;
     border-radius: 0.3em;
@@ -1120,6 +1129,55 @@
 
   .note.below {
     transform: translate(-50%, 0);
+  }
+
+  .lines {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* A verdict on what the callout reads, as tall as its lines: hung off its left
+     edge, so arriving it moves neither the lines nor where the callout is placed. */
+  .mark {
+    position: absolute;
+    top: 0;
+    right: 100%;
+    bottom: 0;
+    display: grid;
+    place-items: center;
+    padding-left: 0.4em;
+    border-radius: 0.3em 0 0 0.3em;
+    background: color-mix(in srgb, var(--card-footer) 85%, transparent);
+    color: var(--verdict-miss);
+    animation: mark 0.3s ease-out;
+  }
+
+  .note:has(.mark) {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .mark.match {
+    color: var(--verdict-match);
+  }
+
+  .mark :global(svg) {
+    width: 2em;
+    height: 2em;
+    stroke-width: 3;
+  }
+
+  @keyframes mark {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mark {
+      animation: none;
+    }
   }
 
   /* A part of a callout that has just changed: lit in the lattice's colour, then
@@ -1146,6 +1204,9 @@
 
   .note.left {
     transform: translate(-100%, -50%);
+  }
+
+  .note.left .lines {
     align-items: flex-end;
   }
 

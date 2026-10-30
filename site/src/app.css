@@ -44,6 +44,10 @@ html {
      lightened to read as text on the dark page. */
   --error-text: #f87171;
 
+  /* A verdict on a callout, its ✗ and ✓: whether a joined track meets the cross. */
+  --verdict-miss: #f87171;
+  --verdict-match: #4ade80;
+
   /* Behind a dialog asked of the reader over the page, such as a submission. */
   --dialog-backdrop: rgb(0 0 0 / 0.6);
 }
