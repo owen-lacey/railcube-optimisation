@@ -11,15 +11,18 @@
 // the X in the first segment. A loop's heading is where the chain leaves the train
 // as it comes back to the cross, read off the model rather than written here.
 //
-// Loop A's second segment comes with three decoys: random walks of its length,
-// grown on from the first segment as `meet.py`'s `sample_half` grows a walk —
-// each piece drawn uniformly from those that fit — and kept only if, joined to the
-// first segment, they collide with nothing, stay on the floor and in the box's
-// inventory, and miss the cross's pose. So a decoy fails for the pose alone.
+// Each loop's second segment comes with three decoys: random walks of its length,
+// grown on from everything before it as `meet.py`'s `sample_half` grows a walk —
+// each piece drawn uniformly from those that fit — and kept only if they collide
+// with nothing, stay on the floor and miss the cross's pose — but only just, ending
+// within `NEAR` cubes of it, counted along the axes. So a decoy is a near miss, and
+// fails for the pose alone. Loop A's are also kept within the box's inventory, joined to the
+// first segment. Loop B's are capped only on their own, as `meet.py` caps a half,
+// so joined to the ¾ of the track before them they may overspend.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { chainOpen, chainTrack, overflowingPoolByType, startCell } from '../src/track.js';
+import { chainOpen, chainTrack, cubeOf, overflowingPoolByType, startCell } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { random } from './sweep-data.js';
 
@@ -42,22 +45,37 @@ const headingOf = letters => chainOpen(routeOf(letters)).head.pose;
 // The pieces a decoy is drawn from: every cube but the cross, which only leads a loop.
 const KINDS = ['S', 'L', 'R', 'I', 'O'];
 
-/** Whether `letters` chain with no fault, every cube on the floor and within `inventory`. */
-const fits = (letters, inventory) => {
+/** Whether `letters` chain with no fault and every cube on the floor. */
+const laid = letters => {
   const { placed, faults } = chainOpen(routeOf(letters));
-  return faults.length === 0
-    && placed.every(p => p.material.every(c => c[1] >= 0))
-    && overflowingPoolByType(routeOf(letters), inventory) === null;
+  return faults.length === 0 && placed.every(p => p.material.every(c => c[1] >= 0));
 };
 
+/** Whether `letters` stay within `inventory`. Route entries, so a crossed X counts twice. */
+const within = (letters, inventory) => overflowingPoolByType(routeOf(letters), inventory) === null;
+
 /** Whether `letters` come back to the cross in `heading`. */
+// How many cubes from the cross, counted along the axes, a decoy may end: the cube
+// its end's callout reads, under the train, against the cross at the origin.
+const NEAR = 4;
+
+// How many of their seven positions any two of loop A's decoys differ in, so none
+// looks like another. Loop B's need only differ.
+const APART = 5;
+
+/** How many cubes from the cross, counted along the axes, `letters` end. */
+const offBy = letters => {
+  const { head } = chainOpen(routeOf(letters));
+  return cubeOf(head.cell, head.pose).reduce((sum, v) => sum + Math.abs(v), 0);
+};
+
 const meets = (letters, heading) => {
   const { head } = chainOpen(routeOf(letters));
   return head.pose === heading && head.cell.every((v, k) => v === startCell('DF')[k]);
 };
 
-/** One walk of `n` pieces on from `first`, each drawn from those that fit; null at a dead end. */
-function walk(first, n, inventory, rand) {
+/** One walk of `n` pieces, each drawn from those `fits` takes; null at a dead end. */
+function walk(n, fits, rand) {
   let letters = '';
   for (let i = 0; i < n; i++) {
     const order = [...KINDS];
@@ -65,20 +83,27 @@ function walk(first, n, inventory, rand) {
       const k = Math.floor(rand() * (j + 1));
       [order[j], order[k]] = [order[k], order[j]];
     }
-    const next = order.find(kind => fits(first + letters + kind, inventory));
+    const next = order.find(kind => fits(letters + kind));
     if (!next) return null;
     letters += next;
   }
   return letters;
 }
 
-/** Three walks the length of `segment` that join `first` cleanly and miss `heading`. */
-function decoysFor([first, segment], heading, inventory, seed) {
+/** How many positions two walks of one length differ in. */
+const differ = (p, q) => [...p].filter((letter, i) => letter !== q[i]).length;
+
+/**
+ * Three walks the length of `segment`, each taken by `fits`, that on from `before`
+ * miss `heading`, but within `NEAR`; any two differ in at least `apart` positions.
+ */
+function decoysFor(before, segment, heading, fits, seed, { apart = 1 } = {}) {
   const rand = random(seed);
   const decoys = [];
   while (decoys.length < 3) {
-    const letters = walk(first, segment.length, inventory, rand);
-    if (letters && letters !== segment && !decoys.includes(letters) && !meets(first + letters, heading)) {
+    const letters = walk(segment.length, fits, rand);
+    if (letters && letters !== segment && decoys.every(decoy => differ(decoy, letters) >= apart)
+      && !meets(before + letters, heading) && offBy(before + letters) <= NEAR) {
       decoys.push(letters);
     }
   }
@@ -93,16 +118,27 @@ export function meetFigure(id, seed) {
   const [{ reading, loop }] = readings(row.shape).sort((p, q) => p.loop - q.loop);
   chainTrack(routeOf(reading));
   const [a, b] = [reading.slice(0, loop), reading.slice(loop)];
-  const segments = halves(a);
+  const { inventory } = sample.question;
+  const [first, second] = halves(a);
   const heading = headingOf(a);
+  const [third, last] = halves(b);
+  const before = a + third;
   return {
     generatedBy: 'scripts/meet-figure.js',
     id,
     seed,
     shape: row.shape,
     reading,
-    a: { segments, heading, decoys: decoysFor(segments, heading, sample.question.inventory, seed) },
-    b: { segments: halves(b), heading: headingOf(reading) },
+    a: {
+      segments: [first, second],
+      heading,
+      decoys: decoysFor(first, second, heading, letters => laid(first + letters) && within(first + letters, inventory), seed, { apart: APART }),
+    },
+    b: {
+      segments: [third, last],
+      heading: headingOf(reading),
+      decoys: decoysFor(before, last, 'DF', letters => laid(before + letters) && within(letters, inventory), seed),
+    },
   };
 }
 

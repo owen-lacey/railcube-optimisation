@@ -18,52 +18,72 @@
 	let { aspect = "16 / 10", camera = "follow" } = $props();
 
 	const [first, second] = data.a.segments;
-
-	// Loop A's second segment, searched for: each decoy, then the real one, joined to
-	// the first segment in turn.
-	const candidates = [...data.a.decoys, second];
-	const routes = candidates.map((candidate) => first + candidate);
-	const trial = (state, judged = false) =>
-		trialScene(first.length, {
-			state,
-			judged,
-			target: data.a.heading,
-			routes: camera === "fixed" ? routes : null
-		});
-	const TRIALS = {
-		alone: trial("alone"),
-		apart: trial("apart"),
-		turned: trial("turned"),
-		joined: trial("joined"),
-		judged: trial("joined", true)
-	};
+	const [third, last] = data.b.segments;
 
 	// How long each beat of the trials is held, in seconds: a carry is `MOVE`, and the
 	// rest is time to look.
 	const LOOK = 0.8;
 	const VERDICT = 1.4;
 
-	// The trials, beat by beat, played on entering step 3. Each candidate flies in
-	// beside the first segment, is turned to carry on from it, joined to it, and its
-	// end's callout marked ✗ or ✓; a miss then fades away, back to the first segment
-	// alone in the next candidate's shot, before it flies in. The last beat, the real segment's ✓, is held.
-	const BEATS = routes.flatMap((shape, i) => {
-		const match = i === routes.length - 1;
-		return [
-			{ shape, state: "apart", hold: MOVE + LOOK },
-			{ shape, state: "turned", hold: MOVE + LOOK },
-			{ shape, state: "joined", hold: MOVE + LOOK / 2 },
-			{ shape, state: "judged", hold: VERDICT },
-			...(match ? [] : [{ shape: routes[i + 1], state: "alone", hold: MOVE }])
-		];
-	});
-	const LAST = BEATS.length - 1;
+	// A loop's last segment, searched for: each decoy, then the real one, joined in
+	// turn to everything `before` it, beat by beat. Each candidate flies in beside
+	// what is built, is turned to carry on from it, joined to it, and its end's
+	// callout marked ✗ or ✓ against `target`; a miss then fades away, back to what is
+	// built alone in the next candidate's shot, before it flies in. The last beat, the
+	// real segment's ✓, is held. `opening` beats go first.
+	function trials(before, { decoys, segment, target }, opening = []) {
+		const routes = [...decoys, segment].map((candidate) => before + candidate);
+		const trial = (state, judged = false) =>
+			trialScene(before.length, {
+				state,
+				judged,
+				target,
+				routes: camera === "fixed" ? routes : null
+			});
+		const pictures = {
+			alone: trial("alone"),
+			apart: trial("apart"),
+			turned: trial("turned"),
+			joined: trial("joined"),
+			judged: trial("joined", true)
+		};
+		const beats = routes.flatMap((shape, i) => {
+			const match = i === routes.length - 1;
+			return [
+				{ shape, state: "apart", hold: MOVE + LOOK },
+				{ shape, state: "turned", hold: MOVE + LOOK },
+				{ shape, state: "joined", hold: MOVE + LOOK / 2 },
+				{ shape, state: "judged", hold: VERDICT },
+				...(match ? [] : [{ shape: routes[i + 1], state: "alone", hold: MOVE }])
+			];
+		});
+		return [...opening, ...beats].map((entry) => ({ ...entry, scene: pictures[entry.state] }));
+	}
+
+	// Loop A's second segment, on from its first.
+	const LOOP_A = trials(first, { decoys: data.a.decoys, segment: second, target: data.a.heading });
+	// Loop B's last segment, on from the rest of the track. It opens on loop B's first
+	// segment flying straight on to the end of loop A, in the first candidate's shot.
+	const before = first + second + third;
+	const LOOP_B = trials(
+		before,
+		{ decoys: data.b.decoys, segment: last, target: data.b.heading },
+		[{ shape: before + data.b.decoys[0], state: "alone", hold: MOVE + LOOK }]
+	);
 
 	// Each step: what is drawn, how it arrives and what the footer says. The first
 	// segment is built once its pieces are picked, then its ends are shown; both
 	// share one shot, so stepping between them does not pan, and stepping back
-	// empties the viewer for the pieces to be picked again. The third plays the
-	// trials, a view a beat.
+	// empties the viewer for the pieces to be picked again. The third and fourth play
+	// their `beats`, a view a beat.
+	const trialStep = (beats, caption) => ({
+		beats,
+		view: () => {
+			const { shape, scene } = beats[beat];
+			return { shape, scene, transition: { kind: "move", pan: 0.6 } };
+		},
+		caption
+	});
 	const STEPS = [
 		{
 			view: () => ({
@@ -84,42 +104,41 @@
 			}),
 			caption: noteCaption
 		},
-		{
-			view: () => {
-				const { shape, state } = BEATS[beat];
-				return { shape, scene: TRIALS[state], transition: { kind: "move", pan: 0.6 } };
-			},
-			caption: pairCaption
-		}
+		trialStep(LOOP_A, pairCaption),
+		trialStep(LOOP_B, againCaption)
 	];
 
 	let at = $state(0);
 	// Whether the first step's pieces have been picked, which is what builds them.
 	let picked = $state(false);
-	// Which beat of the trials is up, on the third step.
+	// Which beat of the trials is up, on a step that has them.
 	let beat = $state(0);
 	const step = $derived(STEPS[at]);
 	const view = $derived(step.view());
+	// The step's last beat, if it has beats.
+	const end = $derived(step.beats ? step.beats.length - 1 : null);
 	// Whether this step has done what it shows, so the reader can go on.
-	const ready = $derived(at === 0 ? picked : at === 2 ? beat === LAST : true);
+	const ready = $derived(at === 0 ? picked : end === null || beat === end);
 
 	$effect(() => {
-		if (at !== 2 || beat === LAST) return;
-		const timer = setTimeout(() => (beat += 1), BEATS[beat].hold * 1000);
+		if (end === null || beat === end) return;
+		const timer = setTimeout(() => (beat += 1), step.beats[beat].hold * 1000);
 		return () => clearTimeout(timer);
 	});
 
 	function forwards() {
 		at += 1;
-		// Under reduced motion the trials are skipped, straight to the match.
-		if (at === 2) {
-			beat = matchMedia("(prefers-reduced-motion: reduce)").matches ? LAST : 0;
-		}
+		// The trials play from the start; under reduced motion they are skipped,
+		// straight to the match.
+		const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+		beat = reduced && STEPS[at].beats ? STEPS[at].beats.length - 1 : 0;
 	}
 
 	function back() {
 		at -= 1;
 		picked = false;
+		// Back into trials lands on their match, without playing them again.
+		beat = STEPS[at].beats ? STEPS[at].beats.length - 1 : 0;
 	}
 </script>
 
@@ -135,6 +154,12 @@
 	Do this many times, and pair up segments that would finish when it meets the <PieceTag
 		letter="X"
 	/> for the first time at orientation <OrientationChip orientation={data.a.heading} />.
+{/snippet}
+
+{#snippet againCaption()}
+	Similarly, do this again with segments that add up to <OrientationChip
+		orientation={data.b.heading}
+	/>, giving the other half of the figure-of-eight.
 {/snippet}
 
 {#snippet pick()}

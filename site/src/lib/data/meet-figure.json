@@ -11,9 +11,9 @@
     ],
     "heading": "DL",
     "decoys": [
-      "IOLLSOO",
-      "LRRSLSI",
-      "LROLOLR"
+      "RRSIOSI",
+      "OSRROIO",
+      "ISIRLSI"
     ]
   },
   "b": {
@@ -21,6 +21,11 @@
       "XSIISSOLOSO",
       "ISILSSISSLS"
     ],
-    "heading": "DF"
+    "heading": "DF",
+    "decoys": [
+      "ISOILILOISO",
+      "ISSOOSIOOLS",
+      "SRSOOSIOSSO"
+    ]
   }
 }

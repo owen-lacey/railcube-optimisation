@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { chainOpen, chainTrack, overflowingPoolByType, startCell } from '../src/track.js';
+import { chainOpen, chainTrack, cubeOf, overflowingPoolByType, startCell } from '../src/track.js';
 import { routeOf, trackKey } from '../src/layouts.js';
 
 const FILE = 'site/src/lib/data/meet-figure.json';
@@ -22,6 +22,11 @@ const sample = JSON.parse(readFileSync('site/src/lib/data/sweep-crossed.json', '
 const { a, b } = data;
 const loopA = a.segments.join('');
 const loopB = b.segments.join('');
+
+// A decoy is a near miss: the cube its end's callout reads is within this many of
+// the cross at the origin, counted along the axes.
+const NEAR = 4;
+const offBy = head => cubeOf(head.cell, head.pose).reduce((sum, v) => sum + Math.abs(v), 0);
 
 test('the layout is a row of the crossed sample', () => {
   const row = sample.shapes.find(s => s.id === data.id);
@@ -73,6 +78,12 @@ test('each decoy joins the first segment cleanly and misses the cross', () => {
   const [first, second] = a.segments;
   assert.equal(a.decoys.length, 3);
   assert.equal(new Set([...a.decoys, second]).size, 4, 'a decoy repeats, or is the real segment');
+  // No two look alike: any two differ in at least five of their seven pieces.
+  for (const [i, p] of a.decoys.entries()) {
+    for (const q of a.decoys.slice(i + 1)) {
+      assert.ok([...p].filter((letter, k) => letter !== q[k]).length >= 5, `${p} and ${q} are too alike`);
+    }
+  }
   for (const decoy of a.decoys) {
     assert.equal(decoy.length, second.length, decoy);
     assert.doesNotMatch(decoy, /X/, decoy);
@@ -84,6 +95,26 @@ test('each decoy joins the first segment cleanly and misses the cross', () => {
     assert.equal(overflowingPoolByType(route, sample.question.inventory), null, `${decoy} overspends`);
     const home = head.cell.every((v, k) => v === startCell('DF')[k]);
     assert.ok(!(home && head.pose === a.heading), `${decoy} closes the loop`);
+    assert.ok(offBy(head) <= NEAR, `${decoy} ends ${offBy(head)} cubes off, not a near miss`);
+  }
+});
+
+test("each of loop B's decoys is within the inventory alone, joins the ¾ track cleanly and misses the cross", () => {
+  const [third, last] = b.segments;
+  const before = loopA + third;
+  assert.equal(b.decoys.length, 3);
+  assert.equal(new Set([...b.decoys, last]).size, 4, 'a decoy repeats, or is the real segment');
+  for (const decoy of b.decoys) {
+    assert.equal(decoy.length, last.length, decoy);
+    assert.doesNotMatch(decoy, /X/, decoy);
+    assert.deepEqual(chainOpen(routeOf(decoy)).faults, [], `${decoy} on its own`);
+    assert.equal(overflowingPoolByType(routeOf(decoy), sample.question.inventory), null, `${decoy} overspends alone`);
+    const { placed, head, faults } = chainOpen(routeOf(before + decoy));
+    assert.deepEqual(faults, [], `${decoy} joined`);
+    assert.ok(placed.every(p => p.material.every(c => c[1] >= 0)), `${decoy} goes below the floor`);
+    const home = head.cell.every((v, k) => v === startCell('DF')[k]);
+    assert.ok(!(home && head.pose === b.heading), `${decoy} closes the track`);
+    assert.ok(offBy(head) <= NEAR, `${decoy} ends ${offBy(head)} cubes off, not a near miss`);
   }
 });
 
