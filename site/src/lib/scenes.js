@@ -229,15 +229,23 @@ export function apartScene(at, { turned = false, states = SUM } = {}) {
  * The two groups of `apartScene` joined: the whole route, with only its two ends
  * outlined, in a tight shot of its own. `ends: false` leaves out the outlines and
  * the callout but keeps the shot, so a step before the ends are shown frames the same.
+ * `routes`, given, is every route a figure shows this way, and the shot is fitted
+ * over all of them, so going from one to the next pans nothing.
  */
-export function joinedScene(letters, { ends = true } = {}) {
+export function joinedScene(letters, { ends = true, routes = null } = {}) {
   const scene = openScene(letters);
   return {
     ...scene,
     outlines: ends ? stepOutlines([0, 0, 0], trackCell(scene.head)) : [],
     notes: ends ? [endNote('joined', scene.head)] : [],
-    camera: fitCells([...scene.pieces.flatMap(p => p.material), trackCell(scene.head)]),
+    camera: fitCells((routes ?? [letters]).flatMap(joinedCells)),
   };
+}
+
+/** Every cube `joinedScene` frames for `letters`: its material, and the cell its end is outlined at. */
+function joinedCells(letters) {
+  const { pieces, head } = openScene(letters);
+  return [...pieces.flatMap(p => p.material), trackCell(head)];
 }
 
 /**

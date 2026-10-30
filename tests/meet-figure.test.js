@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { chainOpen, chainTrack, cubeOf, overflowingPoolByType, startCell } from '../src/track.js';
+import { chainOpen, chainTrack, countPieces, cubeOf, overflowingPoolByType, POOLS, startCell } from '../src/track.js';
 import { routeOf, trackKey } from '../src/layouts.js';
 
 const FILE = 'site/src/lib/data/meet-figure.json';
@@ -115,6 +115,40 @@ test("each of loop B's decoys is within the inventory alone, joins the ¾ track 
     const home = head.cell.every((v, k) => v === startCell('DF')[k]);
     assert.ok(!(home && head.pose === b.heading), `${decoy} closes the track`);
     assert.ok(offBy(head) <= NEAR, `${decoy} ends ${offBy(head)} cubes off, not a near miss`);
+  }
+});
+
+test('the real track spends the box exactly', () => {
+  const used = countPieces(chainTrack(routeOf(data.reading)));
+  for (const pool of POOLS) assert.equal(used[pool], sample.question.inventory[pool] ?? 0, pool);
+});
+
+test("each step-5 decoy is another layout's loop B that closes with loop A but miscounts the box", () => {
+  const { inventory, box } = sample.question;
+  const decoys = data.spend.decoys;
+  assert.equal(decoys.length, 3);
+  assert.equal(new Set([...decoys.map(d => d.loop), loopB]).size, 4, 'a decoy repeats, or is the real loop B');
+  for (const { id, loop } of decoys) {
+    const row = sample.shapes.find(s => s.id === id);
+    assert.ok(row, `row ${id} is not in the sample`);
+    const read = [...row.shape].some((letter, i) => {
+      if (letter !== 'X') return false;
+      const reading = row.shape.slice(i) + row.shape.slice(0, i);
+      const at = reading.indexOf('X', 1);
+      return at === loopA.length && reading.slice(at) === loop
+        && chainOpen(routeOf(reading.slice(0, at))).head.pose === a.heading;
+    });
+    assert.ok(read, `${loop} is not row ${id}'s loop B after a loop A like ours`);
+    assert.equal(loop[0], 'X', loop);
+    assert.equal(loop.length, loopB.length, loop);
+    const placed = chainTrack(routeOf(loopA + loop));
+    const cells = placed.flatMap(p => p.material);
+    assert.ok(cells.every(c => c[1] >= 0), `${loop} goes below the floor`);
+    assert.ok(Math.max(...cells.flatMap(c => c.map(Math.abs))) <= box, `${loop} leaves the box`);
+    const used = countPieces(placed);
+    const cubes = n => Object.values(n).reduce((t, k) => t + k, 0);
+    assert.equal(cubes(used), cubes(inventory), loop);
+    assert.ok(POOLS.some(pool => used[pool] !== (inventory[pool] ?? 0)), `${loop} spends the box`);
   }
 });
 

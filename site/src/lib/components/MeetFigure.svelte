@@ -7,10 +7,13 @@
 	import ChevronRight from "@lucide/svelte/icons/chevron-right";
 	import Frame from "./Frame.svelte";
 	import GateButton from "./GateButton.svelte";
+	import InventorySlots from "./InventorySlots.svelte";
 	import OrientationChip from "./OrientationChip.svelte";
 	import PieceTag from "./PieceTag.svelte";
 	import { joinedScene, trialScene } from "$lib/scenes.js";
 	import { MOVE } from "$lib/render/move.js";
+	import { usedOf } from "$lib/building.js";
+	import { INVENTORY } from "$lib/submission.js";
 	import data from "$lib/data/meet-figure.json" with { type: "json" };
 
 	// `camera` is how the trials are shot: 'follow' frames each picture on its own and
@@ -71,10 +74,24 @@
 		[{ shape: before + data.b.decoys[0], state: "alone", hold: MOVE + LOOK }]
 	);
 
+	// Whole tracks, loop A with each loop B in turn: other layouts' loop Bs, which
+	// close the track but miscount the box, then the real one, which spends it. Each
+	// flies in, carrying loop B's cubes from the last, and is judged on the inventory.
+	const loopA = first + second;
+	const tracks = [...data.spend.decoys.map(({ loop }) => loopA + loop), data.reading];
+	const whole = (letters) => ({
+		...joinedScene(letters, { ends: false, routes: camera === "fixed" ? tracks : null }),
+		closed: false
+	});
+	const SPEND = tracks.flatMap((shape) => [
+		{ shape, state: "shown", hold: MOVE + LOOK, scene: whole },
+		{ shape, state: "judged", hold: VERDICT, scene: whole }
+	]);
+
 	// Each step: what is drawn, how it arrives and what the footer says. The first
 	// segment is built once its pieces are picked, then its ends are shown; both
 	// share one shot, so stepping between them does not pan, and stepping back
-	// empties the viewer for the pieces to be picked again. The third and fourth play
+	// empties the viewer for the pieces to be picked again. The rest play
 	// their `beats`, a view a beat.
 	const trialStep = (beats, caption) => ({
 		beats,
@@ -105,7 +122,8 @@
 			caption: noteCaption
 		},
 		trialStep(LOOP_A, pairCaption),
-		trialStep(LOOP_B, againCaption)
+		trialStep(LOOP_B, againCaption),
+		trialStep(SPEND, spendCaption)
 	];
 
 	let at = $state(0);
@@ -117,6 +135,14 @@
 	const view = $derived(step.view());
 	// The step's last beat, if it has beats.
 	const end = $derived(step.beats ? step.beats.length - 1 : null);
+	// The pieces the matching step's track uses, and its verdict once judged.
+	const used = $derived(step.beats === SPEND ? usedOf(SPEND[beat].shape) : null);
+	const spent = $derived(
+		used && Object.keys(INVENTORY).every((type) => (used[type] ?? 0) === INVENTORY[type])
+	);
+	const mark = $derived(
+		step.beats === SPEND && SPEND[beat].state === "judged" ? (spent ? "match" : "miss") : null
+	);
 	// Whether this step has done what it shows, so the reader can go on.
 	const ready = $derived(at === 0 ? picked : end === null || beat === end);
 
@@ -162,11 +188,25 @@
 	/>, giving the other half of the figure-of-eight.
 {/snippet}
 
+{#snippet spendCaption()}
+	We then have a bunch of halves. Pair these up based on the inventory they use. When
+	combined, they must use every piece in the box.
+{/snippet}
+
+{#snippet inventory()}
+	<InventorySlots {used} inventory={INVENTORY} {mark} />
+{/snippet}
+
 {#snippet pick()}
 	<GateButton onclick={() => (picked = true)}>Select pieces</GateButton>
 {/snippet}
 
-<Frame {view} centre={at === 0 && !picked ? pick : undefined} {aspect}>
+<Frame
+	{view}
+	centre={at === 0 && !picked ? pick : undefined}
+	overlay={used ? inventory : undefined}
+	{aspect}
+>
 	{#snippet footer()}
 		<div class="steps">
 			<button

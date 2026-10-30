@@ -27,5 +27,21 @@
       "ISSOOSIOOLS",
       "SRSOOSIOSSO"
     ]
+  },
+  "spend": {
+    "decoys": [
+      {
+        "id": 9808754,
+        "loop": "XLIRSLSSLOISLSISOOIISS"
+      },
+      {
+        "id": 6386435,
+        "loop": "XIRSRSOORILOSSLOSSISLS"
+      },
+      {
+        "id": 16306466,
+        "loop": "XIIOSLSOOSILSSIILSLSIS"
+      }
+    ]
   }
 }

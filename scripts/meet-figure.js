@@ -19,10 +19,16 @@
 // fails for the pose alone. Loop A's are also kept within the box's inventory, joined to the
 // first segment. Loop B's are capped only on their own, as `meet.py` caps a half,
 // so joined to the ¾ of the track before them they may overspend.
+//
+// The last step pairs loop A with whole loop Bs, which must spend the box exactly.
+// Its three decoys are loop Bs from other layouts of the sample, read from the X
+// that puts a loop of loop A's length and heading first: each closes with loop A,
+// colliding with nothing, on the floor and within the box, but counts the box's
+// pieces wrong. Drawn by `seed` from every such loop.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { chainOpen, chainTrack, cubeOf, overflowingPoolByType, startCell } from '../src/track.js';
+import { chainOpen, chainTrack, countPieces, cubeOf, overflowingPoolByType, POOLS, startCell } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { random } from './sweep-data.js';
 
@@ -110,6 +116,50 @@ function decoysFor(before, segment, heading, fits, seed, { apart = 1 } = {}) {
   return decoys;
 }
 
+/** Whether `placed` is on the floor and within `box` cubes of the origin. */
+const inside = (placed, box) => {
+  const cells = placed.flatMap(p => p.material);
+  return cells.every(c => c[1] >= 0) && Math.max(...cells.flatMap(c => c.map(Math.abs))) <= box;
+};
+
+/** Whether `placed` spends `inventory` exactly, counting cubes. */
+const spends = (placed, inventory) => {
+  const used = countPieces(placed);
+  return POOLS.every(pool => used[pool] === (inventory[pool] ?? 0));
+};
+
+/**
+ * Three loop Bs from other rows of `sample`, each read after a loop A of `a`'s
+ * length and `heading`, that close after `a` but do not spend the box, drawn by `seed`.
+ */
+function spendDecoys(sample, a, heading, real, seed) {
+  const { inventory, box } = sample.question;
+  const loops = new Map();
+  for (const { id, shape } of sample.shapes) {
+    for (const { reading, loop } of readings(shape)) {
+      const b = reading.slice(loop);
+      if (loop !== a.length || b.length !== real.length || b === real || loops.has(b)) continue;
+      if (headingOf(reading.slice(0, loop)) !== heading) continue;
+      loops.set(b, id);
+    }
+  }
+  const misses = [...loops].filter(([b]) => {
+    let placed;
+    try {
+      placed = chainTrack(routeOf(a + b));
+    } catch {
+      return false;
+    }
+    return inside(placed, box) && !spends(placed, inventory);
+  });
+  const rand = random(seed);
+  for (let j = misses.length - 1; j > 0; j--) {
+    const k = Math.floor(rand() * (j + 1));
+    [misses[j], misses[k]] = [misses[k], misses[j]];
+  }
+  return misses.slice(0, 3).map(([loop, id]) => ({ id, loop }));
+}
+
 /** The figure's data for the layout `id` of the crossed sample, its decoys drawn by `seed`. */
 export function meetFigure(id, seed) {
   const sample = JSON.parse(readFileSync(SAMPLE, 'utf8'));
@@ -138,6 +188,9 @@ export function meetFigure(id, seed) {
       segments: [third, last],
       heading: headingOf(reading),
       decoys: decoysFor(before, last, 'DF', letters => laid(before + letters) && within(letters, inventory), seed),
+    },
+    spend: {
+      decoys: spendDecoys(sample, a, heading, b, seed),
     },
   };
 }
