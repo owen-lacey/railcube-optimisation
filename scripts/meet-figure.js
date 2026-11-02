@@ -11,7 +11,7 @@
 // the X in the first segment. A loop's heading is where the chain leaves the train
 // as it comes back to the cross, read off the model rather than written here.
 //
-// Each loop's second segment comes with three decoys: random walks of its length,
+// Each loop's second segment comes with two decoys: random walks of its length,
 // grown on from everything before it as `meet.py`'s `sample_half` grows a walk —
 // each piece drawn uniformly from those that fit — and kept only if they collide
 // with nothing, stay on the floor and miss the cross's pose — but only just, ending
@@ -100,13 +100,13 @@ function walk(n, fits, rand) {
 const differ = (p, q) => [...p].filter((letter, i) => letter !== q[i]).length;
 
 /**
- * Three walks the length of `segment`, each taken by `fits`, that on from `before`
+ * Two walks the length of `segment`, each taken by `fits`, that on from `before`
  * miss `heading`, but within `NEAR`; any two differ in at least `apart` positions.
  */
 function decoysFor(before, segment, heading, fits, seed, { apart = 1 } = {}) {
   const rand = random(seed);
   const decoys = [];
-  while (decoys.length < 3) {
+  while (decoys.length < 2) {
     const letters = walk(segment.length, fits, rand);
     if (letters && letters !== segment && decoys.every(decoy => differ(decoy, letters) >= apart)
       && !meets(before + letters, heading) && offBy(before + letters) <= NEAR) {

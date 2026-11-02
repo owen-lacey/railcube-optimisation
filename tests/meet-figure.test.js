@@ -76,8 +76,8 @@ test('every segment is legal on its own', () => {
 
 test('each decoy joins the first segment cleanly and misses the cross', () => {
   const [first, second] = a.segments;
-  assert.equal(a.decoys.length, 3);
-  assert.equal(new Set([...a.decoys, second]).size, 4, 'a decoy repeats, or is the real segment');
+  assert.equal(a.decoys.length, 2);
+  assert.equal(new Set([...a.decoys, second]).size, 3, 'a decoy repeats, or is the real segment');
   // No two look alike: any two differ in at least five of their seven pieces.
   for (const [i, p] of a.decoys.entries()) {
     for (const q of a.decoys.slice(i + 1)) {
@@ -102,8 +102,8 @@ test('each decoy joins the first segment cleanly and misses the cross', () => {
 test("each of loop B's decoys is within the inventory alone, joins the ¾ track cleanly and misses the cross", () => {
   const [third, last] = b.segments;
   const before = loopA + third;
-  assert.equal(b.decoys.length, 3);
-  assert.equal(new Set([...b.decoys, last]).size, 4, 'a decoy repeats, or is the real segment');
+  assert.equal(b.decoys.length, 2);
+  assert.equal(new Set([...b.decoys, last]).size, 3, 'a decoy repeats, or is the real segment');
   for (const decoy of b.decoys) {
     assert.equal(decoy.length, last.length, decoy);
     assert.doesNotMatch(decoy, /X/, decoy);
