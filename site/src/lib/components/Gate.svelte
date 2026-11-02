@@ -19,7 +19,7 @@
 
 	let { label, onleave = () => {}, onopen } = $props();
 
-	let button = $state();
+	let button = $state(null);
 	let leaving = $state(false);
 	let opened = false;
 
