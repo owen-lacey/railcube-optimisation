@@ -13,11 +13,14 @@
 	import PoseStep from "$lib/components/PoseStep.svelte";
 	import PoseBuilder from "$lib/components/PoseBuilder.svelte";
 	import TrainCoordinates from "$lib/components/TrainCoordinates.svelte";
-	import { cellScene } from "$lib/scenes.js";
+	import { cellScene, joinedScene } from "$lib/scenes.js";
 	import TrackSum from "$lib/components/TrackSum.svelte";
 	import TrackRotate from "$lib/components/TrackRotate.svelte";
 	import TrackJoin from "$lib/components/TrackJoin.svelte";
-	import MeetFigure from "$lib/components/MeetFigure.svelte";
+	import TrackFigure from "$lib/components/TrackFigure.svelte";
+	import MeetLoop from "$lib/components/MeetLoop.svelte";
+	import MeetSpend from "$lib/components/MeetSpend.svelte";
+	import { data, FIRST } from "$lib/meet.svelte.js";
 </script>
 
 <Chapter id="coordinates">
@@ -107,8 +110,7 @@
 		track pieces together such that it finishes where it started. Specifically,
 		we have a complete track if the groups add up to (0, 0, 0), facing <OrientationChip
 			orientation="DF"
-		/>.
-		First we rotate, then join.
+		/>. First we rotate, then join.
 	</p>
 	<TrackSum a="SILISL" b="IL" />
 
@@ -122,13 +124,46 @@
 
 	<p>
 		Similarly, the train then needs to travel the other half of the
-		figure-of-eight to return in our required <OrientationChip orientation="DF" /> orientation to give us a
-		complete track.
+		figure-of-eight to return in our required <OrientationChip
+			orientation="DF"
+		/> orientation to give us a complete track.
 	</p>
 	<TrackSum a="XSRRRSXSL" b="LLS" />
 
-	<p>The model I made to generate these layouts does exactly this:</p>
-	<MeetFigure />
+	<p>The model I made to generate these layouts takes a similar approach:</p>
+	<ol>
+		<li>
+			Pick a handful of pieces from the box at random and join them together,
+			making note of the finishing pose. We put <PieceTag letter="X" /> in front of
+			it because the next stage asserts the track makes its way back to it. In this
+			example, the handful of pieces selected was
+			<PieceTag letter="R" />
+			<PieceTag letter="S" />
+			<PieceTag letter="S" />
+			<PieceTag letter="I" />
+			<PieceTag letter="R" />
+			<PieceTag letter="O" />:
+			<TrackFigure shape={FIRST} scene={joinedScene} />
+		</li>
+		<li>
+			Perform this random selection many times, and pair up segments that would
+			finish when it meets the <PieceTag letter="X" /> for the first time at orientation
+			<OrientationChip orientation={data.a.heading} /> when rotated and joined together.
+			<MeetLoop loop="a" />
+		</li>
+		<li>
+			We then do this for the other half of the figure of eight by combining
+			segments that add up to <OrientationChip orientation={data.b.heading} /> when
+			exiting the <PieceTag letter="X" /> for the second time.
+			<MeetLoop loop="b" />
+		</li>
+		<li>
+			Finally, we need to check we're actually using the right number of real
+			life pieces, so pick the second half of the track such that we're using
+			everything we have in the box.
+			<MeetSpend />
+		</li>
+	</ol>
 	<p>
 		This approach is fairly brute force and exhaustive. It only generates a
 		valid train track every ~50,000 attempts. Fortunately, my laptop doesn't

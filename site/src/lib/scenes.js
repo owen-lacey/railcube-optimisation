@@ -249,12 +249,9 @@ function joinedCells(letters) {
 }
 
 /**
- * One trial in a search for a loop's second segment, as `MeetFigure` stages it: the
- * first segment (the letters before `at`) and a candidate (the rest), in one of four
- * pictures — `'alone'`, the first segment by itself as `joinedScene` draws it, in the
- * shot `'apart'` takes, so it clears the way for the candidate without reframing, and
- * with no callout: its end's comes back with the candidate, once it has landed;
- * `'apart'` and `'turned'`, as `apartScene` draws them; and `'joined'`, the two as
+ * One trial in a search for a loop's second segment, as `MeetLoop` stages it: the
+ * first segment (the letters before `at`) and a candidate (the rest), in one of three
+ * pictures — `'apart'` and `'turned'`, as `apartScene` draws them; and `'joined'`, the two as
  * one route, as `joinedScene` draws it. `judged`, the joined end's callout is marked
  * with whether it meets `target`, the orientation the loop must come back to the
  * cross in: `mark` is 'match' if it ends there, on the origin cube, else 'miss'.
@@ -266,7 +263,6 @@ function joinedCells(letters) {
 export function trialScene(at, { state, target, judged = false, routes = null }) {
   const camera = routes && fitCells(routes.flatMap(route => trialCells(route, at)));
   const pictures = {
-    alone: letters => ({ ...joinedScene(letters.slice(0, at)), notes: [], camera: apartScene(at)(letters).camera }),
     apart: letters => apartScene(at)(letters),
     turned: letters => apartScene(at, { turned: true })(letters),
     joined: letters => {

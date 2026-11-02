@@ -152,7 +152,7 @@ test('a reserved corner frames the shot in the band that fits it larger', () => 
 });
 
 test('a reserved corner as wide as the viewer frames the shot under it', () => {
-  // MeetFigure's inventory on a phone's square card, with the toolbar and the hand:
+  // MeetSpend's inventory on a phone's square card, with the toolbar and the hand:
   // beside it is no room at all, which once came out NaN and was kept.
   const boxes = [
     { edge: 'top-left', width: 346, height: 192 },

@@ -964,20 +964,33 @@ rendered, and the page is held to the opening's one screen as it is to the splas
 in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, fades (`FADE`,
 0.4 s) and then `onopen` — at once under reduced motion.
 
-### The meet-in-the-middle figure: `MeetFigure`
+### The meet-in-the-middle figures: `MeetLoop`, `MeetSpend`
 
-How `meet.py` makes a crossed layout, stepped through in the Coordinates chapter, where it
-replaced the numbered list (Owen's call): its five captions are the list, so the wording lives
-there now. One fixed layout, row 7932037, read from its X as `X·seg₁·seg₂·X·seg₃·seg₄`; a
-**segment** is the code's *half*, a **loop** its *lobe* (Owen's names, for the figure and its
-prose). `scripts/meet-figure.js` writes `site/src/lib/data/meet-figure.json` — the segments and
-seeded decoys for both loops' trials and for the inventory match — and
-`tests/meet-figure.test.js` re-derives every claim in it.
+How `meet.py` makes a crossed layout, in the Coordinates chapter as a numbered list with a
+figure in four of its five items (Owen's call: it was one stepped `MeetFigure`, which did too
+much; the list's wording was its captions). One fixed layout, row 7932037, read from its X as
+`X·seg₁·seg₂·X·seg₃·seg₄`; a **segment** is the code's *half*, a **loop** its *lobe* (Owen's
+names, for the figures and their prose). `scripts/meet-figure.js` writes
+`site/src/lib/data/meet-figure.json` — the segments and seeded decoys for both loops' trials
+and for the inventory match — and `tests/meet-figure.test.js` re-derives every claim in it.
+What the figures share (the trials, the card's shape) is `$lib/meet.svelte.js`, and the
+carousel footer is `Attempts`.
 
-- Steps 3–5 auto-play a `BEATS`-style table on one timer, every beat a `move`; the ✓/✗ is a
-  callout's `mark` (steps 3–4) or `InventorySlots`' (step 5, a reserved top-left `overlay`).
-  Forwards plays a trial from the start, back lands on its ✓, reduced motion goes straight to it.
-- **Square on a phone**, 16/10 otherwise, as `TrackBuilder`: at 16/10 and 390px the step-5
+- The first segment needs no figure of its own: it is `TrackFigure` over `joinedScene`,
+  shown at once.
+- **A build with no train holds its outlines and callouts back until it lands**, as a move
+  does (`holdsOverlays` in `TrackViewer`). With a train a build never ends, so its overlays
+  are up from the start.
+- `MeetLoop` (`loop` 'a' or 'b') does not play by itself (Owen's call): it is a carousel of
+  the candidates, decoys first and the real segment last, the arrows disabled at either end
+  (`RankedTracks`' chevrons, at the footer's far ends). Between them, "Attempt #n:" and the
+  candidate's letters as `PieceTag`s; under them, centred, `TrackSum`'s button, Rotate → Join → Reset, over
+  `loopTrials`' three pictures; joined, the callout is marked. Another attempt starts apart.
+  `MeetSpend` is the same carousel over `spendTrials`: loop A with each loop B, decoys
+  first, with no letters after "Attempt #n" and no step button — each track is judged as it
+  arrives (Owen's call). The ✓/✗ is a callout's `mark` (loops) or `InventorySlots`' (spend, a
+  reserved top-left `overlay`).
+- **Square on a phone**, 16/10 otherwise, as `TrackBuilder`: at 16/10 and 390px the spend
   panel (338 × 184, its names wrapping) covered the whole 346 × 216 canvas.
 - **A reserved box as wide as the viewer** leaves no room beside it, and `clearOfButtons` used
   to divide by that zero-width frame: the region came out NaN, `bandFor` never preferred

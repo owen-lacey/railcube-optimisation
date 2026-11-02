@@ -456,7 +456,15 @@
    * for its cubes, so nothing is drawn where they have yet to arrive.
    */
   const landing = () => moving
-    || (change() === CHANGES.move && Boolean(shown) && !reduced && shownAs(pieces) !== shownKey);
+    || (holdsOverlays() && !reduced && shownAs(pieces) !== shownKey);
+
+  /**
+   * Does this change put up the overlays it brings only once its cubes have landed?
+   * A move over a standing layout does, and so does a build with no train — with
+   * one, a build never ends, so its overlays are up from the start.
+   */
+  const holdsOverlays = () => (change() === CHANGES.move && Boolean(shown))
+    || (change() === CHANGES.build && !train);
 
   /**
    * Of `next`, what to put up, matched with what is `up` by `key`. While a move is
@@ -519,13 +527,30 @@
     }
   }
 
-  /** Empty the stage and click the whole layout together, every piece a mint. */
+  /**
+   * Empty the stage and click the whole layout together, every piece a mint. With
+   * no train, the outlines and callouts it brings fade in once every piece has
+   * landed, as a move's do.
+   */
   function showBuilt(next) {
     stage.clear();
     const { pace, speed } = settings();
-    stage.run([buildPhase(stage, next, {
+    const build = buildPhase(stage, next, {
       pace: Number(pace), speed: Number(speed), drive: Boolean(train), alarm: flagged(), highlight: picked(),
-    })]);
+    });
+    if (train) {
+      stage.run([build]);
+      return;
+    }
+    moving = true;
+    stage.setChangingOpacity(0);
+    stage.run([
+      build,
+      deferred(() => {
+        landed();
+        return changingFadePhase(stage, { to: 1, speed: Number(speed) });
+      }),
+    ]);
   }
 
   /**
