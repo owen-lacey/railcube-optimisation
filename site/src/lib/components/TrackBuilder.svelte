@@ -23,6 +23,10 @@
   // The piece that closes the loop puts it on the leaderboard and shows the
   // verdict (`SubmitDialog`), and a closed track keeps a button in the footer to
   // show it again.
+  //
+  // Given `onunlock`, the track is only being looked at — one opened from the
+  // leaderboard, which is not the reader's to submit. No piece goes on or comes
+  // off, there is no verdict, and the footer's one button calls `onunlock`.
   import { onMount, untrack } from 'svelte';
   import TrackViewer from './TrackViewer.svelte';
   import ExpandingCard from './ExpandingCard.svelte';
@@ -59,7 +63,11 @@
     onresults = id => window.open(`${base}/?tab=leaderboard&id=${id}`, '_blank'),
     // What the verdict's button for that reads.
     resultsLabel = undefined,
+    // Set while the track is only being viewed: called to start one of the reader's own.
+    onunlock = undefined,
   } = $props();
+
+  const locked = $derived(Boolean(onunlock));
 
   let letters = $state(seed(shape));
   // Whether the last change replaced a track that was standing, which carries its
@@ -119,12 +127,13 @@
   let submission = $state(null);
 
   const add = letter => {
-    if (done || spent.has(letter)) return;
+    if (locked || done || spent.has(letter)) return;
     carrying = false;
     letters = added(letters, letter);
     if (view.closed) submission.offer();
   };
   const removeLast = () => {
+    if (locked) return;
     carrying = false;
     letters = removed(letters);
   };
@@ -169,8 +178,14 @@
 
 {#snippet keys()}
   <ScoreMaths {readings} />
-  <PieceKeys disabled={done} {spent} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
-  {#if view.closed}
+  {#if locked}
+    <div class="verdict">
+      <button class="submit" onclick={() => onunlock()}>Start a new track</button>
+    </div>
+  {:else}
+    <PieceKeys disabled={done} {spent} canRemove={Boolean(letters)} onadd={add} onremove={removeLast} />
+  {/if}
+  {#if view.closed && !locked}
     <div class="verdict">
       <button class="submit" onclick={() => submission.offer()}>See the verdict</button>
     </div>

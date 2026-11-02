@@ -3,7 +3,9 @@
 	// with, and the leaderboard beside it as a second tab.
 	//
 	// The address keeps the track as `?track=`, so a reload, or a link from the
-	// leaderboard, opens it where it was left; and the tab as `?tab=leaderboard`, with
+	// leaderboard, opens it where it was left. A leaderboard link adds `&view`, which
+	// opens the track read-only until the reader starts one of their own: otherwise a
+	// listed track could be re-closed and submitted as theirs. The tab is `?tab=leaderboard`, with
 	// `&id=` for the row to pick out, which is where the post's verdict sends a reader.
 	//
 	// The page is prerendered, so the address is read once the router is up, not at
@@ -47,6 +49,7 @@
 
 	let shape = $state("");
 	let letters = $state("");
+	let viewing = $state(false);
 	let tab = $state("builder");
 	let list = $state("submissions");
 	let picked = $state(null);
@@ -71,6 +74,7 @@
 	afterNavigate(({ to }) => {
 		const query = to.url.searchParams;
 		shape = query.get("track") ?? "";
+		viewing = query.has("view");
 		tab = query.get("tab") === "leaderboard" ? "leaderboard" : "builder";
 		picked = query.has("id") ? Number(query.get("id")) : null;
 		list = query.get("list") === "model" && picked === null ? "model" : "submissions";
@@ -84,6 +88,7 @@
 		const set = (key, value) =>
 			value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
 		set("track", letters);
+		set("view", viewing ? "1" : null);
 		set("tab", tab === "leaderboard" ? tab : null);
 		const shown = tab === "leaderboard" ? list : null;
 		set("list", shown === "model" ? shown : null);
@@ -117,6 +122,11 @@
 				modelError = failure.message;
 			});
 	});
+
+	function unlock() {
+		viewing = false;
+		shape = "";
+	}
 
 	function results(id) {
 		picked = id;
@@ -155,6 +165,7 @@
 				onchange={(value) => (letters = value)}
 				card={FillCard}
 				onresults={results}
+				onunlock={viewing ? unlock : undefined}
 			/>
 		</Tabs.Content>
 		<Tabs.Content value="leaderboard">

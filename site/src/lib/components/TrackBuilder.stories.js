@@ -62,3 +62,17 @@ export const Stuck = {
     },
   },
 };
+
+export const Viewing = {
+  name: 'Only being viewed',
+  args: { shape: 'LIRIROSOLORLLSORII', pace: 0.1, speed: 1.2, onunlock: () => {} },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A track opened from the leaderboard: no piece goes on or comes off and '
+          + 'there is no verdict, so a listed track cannot be re-closed as the reader\'s '
+          + 'own. The one button starts a new track.',
+      },
+    },
+  },
+};

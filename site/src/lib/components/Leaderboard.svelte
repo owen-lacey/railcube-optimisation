@@ -1,6 +1,6 @@
 <script>
   // A ranked list of tracks, and the reader's own wherever it ranks: rank, name,
-  // score and the track, which opens in the front page's builder. A row with no
+  // score and the track, which opens in the front page's builder, read-only. A row with no
   // name is "Unnamed". Notes are never shown — the Worker does not serve them.
   import { base } from '$app/paths';
 
@@ -9,7 +9,8 @@
   let { rows, entry, caption } = $props();
 
   const below = $derived(entry && !rows.some(row => row.id === entry.id));
-  const linkOf = shape => `${base}/?track=${shape}`;
+  // Opened only to be looked at: a track already listed is not the reader's to submit.
+  const linkOf = shape => `${base}/?track=${shape}&view=1`;
 </script>
 
 <table>
