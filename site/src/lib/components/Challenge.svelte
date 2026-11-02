@@ -2,7 +2,7 @@
 	// The post's final boss: take it on, or don't. "Bring it on" opens the briefing,
 	// whose confirm opens the builder full screen, and a submitted track ends the
 	// challenge from the verdict; turning the briefing down ends it at once. Either
-	// way the button goes and `onconclude(submitted)` is called.
+	// way the button goes and `onconclude` is called.
 	//
 	// Once in the builder, the way out without a submitted track is to give up:
 	// its close button, or Escape, ends the challenge there and then.
@@ -41,13 +41,13 @@
 	// Escape closes the builder as the close button does: by giving up.
 	function giveUp(event) {
 		event.preventDefault();
-		conclude(false);
+		conclude();
 	}
 
-	function conclude(submitted) {
+	function conclude() {
 		arena?.close();
 		over = true;
-		onconclude(submitted);
+		onconclude();
 	}
 </script>
 
@@ -56,7 +56,7 @@
 		<GateButton bind:element={bring} onclick={() => briefing.open()}>Bring it on</GateButton>
 	</div>
 
-	<ChallengeBriefing bind:this={briefing} onconfirm={fight} ondecline={() => conclude(false)} />
+	<ChallengeBriefing bind:this={briefing} onconfirm={fight} ondecline={() => conclude()} />
 
 	<dialog
 		bind:this={arena}
@@ -71,7 +71,7 @@
 				</button>
 			</div>
 			<div class="builder">
-				<TrackBuilder card={FillCard} onresults={() => conclude(true)} resultsLabel="Continue" />
+				<TrackBuilder card={FillCard} onresults={() => conclude()} resultsLabel="Continue" />
 			</div>
 		{/if}
 	</dialog>

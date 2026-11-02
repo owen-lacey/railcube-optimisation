@@ -18,6 +18,7 @@
 	import { onMount } from "svelte";
 	import Gate, { FADE } from "./Gate.svelte";
 	import { GAPS, WIDTHS, HEIGHT, rowWidth, rowsHeight } from "$lib/letters.js";
+	import { letterImage } from "$lib/letter-images.js";
 
 	let { onnext } = $props();
 
@@ -52,13 +53,6 @@
 	// any other one a word.
 	const arrivals = (row) => (row.drops ? 1 : row.words.length);
 	const FIRST = ROWS.map((_, r) => ROWS.slice(0, r).reduce((n, row) => n + arrivals(row), 0));
-
-	const urls = import.meta.glob("../assets/letters/*.png", {
-		eager: true,
-		query: "?url",
-		import: "default"
-	});
-	const src = (letter) => urls[`../assets/letters/${letter}.png`];
 
 	const widest = (rows) => Math.max(...rows.map(rowWidth));
 
@@ -117,7 +111,7 @@
 							{#each word as letter}
 								<img
 									class:fades={letter !== "O"}
-									src={src(letter)}
+									{...letterImage(letter)}
 									alt=""
 									style:--across={WIDTHS[letter]}
 									style:--down={HEIGHT}

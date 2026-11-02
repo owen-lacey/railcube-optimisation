@@ -9,6 +9,14 @@
 	// `count` is how many attempts there are, `attempt` the index up, `letters` its
 	// letters, and `onturn` is called with -1 or 1.
 	let { count, attempt, onturn, letters = undefined, children = undefined } = $props();
+
+	// An arrow at its end says so and does nothing, rather than being disabled, which
+	// would drop focus from it.
+	const first = $derived(attempt === 0);
+	const final = $derived(attempt === count - 1);
+	const turn = (by, stop) => {
+		if (!stop) onturn(by);
+	};
 </script>
 
 <div class="attempts" role="group" aria-label="Attempts">
@@ -16,27 +24,28 @@
 		type="button"
 		class="turn"
 		aria-label="Previous attempt"
-		disabled={attempt === 0}
-		onclick={() => onturn(-1)}
+		aria-disabled={first}
+		onclick={() => turn(-1, first)}
 	>
-		<ChevronLeft />
+		<ChevronLeft aria-hidden="true" />
 	</button>
 	<span class="candidate">
 		<span class="attempt">Attempt #{attempt + 1}{letters ? ":" : ""}</span>
 		{#if letters}
-			<span class="tags" aria-label={letters}>
+			<span class="tags" aria-hidden="true">
 				{#each letters as letter, j (j)}<PieceTag {letter} />{/each}
 			</span>
+			<span class="visually-hidden">{[...letters].join(" ")}</span>
 		{/if}
 	</span>
 	<button
 		type="button"
 		class="turn"
 		aria-label="Next attempt"
-		disabled={attempt === count - 1}
-		onclick={() => onturn(1)}
+		aria-disabled={final}
+		onclick={() => turn(1, final)}
 	>
-		<ChevronRight />
+		<ChevronRight aria-hidden="true" />
 	</button>
 	{#if children}
 		<div class="below">{@render children()}</div>
@@ -92,7 +101,7 @@
 	}
 
 	/* As StepSection's. */
-	.turn:disabled {
+	.turn[aria-disabled="true"] {
 		opacity: 0.35;
 		cursor: default;
 	}

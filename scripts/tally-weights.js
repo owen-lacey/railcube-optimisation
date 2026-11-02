@@ -64,17 +64,22 @@ function tally(path) {
     if (r.underground) { underground += 1; continue; }
     const values = weightingValuesOf(r);
     if (values.knotted === null) throw new Error(`row ${r.id} has its knot unread: run hydrate-sweeps.js --knots`);
-    const key = NAMES.map(n => values[n]).join(',');
-    if (!groups.has(key)) groups.set(key, { ...values, id: null, shape: null, knot: null });
-    const group = groups.get(key);
-    if (r.mirrored === 1 || (group.shape !== null && group.shape <= r.shape)) continue;
-    Object.assign(group, { id: r.id, shape: r.shape, knot: knotOf(r.knot_over, r.knot_under) });
+    group(groups, r, values);
   }
   db.close();
   const rows = [...groups.values()];
   const bare = rows.find(r => r.shape === null);
   if (bare) throw new Error(`${NAMES.map(n => `${n} ${bare[n]}`)} has only mirrored layouts`);
   return { question, population, legal: population - underground, rows };
+}
+
+/** Put a legal row in its group, as that group's sample if it is the first unmirrored shape. */
+function group(groups, r, values) {
+  const key = NAMES.map(n => values[n]).join(',');
+  if (!groups.has(key)) groups.set(key, { ...values, id: null, shape: null, knot: null });
+  const held = groups.get(key);
+  if (r.mirrored === 1 || (held.shape !== null && held.shape <= r.shape)) return;
+  Object.assign(held, { id: r.id, shape: r.shape, knot: knotOf(r.knot_over, r.knot_under) });
 }
 
 /** The rows at either end of every weighting the sliders can set, all-zero included. */

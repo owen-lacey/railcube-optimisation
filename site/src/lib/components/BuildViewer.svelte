@@ -1,6 +1,7 @@
 <script>
   import TrackViewer from './TrackViewer.svelte';
   import { sceneFromRoute, cubesIn } from '$lib/scenes.js';
+  import { describeTrack } from '$lib/catalogue.js';
   import { routeOf } from '../../../../src/layouts.js';
 
   let {
@@ -48,7 +49,7 @@
     train={{}}
     {aspect}
     {controls}
-    label="The layout {letters}, building"
+    label="{describeTrack(letters)}, building"
   />
 {:else}
   <div class="viewer" style:aspect-ratio={aspect}>

@@ -9,10 +9,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { readingsOf } from '../site/src/lib/readings.js';
-import { SWEEP_CROSSED_SINGLES as singles, SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
+import { SWEEP_CROSSED_SINGLES as singles } from '../site/src/lib/sweeps/singles.js';
+import { SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps/weights.js';
 import { DIRECTIONS, scoreOf, WEIGHTS } from '../site/src/lib/weighting.js';
 
 const NAMES = Object.keys(DIRECTIONS);
@@ -30,7 +31,7 @@ test('every layout is legal, spends the inventory, and is at its metric\'s best'
   for (const { metric, shape, knot, tied, others } of singles.layouts) {
     const placed = chainTrack(routeOf(shape));
     const spent = countPieces(placed);
-    for (const pool of POOLS) assert.equal(spent[pool], singles.question.inventory[pool], `${shape} ${pool}`);
+    for (const pool of PIECE_TYPES) assert.equal(spent[pool], singles.question.inventory[pool], `${shape} ${pool}`);
     assert.ok(placed.every(p => p.cell[1] >= 0), `${shape} goes below the floor`);
     const values = readingsOf(shape);
     assert.equal(values.knot, knot, shape);

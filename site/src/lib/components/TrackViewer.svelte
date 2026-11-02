@@ -1,6 +1,10 @@
 <script>
   import { onMount } from 'svelte';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+  import RotateCcwSquare from '@lucide/svelte/icons/rotate-ccw-square';
+  import RotateCwSquare from '@lucide/svelte/icons/rotate-cw-square';
+  import ZoomIn from '@lucide/svelte/icons/zoom-in';
+  import ZoomOut from '@lucide/svelte/icons/zoom-out';
   import Check from '@lucide/svelte/icons/check';
   import X from '@lucide/svelte/icons/x';
   import { createStage, together, deferred } from '../render/stage.js';
@@ -13,9 +17,18 @@
   import { fixedFrame, sketchBox, withAxes, frameTight, cubeIds } from '$lib/scenes.js';
   import { identify } from '../../../../src/layouts.js';
   import { toWorld } from '../render/vec.js';
+  import { STEPS } from '../render/controls.js';
 
   // How far a callout stands off the outline of what is drawn, in CSS pixels.
   const CALLOUT_GAP = 12;
+
+  // The buttons that step a handled view, as the keys do: `STEPS` in controls.js.
+  const VIEW_STEPS = [
+    { step: 'zoomIn', name: 'Zoom in', icon: ZoomIn },
+    { step: 'zoomOut', name: 'Zoom out', icon: ZoomOut },
+    { step: 'turnLeft', name: 'Turn the view left', icon: RotateCcwSquare },
+    { step: 'turnRight', name: 'Turn the view right', icon: RotateCwSquare },
+  ];
 
   let {
     pieces = [],
@@ -299,26 +312,40 @@
    * The frame grows and shrinks with it: see `sketchBox`.
    */
   function showGrown(next) {
-    const { start } = settings();
+    const { start, carry } = settings();
     const turned = start !== shownStart;
     shownStart = start;
-    if (turned && shown?.length && next.length && !reduced) return showTurned(next);
-    if (settings().carry && shown?.length && next.length && !reduced) return showCarried(next);
+    if (turned && movesWhole(next)) return showTurned(next);
+    if (carry && movesWhole(next)) return showCarried(next);
+    growOn(next, detachPast(shown ?? [], next));
+  }
 
-    const before = shown ?? [];
+  /** Whether a grow's change is the whole track moving: a turn or a carry. */
+  const movesWhole = next => shown?.length && next.length && !reduced;
+
+  /** How many pieces from the start two layouts have in common. */
+  function commonPrefix(before, next) {
     let prefix = 0;
     while (prefix < before.length && prefix < next.length
       && pieceKey(before[prefix]) === pieceKey(next[prefix])) prefix += 1;
+    return prefix;
+  }
 
+  /** Take every cube past what the two layouts share off the stage, to leave. */
+  function detachPast(before, next) {
     // A revisit has no cube of its own, so it has no ID and there is nothing to
     // take off — the cross it is a second pass over may well be in the prefix.
     const ids = cubeIds(before);
     const leaving = [];
-    for (let i = prefix; i < before.length; i++) {
+    for (let i = commonPrefix(before, next); i < before.length; i++) {
       const cube = ids[i] && stage.detach(ids[i]);
       if (cube) leaving.push({ cube, piece: before[i] });
     }
+    return leaving;
+  }
 
+  /** Slide `leaving` back out and the new tail on, the frame following. */
+  function growOn(next, leaving) {
     // A change while a turn was still under way puts back what the turn was holding.
     const unveil = turning || stage.overlayOpacity() < 1;
     if (turning) showOverlays();
@@ -591,6 +618,8 @@
         stage = createStage(canvas, {
           theme: readTheme(host),
           reduced,
+          // Unseen until the observer below says otherwise.
+          visible: false,
           onTrainPiece: cube => train?.onPiece?.(cube),
           onTrainPose: pose => train?.onPose?.(pose),
           onCamera: () => {
@@ -613,28 +642,27 @@
         // rAF loop for ever is the one thing that would make this unusable on a
         // phone; a still viewer costs nothing. Every viewer is gated, not only one
         // that animates at mount, because any can come to: a static one is handed a
-        // rejected piece, which pulses, as soon as its shape stops being legal.
-        if (!reduced) {
-          // Runs while both hold. Each signal re-checks the pair rather than only
-          // stopping, because the observer does not fire again when the page comes
-          // back: switching desktops leaves the viewer exactly as in view as it was.
-          let onscreen = false;
-          const gate = () => {
-            if (onscreen && !document.hidden) stage?.start();
-            else stage?.stop();
-          };
-          const io = new IntersectionObserver(([entry]) => {
-            onscreen = entry.isIntersecting;
-            gate();
-          }, { rootMargin: '100px' });
-          io.observe(host);
+        // rejected piece, which pulses, as soon as its shape stops being legal. A
+        // reader who has asked for reduced motion is no exception: a driven track
+        // still drives, and never finishes. While the stage cannot be seen, nothing
+        // here starts it (see `setVisible` in stage.js).
+        //
+        // Seen while both hold. Each signal re-checks the pair, because the observer
+        // does not fire again when the page comes back: switching desktops leaves
+        // the viewer exactly as in view as it was.
+        let onscreen = false;
+        const gate = () => stage?.setVisible(onscreen && !document.hidden);
+        const io = new IntersectionObserver(([entry]) => {
+          onscreen = entry.isIntersecting;
+          gate();
+        }, { rootMargin: '100px' });
+        io.observe(host);
 
-          document.addEventListener('visibilitychange', gate);
-          stopObserving = () => {
-            io.disconnect();
-            document.removeEventListener('visibilitychange', gate);
-          };
-        }
+        document.addEventListener('visibilitychange', gate);
+        stopObserving = () => {
+          io.disconnect();
+          document.removeEventListener('visibilitychange', gate);
+        };
       } catch (error) {
         failed = error.message;
       }
@@ -651,14 +679,9 @@
       ro.disconnect();
       handle?.destroy();
       handle = null;
-      stage?.setGrid(null);
-      stage?.setOrigin(null);
       cancelAnimationFrame(labelFrame);
       labelFrame = 0;
-      stage?.setGhosts([]);
-      stage?.setOrientations([]);
-      stage?.setFill([]);
-      stage?.clear();
+      stage?.dispose();
       stage = null;
     };
   });
@@ -688,7 +711,7 @@
   });
 
   // Paused or played. Starting either way is right: paused, it draws one still
-  // frame and stops; played, it carries on from there.
+  // frame and stops; played, it carries on from there. Either only once seen.
   $effect(() => {
     const hold = paused;
     if (!ready || !stage) return;
@@ -795,14 +818,22 @@
     };
     return shown.map(({ key, lines, flash, mark, changing, side: pinned }, i) => {
       const side = pinned ?? (above.has(i) ? 'above' : 'below');
-      const w = noteEls[key]?.offsetWidth ?? 0;
-      const h = noteEls[key]?.offsetHeight ?? 0;
-      const lead = noteEls[key]?.querySelector('.mark')?.offsetWidth ?? 0;
+      const { w, h, lead } = noteSize(key);
       const { x, y } = PLACE[side](w, h, spots[i], lead);
       // A mark not yet drawn has no width to keep in, so it is measured once drawn too.
       const measured = Boolean(noteEls[key]) && (!mark || lead > 0);
       return { key, lines, flash, mark, changing, side, x: dodge(side, x, y, w, h, width, height), y, to: spots[i], measured };
     });
+  }
+
+  /** A note's size as drawn, and its mark's width: each 0 until there is one. */
+  function noteSize(key) {
+    const note = noteEls[key];
+    return {
+      w: note?.offsetWidth ?? 0,
+      h: note?.offsetHeight ?? 0,
+      lead: note?.querySelector('.mark')?.offsetWidth ?? 0,
+    };
   }
 
   // A note's box from where `PLACE` puts it, `[left, top, right, bottom]`: its
@@ -974,10 +1005,10 @@
   style:--changing={changingShare}
   bind:this={host}
   style:aspect-ratio={aspect}
-  role={label ? 'img' : undefined}
-  aria-label={label || undefined}
+  role={controls ? 'group' : undefined}
+  aria-label={controls ? 'The view, to turn and zoom' : undefined}
 >
-  <canvas bind:this={canvas}></canvas>
+  <canvas bind:this={canvas} role={label ? 'img' : undefined} aria-label={label || undefined}></canvas>
   {#each axisLabels as { name, x, y } (name)}
     <span class="axis-label" style:left="{x}px" style:top="{y}px" aria-hidden="true">{name}</span>
   {/each}
@@ -1017,21 +1048,43 @@
          is not also a gesture on the viewer. The reset button keeps its place while
          there is nothing to undo, so the others never shift under the pointer and the
          toolbar's box holds. -->
-    <div class="tools" bind:this={toolbar} bind:offsetWidth={toolsWidth} bind:offsetHeight={toolbarHeight}>
-      <button
-        type="button"
-        onpointerdown={event => event.stopPropagation()}
-        ontouchstart={event => event.stopPropagation()}
-        class:idle={!(controls && touched)}
-        onclick={() => stage?.reset({ instant: reduced })}
-        aria-label="Reset the view"
-        title="Reset the view"
-        tabindex={controls && touched ? undefined : -1}
-        aria-hidden={controls && touched ? undefined : 'true'}
-      >
-        <RotateCcw aria-hidden="true" />
-      </button>
-      {@render tools?.()}
+    <div class="tools" bind:this={toolbar} bind:offsetWidth={toolsWidth}>
+      <!-- Only the row is reserved: the steps under it lie over the picture rather
+           than pushing the shot down whenever the viewer is handled. -->
+      <div class="row" bind:offsetHeight={toolbarHeight}>
+        <button
+          type="button"
+          onpointerdown={event => event.stopPropagation()}
+          ontouchstart={event => event.stopPropagation()}
+          class:idle={!(controls && touched)}
+          onclick={() => stage?.reset({ instant: reduced })}
+          aria-label="Reset the view"
+          title="Reset the view"
+          tabindex={controls && touched ? undefined : -1}
+          aria-hidden={controls && touched ? undefined : 'true'}
+        >
+          <RotateCcw aria-hidden="true" />
+        </button>
+        {@render tools?.()}
+      </div>
+      <!-- Handled, the steps the keys take too, two by two under the row: narrow,
+           so whatever a host lays beside the toolbar keeps its room. -->
+      {#if controls}
+        <div class="steps">
+          {#each VIEW_STEPS as { step, name, icon: Icon } (step)}
+            <button
+              type="button"
+              onpointerdown={event => event.stopPropagation()}
+              ontouchstart={event => event.stopPropagation()}
+              onclick={() => stage?.nudge(STEPS[step])}
+              aria-label={name}
+              title={name}
+            >
+              <Icon aria-hidden="true" />
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1090,6 +1143,13 @@
 
   .viewer.interactive:active {
     cursor: grabbing;
+  }
+
+  /* Handled, the viewer takes focus for its keys. Drawn inside its edge, which its
+     card would otherwise clip. */
+  .viewer:focus-visible {
+    outline: 2px solid var(--grid-color);
+    outline-offset: -2px;
   }
 
   canvas {
@@ -1245,6 +1305,8 @@
     right: 0.5rem;
     z-index: 1;
     display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     gap: 0.5rem;
   }
 
@@ -1253,8 +1315,19 @@
     bottom: 0.5rem;
   }
 
+  .row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 0.5rem;
+  }
+
   /* Outlined like PlayPause, over a footer-coloured fill so it reads over the dots. */
-  .tools > :global(button) {
+  .tools :global(button) {
     display: grid;
     place-items: center;
     width: 36px;
@@ -1267,11 +1340,11 @@
     cursor: pointer;
   }
 
-  .tools > :global(button[aria-pressed='true']) {
+  .tools :global(button[aria-pressed='true']) {
     background: var(--card-border);
   }
 
-  .tools > .idle {
+  .tools .idle {
     visibility: hidden;
   }
 

@@ -18,34 +18,40 @@
 
 	const reply = (body, status = 200) => Response.json(body, { status });
 
+	// This track's row, ranked among `others`.
+	const entryOf = (assessed) => ({
+		id: 1,
+		rank: 1 + others.reduce((sum, [s, n]) => sum + (s > assessed.score ? n : 0), 0),
+		shape,
+		name: duplicate ? "First submitter" : null,
+		score: assessed.score,
+		readings: assessed.readings,
+	});
+
+	// The board: `others` and this track's row.
+	function boardOf(entry) {
+		const counts = new Map(others);
+		counts.set(entry.score, (counts.get(entry.score) ?? 0) + 1);
+		const histogram = [...counts].sort(([a], [b]) => a - b);
+		return {
+			total: histogram.reduce((sum, [, n]) => sum + n, 0),
+			top: [],
+			entry,
+			histogram,
+		};
+	}
+
 	async function answer(url, init) {
 		if (worker === "judging") return new Promise(() => {});
 		if (worker === "unreachable") throw new TypeError("Failed to fetch");
-		const assessed = await assess(shape);
-		const entry = {
-			id: 1,
-			rank: 1 + others.reduce((sum, [s, n]) => sum + (s > assessed.score ? n : 0), 0),
-			shape,
-			name: duplicate ? "First submitter" : null,
-			score: assessed.score,
-			readings: assessed.readings,
-		};
+		const entry = entryOf(await assess(shape));
 		const { pathname } = new URL(url);
-		if (init?.method === "POST") {
+		const method = init?.method;
+		if (method === "POST") {
 			return reply(duplicate ? { ...entry, duplicate } : { ...entry, duplicate, token: "story" });
 		}
-		if (init?.method === "PATCH") return reply({ ...entry, name: JSON.parse(init.body).name });
-		if (pathname === "/leaderboard") {
-			const counts = new Map(others);
-			counts.set(entry.score, (counts.get(entry.score) ?? 0) + 1);
-			const histogram = [...counts].sort(([a], [b]) => a - b);
-			return reply({
-				total: histogram.reduce((sum, [, n]) => sum + n, 0),
-				top: [],
-				entry,
-				histogram,
-			});
-		}
+		if (method === "PATCH") return reply({ ...entry, name: JSON.parse(init.body).name });
+		if (pathname === "/leaderboard") return reply(boardOf(entry));
 		return reply({ error: "not found" }, 404);
 	}
 

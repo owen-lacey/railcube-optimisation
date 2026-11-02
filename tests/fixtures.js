@@ -1,4 +1,5 @@
-// Inventories the tests solve against. Fixtures, not model data.
+// Inventories the tests solve against, and the slow tier's `slow`. Fixtures, not
+// model data.
 //
 // The model holds exactly one set — `SET` in src/track.js — and these are not it.
 // They exist because a test has to be exhaustive in seconds: an oracle-agreement
@@ -10,6 +11,16 @@
 // docs/pieces.md. They are kept here rather than exported from track.js because
 // nothing in the model needs them: asserting a fixture against itself would prove
 // nothing, so no test claims these numbers are right — docs/pieces.md cites them.
+
+import { test } from 'node:test';
+
+/**
+ * A test in the slow tier: run under SLOW=1, otherwise skipped by name, never
+ * silently, so a skipped test is always seen as one.
+ */
+export const slow = process.env.SLOW === '1'
+  ? test
+  : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
 
 /** The published starter set: 32 track cubes. */
 export const STARTER = {

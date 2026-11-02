@@ -22,7 +22,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES } from '../src/track.js';
 import { routeOf, shapeOf } from '../src/layouts.js';
 
 const [input, output] = process.argv.slice(2);
@@ -57,6 +57,21 @@ const spanOf = placed => {
 
 const { inventory } = solved[0].config;
 
+/**
+ * The sweep spends the inventory in full — that is explore.py's only mode —
+ * so this is `!==`, not a ceiling. A shape spending fewer cubes than claimed
+ * would still be a legal track, and would still be the wrong answer.
+ */
+function assertSpendsAll(shape, placed) {
+  const spent = countPieces(placed);
+  for (const type of PIECE_TYPES) {
+    const held = inventory[type] ?? 0;
+    if (spent[type] !== held) {
+      throw new Error(`${shape} spends ${spent[type]} ${type}, not the ${held} held`);
+    }
+  }
+}
+
 /** Chain the shape and check it is what the log says it is. */
 function verify(record) {
   const placed = chainTrack(routeOf(record.shape));
@@ -68,16 +83,7 @@ function verify(record) {
     throw new Error(`${record.shape} does not round-trip through the letters`);
   }
 
-  // The sweep spends the inventory in full — that is explore.py's only mode —
-  // so this is `!==`, not a ceiling. A shape spending fewer cubes than claimed
-  // would still be a legal track, and would still be the wrong answer.
-  const spent = countPieces(placed);
-  for (const pool of POOLS) {
-    const held = inventory[pool] ?? 0;
-    if (spent[pool] !== held) {
-      throw new Error(`${record.shape} spends ${spent[pool]} ${pool}, not the ${held} held`);
-    }
-  }
+  assertSpendsAll(record.shape, placed);
 
   const span = spanOf(placed);
   if (span.join('x') !== record.span) {

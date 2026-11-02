@@ -14,10 +14,14 @@
 
 import { chainTrack, cubeOf, PIECE_TYPES, PROJ } from './track.js';
 
-const LETTER_OF = {
+/** Each piece type's letter: the one table of them. */
+export const LETTER_OF = {
   straight: 'S', leftCurve: 'L', rightCurve: 'R',
   insideCurve: 'I', outsideCurve: 'O', cross: 'X',
 };
+
+/** Every piece letter, in one string: what may be typed as a piece. */
+export const LETTERS = Object.values(LETTER_OF).join('');
 const TYPE_OF = Object.fromEntries(Object.entries(LETTER_OF).map(([type, l]) => [l, type]));
 
 /** A layout's shape string as a route of piece types. */
@@ -29,6 +33,14 @@ export const routeOf = shape => [...shape].map(l => {
 
 /** A route as its shape string. */
 export const shapeOf = route => route.map(t => LETTER_OF[t]).join('');
+
+/**
+ * A shape's mirror: every left curve a right one and every right a left, every
+ * other piece left alone. It is a legal track whenever the shape is, spending the
+ * same inventory with the two flat curves' counts swapped. Usually a different
+ * track, not always — see `trackKey`.
+ */
+export const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
 
 /**
  * Which physical cube each placed piece is — `1L` is the first left curve, `2L`

@@ -12,18 +12,9 @@ import assert from 'node:assert/strict';
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
 import { chainTrack } from '../src/track.js';
-import { STARTER, UNLIMITED } from './fixtures.js';
+import { STARTER, UNLIMITED, slow } from './fixtures.js';
 import { inversionRoute } from '../src/routes.js';
-
-const LETTER = {
-  leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
-  outsideCurve: 'O', straight: 'S', cross: 'X',
-};
-const shape = route => route.map(t => LETTER[t]).join('');
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
-
+import { routeOf, shapeOf as shape } from '../src/layouts.js';
 
 // Up to n on both sides — `steps` is an upper bound and the loop uses a prefix.
 const oracleShapes = (n, opts) => enumerateLoops({
@@ -75,8 +66,7 @@ slow('clearance removes loops that the material rule allows', async () => {
 
   // And every loop it removes really does put a cube in the train's way.
   for (const s of material.filter(x => !full.includes(x))) {
-    assert.throws(() => chainTrack([...s].map(l =>
-      Object.keys(LETTER).find(t => LETTER[t] === l))), /clearance conflict/, s);
+    assert.throws(() => chainTrack(routeOf(s)), /clearance conflict/, s);
   }
 });
 

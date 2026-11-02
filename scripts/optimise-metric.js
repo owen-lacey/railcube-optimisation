@@ -48,7 +48,7 @@ import { parseArgs } from 'node:util';
 
 import { FACES, chainTrack } from '../src/track.js';
 import { solveTrack } from '../src/solver/index.js';
-import { routeOf, shapeOf } from '../src/layouts.js';
+import { mirrorOf, routeOf, shapeOf } from '../src/layouts.js';
 import {
   METRICS, POPULATION_RANGES, SIGNS, combinedOf, combinedWeights, metricsOf,
 } from '../src/metrics.js';
@@ -87,7 +87,6 @@ if (!objectives.includes(args.objective)) {
   process.exit(2);
 }
 
-const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
 const handed = shape => (shape.includes('R') && !(shape.indexOf('L') >= 0
   && shape.indexOf('L') < shape.indexOf('R')) ? mirrorOf(shape) : shape);
 

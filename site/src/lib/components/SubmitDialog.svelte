@@ -11,7 +11,7 @@
 	import ScoreHistogram from "./ScoreHistogram.svelte";
 	import { submit, sign, standings, HISTOGRAM_FROM } from "$lib/leaderboard.js";
 	import { NAME_LIMIT, NOTES_LIMIT } from "$lib/submission.js";
-	import { SWEEP_CROSSED_SCORES } from "$lib/sweeps.js";
+	import { SWEEP_CROSSED_SCORES } from "$lib/sweeps/scores.js";
 
 	// `shape` is the closed track's letters, `score` its score at the post's weights,
 	// and `onresults` is handed the submission's id once the reader asks for the
@@ -103,9 +103,11 @@
 		/>
 	</section>
 
-	<section>
+	<!-- Live, so the board's verdict is read out when it replaces "Judging…". -->
+	<section aria-live="polite">
 		<h3>vs user-submitted layouts</h3>
 		{#if board}
+			<p class="visually-hidden">Judged: your track is on the board.</p>
 			<!-- Without this a track already on the board would lose its name field
 			     with no word of why. -->
 			{#if sent.duplicate}
@@ -150,6 +152,7 @@
 		{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="actions">
+			<button type="button" onclick={() => dialog.close()}>Not now</button>
 			{#if error && !sent}
 				<button type="button" class="primary" onclick={() => judge(judged)}
 					>Try again</button
@@ -205,7 +208,7 @@
 		width: 100%;
 		box-sizing: border-box;
 		padding: 0.5rem;
-		border: 1px solid var(--rule);
+		border: 1px solid var(--card-border);
 		border-radius: 0.5rem;
 		background: var(--page);
 		color: inherit;

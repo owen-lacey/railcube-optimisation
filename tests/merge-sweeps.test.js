@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { chainTrack, SCORES } from '../src/track.js';
-import { LAYOUTS, routeOf } from '../src/layouts.js';
+import { LAYOUTS, mirrorOf, routeOf } from '../src/layouts.js';
 import { spanOf } from '../src/metrics.js';
 import { openDb, questionOf, staged, trackHash, verify } from '../scripts/sweep-data.js';
 import { audit, mergePass } from '../scripts/merge-sweeps.js';
@@ -181,7 +181,7 @@ test('the database refuses a second copy of a track, even past the script', asyn
 
 // The crossed sweep's question, and a layout that answers it with its mirror.
 const CROSSED = LAYOUTS.crossed.shape;
-const MIRROR = [...CROSSED].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
+const MIRROR = mirrorOf(CROSSED);
 const crossedConfig = {
   inventory: { straight: 14, cross: 1, leftCurve: 4, rightCurve: 4, insideCurve: 8, outsideCurve: 4 },
   steps: 36, box: 8, minY: 0, startPose: 'DF', minLoopLength: null,

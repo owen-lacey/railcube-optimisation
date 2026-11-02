@@ -29,7 +29,8 @@ import { parseArgs } from 'node:util';
 import Database from 'better-sqlite3';
 
 import { auditRows } from './audit-rows.js';
-import { DB_PATH, legalRows, random, weightingValuesOf } from './sweep-data.js';
+import { DB_PATH, legalRows, weightingValuesOf } from './sweep-data.js';
+import { random } from '../site/src/lib/random.js';
 import { knotOf } from '../site/src/lib/knots.js';
 import { scoreOf, WEIGHTS } from '../site/src/lib/weighting.js';
 

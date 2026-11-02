@@ -14,14 +14,12 @@ import { execFileSync } from 'node:child_process';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES } from '../src/track.js';
 import { routeOf, shapeOf } from '../src/layouts.js';
 import {
   METRICS, POPULATION_RANGES, SIGNS, combinedOf, combinedWeights, metricsOf, spanOf,
 } from '../src/metrics.js';
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
+import { slow } from './fixtures.js';
 
 const total = inventory => Object.values(inventory).reduce((a, b) => a + b, 0);
 const RANGES = POPULATION_RANGES.sweep28;
@@ -43,7 +41,7 @@ const CROSSED_STEPS = 16;
 
 const fullSpend = route => {
   const spent = countPieces(chainTrack(route));
-  return POOLS.every(pool => spent[pool] === (FULL[pool] ?? 0));
+  return PIECE_TYPES.every(pool => spent[pool] === (FULL[pool] ?? 0));
 };
 
 const FULL_LOOPS = enumerateLoops({
@@ -145,7 +143,7 @@ const floorLoops = minY => enumerateLoops({
   inventory: FLOOR, maxPieces: total(FLOOR), minPieces: total(FLOOR), box: FLOOR_BOX, minY,
 }).map(route => chainTrack(route)).filter(placed => {
   const spent = countPieces(placed);
-  return POOLS.every(pool => spent[pool] === FLOOR[pool])
+  return PIECE_TYPES.every(pool => spent[pool] === FLOOR[pool])
     && placed.every(p => p.material.every(c => c[1] >= 0));
 });
 const lowestUnder = loops => Math.min(...loops.map(metricsOf)

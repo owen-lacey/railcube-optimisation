@@ -53,7 +53,7 @@
     height: 1.75rem;
     border: 2px solid var(--grid-color);
     border-radius: 50%;
-    background: var(--wash);
+    background: var(--card-footer);
     color: var(--ink);
     font-size: 0.8rem;
     font-weight: 700;

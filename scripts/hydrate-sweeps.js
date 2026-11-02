@@ -27,7 +27,8 @@
 
 import { parseArgs } from 'node:util';
 
-import { assertSpends, DB_PATH, derive, openDb, random } from './sweep-data.js';
+import { assertSpends, DB_PATH, derive, openDb } from './sweep-data.js';
+import { random } from '../site/src/lib/random.js';
 import { knotInput, knotPool, knotReader } from './knot-curves.js';
 import { knotOf, knotType } from '../site/src/lib/knots.js';
 import { readFront } from './knot-front.js';

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "lint": "eslint . && uvx ruff@0.15.8 check",
     "build-sheet": "node scripts/build-sheet.js",
     "prepare": "svelte-kit sync",
     "dev": "vite dev",
@@ -31,11 +32,14 @@
     "@sveltejs/kit": "^2.70.2",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@types/node": "^26.6.5",
+    "eslint": "^10.14.0",
+    "eslint-plugin-svelte": "^3.23.1",
     "prettier": "^3.9.9",
     "prettier-plugin-svelte": "^4.1.1",
     "storybook": "^10.5.6",
     "svelte": "^5.56.8",
     "vite": "^7.1.5",
+    "vite-imagetools": "^10.0.1",
     "vite-plugin-qrcode": "^0.4.1",
     "wrangler": "^4.154.0"
   }

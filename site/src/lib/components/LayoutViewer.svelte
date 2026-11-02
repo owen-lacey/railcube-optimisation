@@ -8,6 +8,7 @@
   import ExpandingCard from './ExpandingCard.svelte';
   import { attachControls } from '$lib/render/controls.js';
   import { layoutScene } from '$lib/scenes.js';
+  import { describeTrack } from '$lib/catalogue.js';
 
   let {
     shape = '',
@@ -102,7 +103,7 @@
 
 <!-- The footer is there whether or not anything is drawn: a figure in it may be
      what says what to draw. -->
-<ExpandingCard footer={caption ? footer : undefined} label="The layout {letters}, full screen" bind:expanded bind:full bind:handled>
+<ExpandingCard footer={caption ? footer : undefined} label={describeTrack(letters)} bind:expanded bind:full bind:handled>
   {#snippet children(toggle, hand)}
     {#if result.state === 'ok'}
       {#if overlay}
@@ -140,7 +141,7 @@
         {paused}
         {reserved}
         blueprint
-        label="The layout {letters}"
+        label={describeTrack(letters)}
       />
     {:else}
       <div class="empty" style:aspect-ratio={aspect}>

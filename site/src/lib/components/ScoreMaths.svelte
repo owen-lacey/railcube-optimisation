@@ -5,7 +5,7 @@
   // `onweigh`, the points each are sliders.
   import WeightSlider from './WeightSlider.svelte';
   import { termsOf } from '$lib/weighting.js';
-  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
+  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps/ranked.js';
 
   // `readings` is `{ knotted, poses, closeCalls, repeats, longestSide }`: a swept
   // layout's from `$lib/readings.js`, a track being built's from `$lib/score.js`.
@@ -38,7 +38,7 @@
   const working = $derived.by(() => {
     const { terms, total } = termsOf(readings ?? NONE, weights);
     const byName = Object.fromEntries(terms.map(t => [t.name, t]));
-    const rows = LABELS.map(([name, label]) => ({ ...byName[name], label, weight: weights[name] ?? 0 }));
+    const rows = LABELS.map(([name, label]) => ({ ...byName[name], label, weight: weights[name] }));
     if (!readings) return { rows: rows.map(row => ({ ...row, value: null, contribution: null })), total: null };
     return { rows, total };
   });

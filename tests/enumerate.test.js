@@ -10,18 +10,10 @@ import assert from 'node:assert/strict';
 
 import { enumerateLoops } from '../src/enumerate.js';
 import { chainTrack, overflowingPool } from '../src/track.js';
-import { STARTER } from './fixtures.js';
+import { STARTER, slow } from './fixtures.js';
 import { inversionRoute } from '../src/routes.js';
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
-
 // A route as a compact string, for readable assertions: L R I O S X.
-const LETTER = {
-  leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
-  outsideCurve: 'O', straight: 'S', cross: 'X',
-};
-const shape = route => route.map(t => LETTER[t]).join('');
+import { shapeOf as shape } from '../src/layouts.js';
 
 // ---- The oracle grades itself --------------------------------------------
 

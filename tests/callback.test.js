@@ -20,10 +20,7 @@ import { solveTrack } from '../src/solver/index.js';
 import { routeOf, shapeOf } from '../src/layouts.js';
 import { inversionRoute } from '../src/routes.js';
 import { SET, SCORES, chainTrack } from '../src/track.js';
-import { STARTER } from './fixtures.js';
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
+import { STARTER, slow } from './fixtures.js';
 
 // Which cpsat-js build the exports map handed us, because it changes what asking for
 // eight workers means. The portable build has no threads and clamps the request to one,

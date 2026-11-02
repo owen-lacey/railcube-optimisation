@@ -28,7 +28,11 @@
 	// The pieces this track uses, and its verdict.
 	const used = $derived(usedOf(view.shape));
 	const spent = $derived(
-		Object.keys(INVENTORY).every((type) => (used[type] ?? 0) === INVENTORY[type])
+		Object.keys(INVENTORY).every((type) => used[type] === INVENTORY[type])
+	);
+	// The panel's ✓ or ✗, in words, read out as each attempt arrives.
+	const verdict = $derived(
+		`Attempt ${attempt + 1}: ${spent ? "spends the box exactly" : "does not spend the box"}.`
 	);
 </script>
 
@@ -39,5 +43,6 @@
 <Frame {view} overlay={inventory} aspect={shape.value}>
 	{#snippet footer()}
 		<Attempts count={trials.routes.length} {attempt} onturn={(by) => (attempt += by)} />
+		<p class="visually-hidden" aria-live="polite">{verdict}</p>
 	{/snippet}
 </Frame>

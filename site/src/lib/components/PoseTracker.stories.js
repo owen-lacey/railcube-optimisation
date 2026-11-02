@@ -2,7 +2,7 @@
 // Train coordinates, with the 24 poses as chips underneath.
 
 import PoseTracker from './PoseTracker.svelte';
-import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
+import { SWEEP_CROSSED_RANKED } from '$lib/sweeps/ranked.js';
 
 export default {
   title: 'Pose tracker',

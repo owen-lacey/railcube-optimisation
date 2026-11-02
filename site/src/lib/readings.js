@@ -7,7 +7,7 @@
 import { chainTrack } from '../../../src/track.js';
 import { routeOf } from '../../../src/layouts.js';
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../../../src/metrics.js';
-import { knotOf } from './sweeps.js';
+import { knotOf } from './sweeps/stored-knots.js';
 
 /**
  * `{ knotted, poses, closeCalls, repeats, longestSide, knot }`, `knotted` 0 or 1.

@@ -55,7 +55,7 @@
 </script>
 
 <Tabs.Root bind:value={active} class="pose-step">
-	<ExpandingCard footer={keys} label="The {piece.name.toLowerCase()} entered {describePose(pose)}, full screen" bind:expanded bind:handled>
+	<ExpandingCard footer={keys} label="The {piece.name.toLowerCase()} entered {describePose(pose)}" bind:expanded bind:handled>
 		{#snippet children(toggle, hand)}
 			<Tabs.Content value={active} class="panel">
 				<TrackViewer

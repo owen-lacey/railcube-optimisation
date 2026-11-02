@@ -19,12 +19,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { chainTrack, countPieces, POOLS, SCORES } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES, SCORES } from '../src/track.js';
 import { loopsOf, routeOf, shapeOf, trackKey } from '../src/layouts.js';
-import {
-  SWEEPS, SWEEP_28, SWEEP_CROSSED, SWEEP_CROSSED_RANKED, SWEEP_CROSSED_WEIGHTS,
-  SHAPES_28, SHAPES_CROSSED, knotOf, sample, volumeOf,
-} from '../site/src/lib/sweeps.js';
+import { SWEEP_CROSSED } from '../site/src/lib/sweeps/crossed.js';
+import { SWEEP_CROSSED_RANKED } from '../site/src/lib/sweeps/ranked.js';
+import { SWEEP_CROSSED_WEIGHTS } from '../site/src/lib/sweeps/weights.js';
+import { knotOf } from '../site/src/lib/sweeps/stored-knots.js';
+import { sample, volumeOf } from '../site/src/lib/sweeps/sample.js';
+
+// The 28-cube sweep: 28 cubes in a box of 6 with no cross, a finished sweep, and
+// frozen — nothing writes to it any more. No page shows it, so it is read here
+// straight from its file rather than through a module the site could bundle.
+import SWEEP_28 from '../site/src/lib/data/sweep-28.json' with { type: 'json' };
+
+/** Every sweep the site's data carries a whole file of. */
+const SWEEPS = [SWEEP_28, SWEEP_CROSSED];
+const shapesOf = sweep => sweep.shapes.map(s => s.shape);
 
 const spanOf = placed => {
   const cells = placed.flatMap(p => p.material);
@@ -51,7 +61,7 @@ for (const sweep of SWEEPS) {
     // A layout is only meaningful against the inventory it was solved for, and
     // an inventory that omits a pool it did not use would quietly permit that
     // pool the next time something read this file. Same check as layouts.test.js.
-    for (const pool of POOLS) {
+    for (const pool of PIECE_TYPES) {
       assert.equal(typeof (question.inventory[pool] ?? 0), 'number', `no ${pool} count`);
     }
     assert.equal(sweep.cubes, Object.values(question.inventory).reduce((a, b) => a + b, 0),
@@ -85,7 +95,7 @@ for (const sweep of SWEEPS) {
     // question than the one at the top of the file.
     for (const { shape } of shapes) {
       const spent = countPieces(chainTrack(routeOf(shape)));
-      for (const pool of POOLS) {
+      for (const pool of PIECE_TYPES) {
         assert.equal(spent[pool], question.inventory[pool] ?? 0,
           `${shape} spends ${spent[pool]} ${pool}`);
       }
@@ -143,14 +153,14 @@ for (const sweep of SWEEPS) {
 
 test('no 28-cube layout crosses, and none holds a cross', () => {
   assert.ok(SWEEP_28.shapes.every(s => s.revisits === 0));
-  assert.ok(SHAPES_28.every(s => !s.includes('X')));
+  assert.ok(shapesOf(SWEEP_28).every(s => !s.includes('X')));
 });
 
 test('every crossed layout crosses itself exactly once', () => {
   // A 36-step route over 35 cubes has one step that spends no cube; the checks
   // above count each layout's own, this checks the file holds no uncrossed one.
   assert.ok(SWEEP_CROSSED.shapes.every(s => s.revisits === 1));
-  assert.ok(SHAPES_CROSSED.every(s => s.includes('X')));
+  assert.ok(shapesOf(SWEEP_CROSSED).every(s => s.includes('X')));
 });
 
 test('every crossed layout records the two loops its crossing makes', () => {

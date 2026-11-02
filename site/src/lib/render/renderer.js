@@ -9,6 +9,14 @@
 //
 // It is made on first use rather than at import, because every page here is
 // prerendered and there is no WebGL in Node.
+//
+// It only ever grows by itself, since a smaller viewer fits in a bigger buffer and
+// a resize reallocates it. Two things are therefore said to it from outside: a
+// viewer about to grow to a known size every frame on the way (a card opening full
+// screen) reserves that size at once, so the buffer is reallocated once rather
+// than every frame; and once a picture bigger than any viewer has gone (the
+// title's full-screen zoom, a card closing full screen), it is released, and
+// grows back to only what the viewers then draw.
 
 import { WebGLRenderer } from 'three';
 
@@ -59,6 +67,20 @@ function draw(canvas, scene, camera, w, h) {
 }
 
 export const sharedRenderer = { draw };
+
+/**
+ * Grow the shared renderer to at least `w`×`h` CSS pixels now, for a viewer about
+ * to grow towards that size. Before anything has drawn there is nothing to grow.
+ */
+export function reserveRenderer(w, h) {
+  if (renderer) fitted(w, h);
+}
+
+/** Let the shared renderer shrink to what the viewers draw next. */
+export function releaseRenderer() {
+  width = 0;
+  height = 0;
+}
 
 /**
  * The overlay paint, read off the viewer's stylesheet so the theme stays in CSS:

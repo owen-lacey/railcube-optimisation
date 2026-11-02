@@ -5,7 +5,7 @@
 	import KnownTracks from "$lib/components/KnownTracks.svelte";
 	import StepSection from "$lib/components/StepSection.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
-	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
+	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps/ranked.js";
 
 	let { section = $bindable(), onaboard } = $props();
 

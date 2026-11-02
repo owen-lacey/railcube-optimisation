@@ -1,0 +1,11 @@
+# The Python is standalone uv scripts, each carrying its own inline metadata, so
+# there is no project for a pyproject.toml to describe. Two rule sets: cyclomatic
+# complexity under 10 (the owner's rule) and pyflakes.
+target-version = "py311"
+include = ["scripts/*.py", "src/solver/*.py"]
+
+[lint]
+select = ["C901", "F"]
+
+[lint.mccabe]
+max-complexity = 9

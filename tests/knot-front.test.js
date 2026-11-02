@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { readFront } from '../scripts/knot-front.js';
-import { random } from '../scripts/sweep-data.js';
+import { random } from '../site/src/lib/random.js';
 
 const SETS = [{ a: 1, b: -1, c: 1 }, { a: 1, b: 1 }];
 

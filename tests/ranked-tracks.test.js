@@ -13,10 +13,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { readingsOf } from '../site/src/lib/readings.js';
-import { SWEEP_CROSSED_RANKED as ranked, SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
+import { SWEEP_CROSSED_RANKED as ranked } from '../site/src/lib/sweeps/ranked.js';
+import { SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps/weights.js';
 import { ends, scoreOf, termsOf, WEIGHTS } from '../site/src/lib/weighting.js';
 import { rankRows } from '../site/src/lib/ranks.js';
 import top from '../site/src/lib/data/sweep-crossed-top.json' with { type: 'json' };
@@ -30,7 +31,7 @@ function assertLegal(list, { ownKnots = false } = {}) {
   for (const { shape, knot, score: expected } of list) {
     const placed = chainTrack(routeOf(shape));
     const spent = countPieces(placed);
-    for (const pool of POOLS) assert.equal(spent[pool], ranked.question.inventory[pool], `${shape} ${pool}`);
+    for (const pool of PIECE_TYPES) assert.equal(spent[pool], ranked.question.inventory[pool], `${shape} ${pool}`);
     assert.ok(placed.every(p => p.cell[1] >= 0), `${shape} goes below the floor`);
     const values = ownKnots ? readingsOf(shape, knot) : readingsOf(shape);
     assert.equal(values.knot, knot, shape);

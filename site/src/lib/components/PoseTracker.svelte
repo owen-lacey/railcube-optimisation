@@ -6,7 +6,6 @@
 	import Frame from "./Frame.svelte";
 	import PoseChips from "./PoseChips.svelte";
 	import TrainScrubber from "./TrainScrubber.svelte";
-	import { POSES } from "../../../../src/track.js";
 	import { posesIn } from "../../../../src/metrics.js";
 
 	// `scene` is letters → scene, from scenes.js; unset, `layoutScene`.

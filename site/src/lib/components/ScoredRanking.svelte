@@ -9,7 +9,7 @@
   import TileStrip from './TileStrip.svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import { readingsOf } from '$lib/readings.js';
-  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
+  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps/ranked.js';
 
   // `train` is the large viewer's: its callbacks, or null for no train.
   let { ranked = SWEEP_CROSSED_RANKED, train = {} } = $props();

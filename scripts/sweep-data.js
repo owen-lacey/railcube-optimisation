@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
 
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES } from '../src/track.js';
 import { loopsOf, routeOf, shapeOf, trackKey } from '../src/layouts.js';
 import { closeCallsOf, metricsOf, posesOf, spanOf } from '../src/metrics.js';
 import { knotOf } from '../site/src/lib/knots.js';
@@ -82,18 +82,6 @@ export function openDb(path = DB_PATH) {
   return db;
 }
 
-/** mulberry32: a small seeded PRNG, so a draw is a function of its seed. */
-export function random(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 2 ** 32;
-  };
-}
-
 /** `trackKey`, hashed to the 32 bytes the database keys on. */
 export const trackHash = shape => createHash('sha256').update(trackKey(shape)).digest();
 
@@ -101,12 +89,12 @@ export const trackHash = shape => createHash('sha256').update(trackKey(shape)).d
  * The part of a sweep's config that is the question. Everything else a log
  * records — `minLoopLength`, `tightCrossings`, `exclude` — steers the search
  * without changing what counts as an answer, so rungs of one ladder merge into
- * one question. The inventory states every pool, zeros included, so an omitted
- * pool cannot quietly read as permitted; and a full-spend sweep that logs no
+ * one question. The inventory states every piece type, zeros included, so an
+ * omitted type cannot quietly read as permitted; and a full-spend sweep that logs no
  * `steps` took one step per cube.
  */
 export function questionOf(config) {
-  const inventory = Object.fromEntries(POOLS.map(pool => [pool, config.inventory[pool] ?? 0]));
+  const inventory = Object.fromEntries(PIECE_TYPES.map(type => [type, config.inventory[type] ?? 0]));
   const cubes = Object.values(inventory).reduce((a, b) => a + b, 0);
   return {
     inventory,
@@ -197,9 +185,9 @@ export function derive(shape) {
  */
 export function assertSpends(placed, question, shape) {
   const spent = countPieces(placed);
-  for (const pool of POOLS) {
-    if (spent[pool] !== question.inventory[pool]) {
-      throw new Error(`${shape} spends ${spent[pool]} ${pool}, not the ${question.inventory[pool]} held`);
+  for (const type of PIECE_TYPES) {
+    if (spent[type] !== question.inventory[type]) {
+      throw new Error(`${shape} spends ${spent[type]} ${type}, not the ${question.inventory[type]} held`);
     }
   }
 }

@@ -10,7 +10,7 @@
   import ScoreMaths from './ScoreMaths.svelte';
   import TileStrip from './TileStrip.svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { SWEEP_CROSSED_WEIGHTS } from '$lib/sweeps.js';
+  import { SWEEP_CROSSED_WEIGHTS } from '$lib/sweeps/weights.js';
   import { ends, WEIGHTS } from '$lib/weighting.js';
 
   // `train` is the large viewer's: its callbacks, or null for no train. A slider

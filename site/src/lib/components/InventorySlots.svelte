@@ -15,7 +15,7 @@
 
   const rows = $derived(PIECES
     .filter(piece => (inventory[piece.type] ?? 0) > 0)
-    .map(piece => ({ piece, count: used[piece.type] ?? 0, total: inventory[piece.type] })));
+    .map(piece => ({ piece, count: used[piece.type], total: inventory[piece.type] })));
 </script>
 
 <div class="inventory">
@@ -35,8 +35,12 @@
     {/each}
   </dl>
   <!-- Its room is kept with no mark, so the panel is one size throughout. -->
-  <span class="mark {mark ?? ''}" aria-label={mark === 'match' ? 'Spends the box' : mark === 'miss' ? 'Does not spend the box' : undefined}>
-    {#if mark === 'match'}<Check />{:else if mark === 'miss'}<X />{/if}
+  <span class="mark {mark ?? ''}">
+    {#if mark === 'match'}
+      <Check aria-hidden="true" /><span class="visually-hidden">Spends the box</span>
+    {:else if mark === 'miss'}
+      <X aria-hidden="true" /><span class="visually-hidden">Does not spend the box</span>
+    {/if}
   </span>
 </div>
 

@@ -1,10 +1,7 @@
 <script>
 	// Where the post ends, whether or not the reader took the challenge on, and the
 	// way on to the builder at the front page.
-	import { base } from "$app/paths";
 	import Chapter from "./Chapter.svelte";
-
-	let { submitted } = $props();
 </script>
 
 <Chapter id="conclusion">
@@ -27,6 +24,6 @@
 	</p>
 	<p>
 		Fear not, that wasn't your only opportunity to make a Rail Cube layout. You
-		can always come back <a href="{base}/">here</a> later to build one.
+		can always come back <a href="/">here</a> later to build one.
 	</p>
 </Chapter>

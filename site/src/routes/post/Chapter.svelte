@@ -55,9 +55,15 @@
 	}
 
 	/* The page's first chapter starts under the layout's own top padding alone: the
-	   heading's margin is room from a chapter before it, and there is none. */
-	.chapter:first-child > :global(h2:first-child) {
+	   heading's margin is room from a chapter before it, and there is none: the
+	   first section, since the page's unseen heading comes before it. */
+	.chapter:first-of-type > :global(h2:first-child) {
 		margin-top: 0;
+	}
+
+	/* A heading is focused only from script, to send a reader on to it. */
+	.chapter > :global(h2:focus) {
+		outline: none;
 	}
 
 	.chapter > :global(:is(p, ul, ol)) {

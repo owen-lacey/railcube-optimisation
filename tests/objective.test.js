@@ -16,8 +16,8 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, countPools, overflowingPool, SCORES } from '../src/track.js';
-import { STARTER } from './fixtures.js';
+import { chainTrack, countTypes, overflowingPool, SCORES } from '../src/track.js';
+import { STARTER, slow } from './fixtures.js';
 
 const LETTER = {
   leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
@@ -25,9 +25,6 @@ const LETTER = {
 };
 const shape = route => route.map(t => LETTER[t]).join('');
 const total = inv => Object.values(inv).reduce((a, b) => a + b, 0);
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
 
 // A small set the tests can be exhaustive about. Four curves of each colour and
 // four straights, in a 4-cell box: the best it can do is eight pieces, so
@@ -63,7 +60,7 @@ test('dropped plus used equals the inventory', async () => {
 // Never trust the solver's own count. Re-derive it from the route.
 test('the reported count matches the route actually returned', async () => {
   const result = await best(SMALL);
-  const used = Object.values(countPools(result.route)).reduce((a, b) => a + b, 0);
+  const used = Object.values(countTypes(result.route)).reduce((a, b) => a + b, 0);
   assert.equal(used, result.route.length);
   assert.equal(result.dropped, total(SMALL) - used);
   assert.equal(overflowingPool(result.route, SMALL), null);

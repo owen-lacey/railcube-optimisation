@@ -7,7 +7,7 @@
   import { Tabs } from 'bits-ui';
   import Frame from './Frame.svelte';
   import Scorecard from './Scorecard.svelte';
-  import { SWEEP_CROSSED_SINGLES } from '$lib/sweeps.js';
+  import { SWEEP_CROSSED_SINGLES } from '$lib/sweeps/singles.js';
   import { LABELS } from '$lib/weighting.js';
 
   // `train` is the viewer's: its callbacks, or null for no train.

@@ -8,17 +8,9 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, countPools, overflowingPool } from '../src/track.js';
-import { STARTER, DELUXE } from './fixtures.js';
-
-const LETTER = {
-  leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
-  outsideCurve: 'O', straight: 'S', cross: 'X',
-};
-const shape = route => route.map(t => LETTER[t]).join('');
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
+import { chainTrack, countTypes, overflowingPool } from '../src/track.js';
+import { STARTER, DELUXE, slow } from './fixtures.js';
+import { shapeOf as shape } from '../src/layouts.js';
 
 // ---- Inventory -----------------------------------------------------------
 
@@ -43,7 +35,7 @@ test('every solution fits the inventory it was given', async () => {
     });
     for (const route of found.routes) {
       assert.equal(overflowingPool(route, inventory), null,
-        `${shape(route)} overflows: ${JSON.stringify(countPools(route))}`);
+        `${shape(route)} overflows: ${JSON.stringify(countTypes(route))}`);
     }
   }
 });

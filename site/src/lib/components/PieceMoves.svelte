@@ -22,7 +22,7 @@
 </script>
 
 <Tabs.Root bind:value={active} class="piece-moves">
-  <ExpandingCard footer={keys} label="The {piece.name.toLowerCase()}, full screen" bind:expanded bind:handled>
+  <ExpandingCard footer={keys} label="The {piece.name.toLowerCase()}" bind:expanded bind:handled>
     {#snippet children(toggle, hand)}
       <!-- One panel whose value follows the tab, so there is one viewer and a tab
            change redraws it rather than mounting another. -->

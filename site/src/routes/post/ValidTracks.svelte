@@ -2,10 +2,8 @@
 	// The rules a track must keep. Three broken tracks, and then the rules they
 	// break.
 	import Chapter from "./Chapter.svelte";
-	import PieceTag from "$lib/components/PieceTag.svelte";
 	import OrientationChip from "$lib/components/OrientationChip.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
-	import TrackSum from "$lib/components/TrackSum.svelte";
 </script>
 
 <Chapter id="valid-tracks">

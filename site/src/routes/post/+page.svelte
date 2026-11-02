@@ -23,10 +23,8 @@
 	let passed = $state(nointro || (dev && page.url.searchParams.has("nosplash")));
 	// Whether the reader has gone on past the opening.
 	let aboard = $state(nointro);
-	// Whether the challenge is over, so the conclusion is shown, and whether the
-	// reader submitted a track.
+	// Whether the challenge is over, so the conclusion is shown.
 	let concluded = $state(false);
-	let submitted = $state(false);
 	let opening = $state();
 	// The O's box on screen while the title zooms, and the zoom.
 	let zoomFrom = $state(null);
@@ -40,9 +38,15 @@
 		window.scrollTo(0, 0);
 	}
 
-	function open(rect) {
-		if (reduced()) gone();
-		else zoomFrom = rect;
+	// Sent on from the splash, focus goes to the opening, as the Start button it
+	// was on goes with the splash.
+	async function open(rect) {
+		if (!reduced()) {
+			zoomFrom = rect;
+			return;
+		}
+		await gone();
+		opening.focus();
 	}
 
 	// The O is drawn live over its picture, so the splash can go from under it.
@@ -51,11 +55,11 @@
 		await gone();
 		await zoom.zoomTo(opening.landing());
 		opening.land();
+		opening.focus();
 		zoomFrom = null;
 	}
 
-	async function conclude(sent) {
-		submitted = sent;
+	async function conclude() {
 		concluded = true;
 		await tick();
 		document
@@ -63,10 +67,13 @@
 			.scrollIntoView({ behavior: reduced() ? "instant" : "smooth" });
 	}
 
+	// The chapters replace the opening, and focus goes to the first one's heading,
+	// as the "All aboard!" it was on goes with the opening.
 	async function board() {
 		aboard = true;
 		await tick();
 		window.scrollTo(0, 0);
+		document.getElementById("coordinates").querySelector("h2").focus({ preventScroll: true });
 	}
 </script>
 
@@ -76,6 +83,10 @@
 
 {#if !passed}
 	<Splash onnext={open} />
+{:else}
+	<!-- The splash's heading goes with it. This stays, unseen, so the page is
+		 still headed; the layout's rules look past it, to the first section. -->
+	<h1 class="visually-hidden">Optimising the Rail Cube</h1>
 {/if}
 
 {#if !aboard}
@@ -95,6 +106,6 @@
 	<ValidTracks />
 	<Optimising onconclude={conclude} />
 	{#if concluded}
-		<Conclusion {submitted} />
+		<Conclusion />
 	{/if}
 {/if}

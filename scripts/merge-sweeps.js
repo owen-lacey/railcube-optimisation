@@ -47,6 +47,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SCORES } from '../src/track.js';
+import { mirrorOf } from '../src/layouts.js';
 import { knotInput, knotPool } from './knot-curves.js';
 import { knotOf } from '../site/src/lib/knots.js';
 import {
@@ -244,8 +245,6 @@ function unmatchedNotice(say) {
   };
 }
 
-const flip = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
-
 // The knot columns are not here: they are read on the way in, and re-reading
 // them is hours of topoly, which `hydrate-sweeps.js --recheck` does on a sample.
 const COLUMNS = ['span_across', 'span_up', 'span_along', 'volume', 'revisits', 'loop_small', 'loop_large',
@@ -280,7 +279,7 @@ function mirrorFaults(db, held) {
   if (!rows.some(r => r.mirrored === 1)) return [];
   const present = new Set(rows.map(r => r.shape));
   const originals = rows.filter(r => r.mirrored === 0);
-  const faults = originals.filter(r => !present.has(flip(r.shape)))
+  const faults = originals.filter(r => !present.has(mirrorOf(r.shape)))
     .map(r => `${r.shape} has no mirror`);
   if (originals.length * 2 !== rows.length) {
     faults.push(`${originals.length} originals are not half of ${rows.length} rows`);

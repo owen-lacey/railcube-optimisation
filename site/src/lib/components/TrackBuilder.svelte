@@ -35,13 +35,13 @@
   import InventoryCard from './InventoryCard.svelte';
   import BuildPrompt from './BuildPrompt.svelte';
   import SubmitDialog from './SubmitDialog.svelte';
-  import { attachControls } from '../render/controls.js';
-  import { base } from '$app/paths';
+  import { attachBuilderControls } from '../render/controls.js';
   import { openScene, BUILD_FLOOR } from '$lib/scenes.js';
   import { liveReadingsOf } from '$lib/score.js';
   import { scoreOf, WEIGHTS } from '$lib/weighting.js';
   import { claimKeys } from '$lib/keys.js';
-  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
+  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps/ranked.js';
+  import { PIECES, ordinal, withArticle, describeTrack } from '$lib/catalogue.js';
   import { LIMIT, seed, added, removed, keyAction, usedOf, spentOut } from '$lib/building.js';
 
   // The crossed sweep's pieces, since its scores are the ones to beat.
@@ -60,7 +60,7 @@
     card: Card = ExpandingCard,
     // Handed a submission's id when the reader asks for the full results. In the
     // post they open beside it, on the front page's leaderboard.
-    onresults = id => window.open(`${base}/?tab=leaderboard&id=${id}`, '_blank'),
+    onresults = id => window.open(`/?tab=leaderboard&id=${id}`, '_blank'),
     // What the verdict's button for that reads.
     resultsLabel = undefined,
     // Set while the track is only being viewed: called to start one of the reader's own.
@@ -98,6 +98,15 @@
   // The readings of the track as built, scored at the post's weights: the rejected
   // piece, the last drawn, is not part of it.
   const readings = $derived(liveReadingsOf(view.offender ? view.pieces.slice(0, -1) : view.pieces, view.closed));
+
+  // The piece that cannot go down, in words, for a reader who cannot see it pulse:
+  // which it is, what it runs into, and how to go on. Empty while nothing is stuck.
+  const stuck = $derived.by(() => {
+    if (!view.offender) return '';
+    const { index, message } = view.offender;
+    const piece = withArticle(PIECES.find(p => p.letter === letters[index]).name);
+    return `The ${ordinal(index + 1)} piece, ${piece}, cannot go down: ${message}. Remove it to go on.`;
+  });
 
   // What is spent of the inventory, and the pieces with none left to add.
   const used = $derived(usedOf(letters));
@@ -138,9 +147,12 @@
     letters = removed(letters);
   };
 
-  /** The keyboard: a letter or an arrow adds a piece, Backspace takes one off. */
+  /**
+   * The keyboard: a letter or an arrow adds a piece, Backspace takes one off — the
+   * arrows and Backspace only with focus in the builder.
+   */
   function onKeydown(event) {
-    const action = keyAction(event);
+    const action = keyAction(event, builder.contains(event.target));
     if (!action) return;
     if (action.remove) removeLast();
     else add(action.add);
@@ -151,7 +163,7 @@
 <div class="builder" bind:this={builder}>
   <Card
     footer={keys}
-    label="Track builder: type S L R I O X or use the arrow keys to add a piece, Backspace to remove one"
+    label="Track builder: type S L R I O X to add a piece; with focus in it, the arrow keys add one too and Backspace removes one"
     onkeydown={onKeydown}
     bind:expanded
     bind:handled
@@ -162,13 +174,13 @@
         transition={{ kind: 'grow', pace, speed, from: BUILD_FLOOR, carry: carrying }}
         alarm={view.offender?.id ?? null}
         train={view.closed ? {} : null}
-        controls={handled && !empty ? attachControls : null}
+        controls={handled && !empty ? attachBuilderControls : null}
         tools={toggle}
         cornerTools={hand}
         bind:toolsWidth
         aspect={expanded ? 'auto' : shapeOfViewer}
         blueprint
-        label={letters ? `The track ${letters}, as far as it has been built` : 'An empty stage'}
+        label={letters ? `${describeTrack(letters)}, as far as it has been built` : 'An empty stage'}
       />
       <div class="inventory" style:--tools-width="{toolsWidth}px"><InventoryCard {used} inventory={INVENTORY} /></div>
       {#if empty}<BuildPrompt />{/if}
@@ -177,6 +189,7 @@
 </div>
 
 {#snippet keys()}
+  <p class="visually-hidden" aria-live="polite">{stuck}</p>
   <ScoreMaths {readings} />
   {#if locked}
     <div class="verdict">

@@ -4,7 +4,7 @@
   import { onMount } from 'svelte';
   import Shuffle from '@lucide/svelte/icons/shuffle';
   import Frame from './Frame.svelte';
-  import { SWEEP_CROSSED } from '$lib/sweeps.js';
+  import { SWEEP_CROSSED } from '$lib/sweeps/crossed.js';
 
   // `train` is the viewer's: its callbacks, or null for no train.
   let { sweep = SWEEP_CROSSED, aspect = '16 / 10', train = {} } = $props();

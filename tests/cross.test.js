@@ -15,18 +15,10 @@ import assert from 'node:assert/strict';
 
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, countPieces, countPools, OPPOSITE, POOLS } from '../src/track.js';
-import { DELUXE } from './fixtures.js';
-
-const LETTER = {
-  leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
-  outsideCurve: 'O', straight: 'S', cross: 'X',
-};
-const shape = route => route.map(t => LETTER[t]).join('');
+import { chainTrack, countPieces, countTypes, OPPOSITE, PIECE_TYPES } from '../src/track.js';
+import { routeOf, shapeOf as shape } from '../src/layouts.js';
+import { DELUXE, slow } from './fixtures.js';
 const total = inv => Object.values(inv).reduce((a, b) => a + b, 0);
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
 
 // Small enough to reason about: two crosses and the curves needed to get back to
 // them. Deliberately short on straights, so a cross is worth using as one.
@@ -45,9 +37,9 @@ slow('no solution spends more physical pieces than the inventory holds', async (
   assert.equal(found.status, 'OPTIMAL');
 
   const spent = countPieces(chainTrack(found.route));
-  for (const pool of POOLS) {
-    assert.ok(spent[pool] <= TWO_CROSSES[pool],
-      `${shape(found.route)} spends ${spent[pool]} ${pool}, set has ${TWO_CROSSES[pool]}`);
+  for (const type of PIECE_TYPES) {
+    assert.ok(spent[type] <= TWO_CROSSES[type],
+      `${shape(found.route)} spends ${spent[type]} ${type}, set has ${TWO_CROSSES[type]}`);
   }
 });
 
@@ -74,8 +66,7 @@ slow('dropped counts cubes on the table, not steps in the route', async () => {
 // through one cross. Out along the front, round to the left, back through the
 // origin at right angles to the first pass, then the mirror image of that.
 // Found by search over the catalogue, not invented.
-const FIGURE_EIGHT = [...'XSLLLSXSRRRS'].map(l =>
-  ({ X: 'cross', S: 'straight', L: 'leftCurve', R: 'rightCurve' }[l]));
+const FIGURE_EIGHT = routeOf('XSLLLSXSRRRS');
 
 // A cross visited twice on the same face with perpendicular headings is one
 // cube. Same or opposite headings would be the same rail, not a crossing, and
@@ -126,7 +117,6 @@ test('a crossing needs no clearance beyond the first pass', () => {
   assert.deepEqual(revisit.material, []);
   assert.deepEqual(revisit.train, []);
 });
-
 
 // ---- The foot-gun, at the solver ------------------------------------------
 
@@ -199,7 +189,7 @@ slow('a crossing is not chosen when the set closes without one', async () => {
   });
   assert.equal(result.status, 'OPTIMAL');
   assert.equal(result.pieces.filter(p => p.revisit).length, 0, 'crossing should not pay here');
-  assert.ok(countPools(result.route).cross > 0, 'but the crosses should still get used');
+  assert.ok(countTypes(result.route).cross > 0, 'but the crosses should still get used');
 });
 
 // The other half. Give the solver an inventory that only closes into a
@@ -229,8 +219,7 @@ slow('a crossing IS chosen when it is the only way to spend every cube', async (
 // Found by walking the head back to the same cell at each of three perpendicular
 // poses in turn. It does not close, and it does not need to — the rule has to
 // bite while the route is still being unrolled.
-const THRICE = [...'XSLLLSXSSSLLLRX'].map(l =>
-  ({ X: 'cross', S: 'straight', L: 'leftCurve', R: 'rightCurve' }[l]));
+const THRICE = routeOf('XSLLLSXSSSLLLRX');
 
 test('a cross cannot be traversed three times', () => {
   assert.throws(() => chainTrack(THRICE), /two rails, not three/);
@@ -281,7 +270,7 @@ slow('solver and oracle agree on every crossing loop in a box that holds them al
 // loop to come back to the cross at right angles, and nothing shorter manages it.
 test('twelve steps is the shortest a loop can cross itself in', () => {
   const shorter = enumerateLoops({ inventory: CROSSING_SET, maxPieces: 11, minPieces: 1, minY: 0 })
-    .filter(route => countPools(route).cross > 1);
+    .filter(route => countTypes(route).cross > 1);
   assert.deepEqual(shorter.map(shape), []);
   assert.ok(oracleShapes(6).length > 0, 'but twelve manages it');
 });
@@ -330,12 +319,12 @@ test('mandating more crossings than the box holds crosses is refused', async () 
 
 // ---- Counting, one last time ---------------------------------------------
 
-// countPools counts the traversal; countPieces counts the table. On a crossing
+// countTypes counts the traversal; countPieces counts the table. On a crossing
 // route they must differ, or the distinction the whole rung rests on is fake.
 test('the two counts differ exactly on crossings', () => {
   const placed = chainTrack(FIGURE_EIGHT);
   const route = placed.map(p => p.type);
-  assert.equal(countPools(route).cross, 2, 'the route passes a cross twice');
+  assert.equal(countTypes(route).cross, 2, 'the route passes a cross twice');
   assert.equal(countPieces(placed).cross, 1, 'but there is one cube on the table');
 });
 

@@ -57,20 +57,25 @@ function pick(path) {
     if (r.mirrored === 1) continue;
     const values = weightingValuesOf(r);
     if (values.knotted === null) throw new Error(`row ${r.id} has its knot unread: run hydrate-sweeps.js --knots`);
-    for (const m of NAMES) {
-      const at = kept[m];
-      const lead = at ? DIRECTIONS[m] * (values[m] - at.value) : 1;
-      if (lead < 0) continue;
-      const others = scoreOf(values, OTHERS[m]);
-      if (lead > 0 || others < at.others) kept[m] = { row: r, value: values[m], others, tied: 1 };
-      else if (others === at.others) {
-        at.tied += 1;
-        if (r.shape < at.row.shape) at.row = r;
-      }
-    }
+    keep(kept, r, values);
   }
   db.close();
   return { question, legal, kept };
+}
+
+/** Weigh one unmirrored legal row against what each metric has kept so far. */
+function keep(kept, r, values) {
+  for (const m of NAMES) {
+    const at = kept[m];
+    const lead = at ? DIRECTIONS[m] * (values[m] - at.value) : 1;
+    if (lead < 0) continue;
+    const others = scoreOf(values, OTHERS[m]);
+    if (lead > 0 || others < at.others) kept[m] = { row: r, value: values[m], others, tied: 1 };
+    else if (others === at.others) {
+      at.tied += 1;
+      if (r.shape < at.row.shape) at.row = r;
+    }
+  }
 }
 
 const { question, legal, kept } = pick(args.db);

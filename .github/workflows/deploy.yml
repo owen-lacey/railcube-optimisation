@@ -24,6 +24,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # ruff runs through uvx, as it does locally.
+      - uses: astral-sh/setup-uv@v6
+      - run: npm run lint
       # The leaderboard Worker's URL (worker/), a repository variable. Without it
       # the builder would submit to the .env file's local Worker.
       - run: test -n "$PUBLIC_LEADERBOARD_URL"

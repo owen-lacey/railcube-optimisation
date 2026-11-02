@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { solveTrack } from '../src/solver/index.js';
 import { enumerateLoops } from '../src/enumerate.js';
 import { assertNoCollisions, cellsFor, startCell, step, chainTrack } from '../src/track.js';
-import { STARTER, UNLIMITED } from './fixtures.js';
+import { STARTER, UNLIMITED, slow } from './fixtures.js';
 
 const LETTER = {
   leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
@@ -46,9 +46,6 @@ test('no solution puts two pieces in the same cell', async () => {
 });
 
 // ---- Agreement with the oracle -------------------------------------------
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
 
 // This rung is about collisions and nothing else, so both searches get a
 // bottomless box of pieces. Handing one of them a real inventory would make them

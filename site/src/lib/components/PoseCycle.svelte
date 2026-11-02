@@ -25,7 +25,7 @@
 	};
 </script>
 
-<ExpandingCard footer={controls} label="The train inside one cube, full screen" bind:expanded bind:handled>
+<ExpandingCard footer={controls} label="The train inside one cube" bind:expanded bind:handled>
 	{#snippet children(toggle, hand)}
 		<TrackViewer
 			pieces={scene.pieces}

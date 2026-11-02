@@ -12,14 +12,16 @@
   // it: the full-screen toggle, for `TrackViewer`'s `tools`, and the hand, in the
   // page only, for its `cornerTools`. `expanded` (laid out full screen), `full`
   // (full screen and not on the way back) and `handled` (open for handling: full,
-  // or the hand on) are bound out, for the pane and the footer to read. `onkeydown` has the keys while it is
-  // full screen: focus cannot leave a modal dialog, and the dialog itself takes it
+  // or the hand on) are bound out, for the pane and the footer to read. `label`
+  // names the card, and full screen a full-screen view of it. `onkeydown` has the
+  // keys while it is handled: full screen, focus cannot leave a modal dialog, and the dialog itself takes it
   // when anything else in it is clicked.
   import Hand from '@lucide/svelte/icons/hand';
   import Maximize2 from '@lucide/svelte/icons/maximize-2';
   import Minimize2 from '@lucide/svelte/icons/minimize-2';
   import LayoutCard from './LayoutCard.svelte';
   import { GROW, GROW_CSS } from '$lib/grow.js';
+  import { reserveRenderer, releaseRenderer } from '../render/renderer.js';
 
   let {
     children,
@@ -67,6 +69,9 @@
     const card = dialog.firstElementChild;
     const rect = card.getBoundingClientRect();
     room = { height: card.offsetHeight, margin: getComputedStyle(card).marginBottom };
+    // The viewer grows every frame of the way, and the renderer would be grown
+    // with it every frame: it is grown once, to the screen, instead.
+    reserveRenderer(window.innerWidth, window.innerHeight);
     // Both in one task, so nothing is painted in between.
     dialog.close();
     dialog.showModal();
@@ -108,6 +113,8 @@
     full = false;
     hand = false;
     room = null;
+    // Nothing is drawn the size of the screen any more.
+    releaseRenderer();
     toggle?.focus({ preventScroll: true });
   }
 </script>
@@ -144,8 +151,17 @@
 
 <div class="room" bind:this={space} style:height={room && `${room.height}px`} style:margin-bottom={room?.margin}>
   <!-- Open from the first paint, so a prerendered page shows the card. Focusable
-       from script only, so a click anywhere in it keeps the keys in it. -->
-  <dialog bind:this={dialog} open tabindex="-1" onclose={closed} onkeydown={keydown} aria-label={label}>
+       from script only, so a click anywhere in it keeps the keys in it. A dialog
+       only while it is one: in the page it is a group, a figure among the prose. -->
+  <dialog
+    bind:this={dialog}
+    open
+    tabindex="-1"
+    onclose={closed}
+    onkeydown={keydown}
+    role={expanded ? undefined : 'group'}
+    aria-label={expanded ? `${label}, full screen` : label}
+  >
     <LayoutCard {footer}>
       <div class="pane">
         {@render children(button, grip)}

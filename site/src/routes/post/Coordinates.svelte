@@ -13,11 +13,11 @@
 	import PoseStep from "$lib/components/PoseStep.svelte";
 	import PoseBuilder from "$lib/components/PoseBuilder.svelte";
 	import TrainCoordinates from "$lib/components/TrainCoordinates.svelte";
-	import { cellScene } from "$lib/scenes.js";
 </script>
 
 <Chapter id="coordinates">
-	<h2>Coordinates</h2>
+	<!-- Focused from script once the opening gives way to the chapters. -->
+	<h2 tabindex="-1">Coordinates</h2>
 
 	<p>The Rail Cube box comes with these pieces:</p>
 

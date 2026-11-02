@@ -7,7 +7,7 @@
 // the oracle and the thing it checks cannot drift apart on the rule itself.
 
 import {
-  PIECE_TYPES, POSES, cellsFor, cubeOf, step, startCell, POOL_OF, POOLS, isRevisit,
+  PIECE_TYPES, POSES, cellsFor, cubeOf, step, startCell, isRevisit,
 } from './track.js';
 
 const key = cell => cell.join(',');
@@ -39,15 +39,16 @@ function poseDistances(goal) {
   return dist;
 }
 
+/** Whether a piece's cells are free: no material on material or on train, no train on material. */
+const isFree = (board, material, train, checkTrain) =>
+  material.every(k => !board.solid.has(k) && !(checkTrain && board.train.has(k)))
+  && train.every(k => !board.solid.has(k));
+
 /** Claim a piece's cells, or return null if they are not free. */
 function claim(board, piece, checkTrain) {
   const material = piece.material.map(key);
   const train = checkTrain ? piece.train.map(key) : [];
-  for (const k of material) {
-    if (board.solid.has(k)) return null;
-    if (checkTrain && board.train.has(k)) return null;
-  }
-  for (const k of train) if (board.solid.has(k)) return null;
+  if (!isFree(board, material, train, checkTrain)) return null;
 
   for (const k of material) board.solid.add(k);
   for (const k of train) board.train.set(k, (board.train.get(k) ?? 0) + 1);
@@ -78,7 +79,7 @@ const inBounds = (piece, head, box, minY) =>
 /**
  * Every closed loop that fits the given rules, as arrays of piece types.
  *
- *   inventory   pool counts, e.g. SET. Counted in cubes, so a crossed cross
+ *   inventory   piece counts, e.g. SET. Counted in cubes, so a crossed cross
  *               costs one however many times the train runs over it
  *   maxPieces   search depth, counted in traversal steps rather than cubes — a
  *               crossed cross is two steps
@@ -97,13 +98,13 @@ export function enumerateLoops({
   inventory, maxPieces, minPieces = 1, box = 6, minY = null,
   collisions = true, checkTrain = true, exclude = [], sixFaces = false, startPose = 'DF',
 }) {
-  const types = PIECE_TYPES.filter(t => !exclude.includes(t) && (inventory[POOL_OF[t]] ?? 0) > 0);
+  const types = PIECE_TYPES.filter(t => !exclude.includes(t) && (inventory[t] ?? 0) > 0);
   const home = startCell(startPose);
   const homeDist = poseDistances(startPose);
   // `crosses` is every cross already on the table, by its own cube, in the shape
   // isRevisit reads. `crossed` is the ones the train has been back through.
   const board = { solid: new Set(), train: new Map(), crosses: new Map(), crossed: new Set() };
-  const spent = Object.fromEntries(POOLS.map(p => [p, 0]));
+  const spent = Object.fromEntries(PIECE_TYPES.map(t => [t, 0]));
   const route = [];
   const faces = new Map();
   const found = [];
@@ -118,49 +119,57 @@ export function enumerateLoops({
     found.push([...route]);
   };
 
+  // A second pass over a cross puts no cube on the table: it claims nothing
+  // and spends nothing. Twice is the limit — a third pass would run the same
+  // rail as the second, and a rail's two ends already have their neighbours.
+  const spendable = (type, revisit, at) =>
+    (revisit ? !board.crossed.has(at) : spent[type] < inventory[type]);
+
+  // Lay a piece (or a second pass over a cross) on the route, and take it back up.
+  const lay = (type, pose, at, revisit) => {
+    if (revisit) board.crossed.add(at);
+    else {
+      spent[type] += 1;
+      if (type === 'cross') board.crosses.set(at, { type, pose });
+    }
+    route.push(type);
+    faces.set(pose[0], (faces.get(pose[0]) ?? 0) + 1);
+  };
+  const lift = (type, pose, at, revisit) => {
+    const n = faces.get(pose[0]) - 1;
+    if (n) faces.set(pose[0], n); else faces.delete(pose[0]);
+    route.pop();
+    if (revisit) board.crossed.delete(at);
+    else {
+      spent[type] -= 1;
+      if (type === 'cross') board.crosses.delete(at);
+    }
+  };
+
+  function tryType(type, cell, pose, left, at) {
+    const revisit = isRevisit(type, cell, pose, board.crosses);
+    if (!spendable(type, revisit, at)) return;
+
+    const piece = { type, ...cellsFor(type, pose, cell) };
+    const head = step(cell, pose, type);
+    if (!inBounds(piece, head, box, minY)) return;
+    const claimed = revisit || !collisions ? EMPTY_CLAIM : claim(board, piece, checkTrain);
+    if (!claimed) return;
+
+    if (reachable(head.cell, head.pose, left - 1)) {
+      lay(type, pose, at, revisit);
+      descend(head.cell, head.pose, left - 1);
+      lift(type, pose, at, revisit);
+    }
+    release(board, claimed);
+  }
+
   function descend(cell, pose, left) {
     if (cell.every((v, k) => v === home[k]) && pose === startPose) record();
     if (!left) return;
 
     const at = key(cubeOf(cell, pose));
-    for (const type of types) {
-      const pool = POOL_OF[type];
-
-      // A second pass over a cross puts no cube on the table: it claims nothing
-      // and spends nothing. Twice is the limit — a third pass would run the same
-      // rail as the second, and a rail's two ends already have their neighbours.
-      const revisit = isRevisit(type, cell, pose, board.crosses);
-      if (revisit && board.crossed.has(at)) continue;
-      if (!revisit && spent[pool] >= inventory[pool]) continue;
-
-      const piece = { type, ...cellsFor(type, pose, cell) };
-      const head = step(cell, pose, type);
-      if (!inBounds(piece, head, box, minY)) continue;
-      const claimed = revisit || !collisions ? EMPTY_CLAIM : claim(board, piece, checkTrain);
-      if (!claimed) continue;
-
-      if (reachable(head.cell, head.pose, left - 1)) {
-        if (revisit) board.crossed.add(at);
-        else {
-          spent[pool] += 1;
-          if (type === 'cross') board.crosses.set(at, { type, pose });
-        }
-        route.push(type);
-        faces.set(pose[0], (faces.get(pose[0]) ?? 0) + 1);
-
-        descend(head.cell, head.pose, left - 1);
-
-        const n = faces.get(pose[0]) - 1;
-        if (n) faces.set(pose[0], n); else faces.delete(pose[0]);
-        route.pop();
-        if (revisit) board.crossed.delete(at);
-        else {
-          spent[pool] -= 1;
-          if (type === 'cross') board.crosses.delete(at);
-        }
-      }
-      release(board, claimed);
-    }
+    for (const type of types) tryType(type, cell, pose, left, at);
   }
 
   descend(home, startPose, maxPieces);

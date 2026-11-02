@@ -729,7 +729,11 @@ def main():
     if p.all_solutions:
         explore_all_solutions(geo, rows, p, held)
         return
+    explore_once(geo, rows, p, held)
 
+
+def explore_once(geo, rows, p, held):
+    """One solve of the question, reported, and verified through the JS unless told not to."""
     model, selectors = build_model(geo, rows, p)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = p.time
@@ -760,18 +764,23 @@ def main():
     print(f"  {shape}")
 
     if not p.no_verify:
-        report = verify(shape)
-        if report["cubes"] != len(route):
-            raise SystemExit(f"VERIFICATION FAILED: chainTrack counts {report['cubes']} cubes, "
-                             f"the solver claims {len(route)}")
-        print(f"verified legal: {report['cubes']} cubes, span {report['span']}, "
-              f"{'on the ground' if report['onTheGround'] else 'below ground'}")
-        if p.objective:
-            recount = recount_objective(geo, p, report["metrics"])
-            print(f"recounted: {json.dumps(report['metrics'])}")
-            if recount != round(solver.objective_value):
-                raise SystemExit(f"OBJECTIVE MISMATCH: the solver reads {solver.objective_value:g}, "
-                                 f"the recount {recount}")
+        verify_once(geo, p, shape, route, solver)
+
+
+def verify_once(geo, p, shape, route, solver):
+    """Re-chain the answer through the JS, and recount its objective there."""
+    report = verify(shape)
+    if report["cubes"] != len(route):
+        raise SystemExit(f"VERIFICATION FAILED: chainTrack counts {report['cubes']} cubes, "
+                         f"the solver claims {len(route)}")
+    print(f"verified legal: {report['cubes']} cubes, span {report['span']}, "
+          f"{'on the ground' if report['onTheGround'] else 'below ground'}")
+    if p.objective:
+        recount = recount_objective(geo, p, report["metrics"])
+        print(f"recounted: {json.dumps(report['metrics'])}")
+        if recount != round(solver.objective_value):
+            raise SystemExit(f"OBJECTIVE MISMATCH: the solver reads {solver.objective_value:g}, "
+                             f"the recount {recount}")
 
 
 if __name__ == "__main__":

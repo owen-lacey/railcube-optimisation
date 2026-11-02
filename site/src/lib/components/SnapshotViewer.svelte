@@ -8,6 +8,7 @@
   import RotateCw from '@lucide/svelte/icons/rotate-cw';
   import TrackViewer from './TrackViewer.svelte';
   import { squareOn, VIEWS } from '$lib/scenes.js';
+  import { describeTrack } from '$lib/catalogue.js';
 
   let {
     shape = '',
@@ -71,7 +72,7 @@
         camera={scene.camera}
         alarm={scene.offender?.id ?? null}
         aspect="{scene.width} / {scene.height}"
-        label="The layout {letters} from {view}"
+        label="{describeTrack(letters)}, from {view}"
       />
     </div>
     <div class="actions">

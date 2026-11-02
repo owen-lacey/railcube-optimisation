@@ -39,6 +39,14 @@
 		scene: trials.pictures[step.state],
 		transition: { kind: "move", pan: 0.6 }
 	});
+
+	// The ✓ or ✗ the joined picture's callout carries, in words, for a reader who
+	// cannot see it; nothing until the attempt is joined.
+	const verdict = $derived.by(() => {
+		if (step.state !== "joined") return "";
+		const { mark } = view.scene(view.shape).notes.find((note) => note.mark);
+		return `Attempt ${attempt + 1} joined: its end ${mark === "match" ? "meets" : "misses"} the cross.`;
+	});
 </script>
 
 <Frame {view} aspect={shape.value}>
@@ -53,6 +61,7 @@
 				{step.label}
 			</button>
 		</Attempts>
+		<p class="visually-hidden" aria-live="polite">{verdict}</p>
 	{/snippet}
 </Frame>
 

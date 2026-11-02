@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OrthographicCamera, Vector3 } from 'three';
-import { orbit, zoomed, slid, ZOOM_BY } from '../site/src/lib/render/controls.js';
+import { orbit, zoomed, slid, keyStep, STEPS, ZOOM_BY } from '../site/src/lib/render/controls.js';
 import {
   adjusted, appliedZoom, bandFor, createCamera, freeRegion, polyView, offscreen, CAMERA, REFERENCE_WIDTH, REFERENCE_HEIGHT,
 } from '../site/src/lib/render/camera.js';
@@ -331,4 +331,26 @@ test('under reduced motion a new way of clearing is taken at once', () => {
   camera.region();
   Object.assign(size, { width: 360, height: 700 });
   assert.deepEqual(camera.region(), { left: 0, top: 110, width: 360, height: 590 });
+});
+
+test('+ and − zoom a handled view, and the arrows turn and tilt it unless they are a builder\'s', () => {
+  const key = (k, more = {}) => ({ key: k, ctrlKey: false, metaKey: false, altKey: false, ...more });
+  assert.equal(keyStep(key('+')), 'zoomIn');
+  assert.equal(keyStep(key('=')), 'zoomIn');
+  assert.equal(keyStep(key('-')), 'zoomOut');
+  assert.equal(keyStep(key('ArrowLeft')), 'turnLeft');
+  assert.equal(keyStep(key('ArrowDown')), 'tiltDown');
+  assert.equal(keyStep(key('ArrowLeft'), { arrows: false }), null);
+  assert.equal(keyStep(key('+'), { arrows: false }), 'zoomIn');
+  assert.equal(keyStep(key('-', { ctrlKey: true })), null, 'a browser zoom is not one');
+  assert.equal(keyStep(key('s')), null);
+
+  // Each step is undone by its opposite, and stays within the bounds a gesture does.
+  const view = { rotX: 65, rotY: 315, zoomBy: 1, offset: [0, 0, 0] };
+  assert.deepEqual(STEPS.turnRight(STEPS.turnLeft(view)), view);
+  assert.deepEqual(STEPS.tiltDown(STEPS.tiltUp(view)), view);
+  assert.ok(Math.abs(STEPS.zoomOut(STEPS.zoomIn(view)).zoomBy - 1) < 1e-12);
+  let far = view;
+  for (let i = 0; i < 40; i++) far = STEPS.zoomIn(far);
+  assert.equal(far.zoomBy, ZOOM_BY[1]);
 });

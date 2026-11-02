@@ -64,7 +64,7 @@
     return () => {
       ro.disconnect();
       handle?.destroy();
-      stage?.clear();
+      stage?.dispose();
       stage = null;
     };
   });

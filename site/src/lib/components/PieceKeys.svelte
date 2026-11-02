@@ -1,10 +1,11 @@
 <script>
   // A builder's buttons: one per piece in its colour, and a backspace set apart.
   import Delete from '@lucide/svelte/icons/delete';
-  import { PIECES } from '$lib/catalogue.js';
+  import { PIECES, withArticle } from '$lib/catalogue.js';
 
   // `disabled` stops adding; `spent` is the letters with none left to add;
-  // `canRemove` is whether there is a piece to take off.
+  // `canRemove` is whether there is a piece to take off. Each button's name starts
+  // with the letter on it, "S, add a straight", so saying what is seen finds it.
   let { disabled = false, spent = new Set(), canRemove = false, onadd, onremove } = $props();
 </script>
 
@@ -16,7 +17,7 @@
       style:--piece={piece.hex}
       disabled={disabled || spent.has(piece.letter)}
       onclick={() => onadd(piece.letter)}
-      aria-label={spent.has(piece.letter) ? `${piece.name}: none left` : `Add piece: ${piece.name}`}
+      aria-label={spent.has(piece.letter) ? `${piece.letter}, ${piece.name.toLowerCase()}: none left` : `${piece.letter}, add ${withArticle(piece.name)}`}
       title={spent.has(piece.letter) ? `${piece.name}: none left` : piece.name}
     >{piece.letter}</button>
   {/each}
@@ -73,9 +74,9 @@
     color: inherit;
   }
 
-  /* The icon's body is filled, so the × inside it has to be cut out in the page
-     colour or it vanishes into the fill. The body is the icon's first path. */
+  /* The icon's body is filled, so the × inside it has to be cut out in the
+     footer's colour or it vanishes into the fill. The body is the icon's first path. */
   .remove :global(svg path:not(:first-of-type)) {
-    stroke: var(--wash, #fff);
+    stroke: var(--card-footer);
   }
 </style>

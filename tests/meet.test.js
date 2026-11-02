@@ -14,11 +14,9 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
 import { enumerateLoops } from '../src/enumerate.js';
-import { chainTrack, countPieces, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES } from '../src/track.js';
 import { shapeOf, trackKey } from '../src/layouts.js';
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
+import { slow } from './fixtures.js';
 
 const stepsFor = inventory => Object.values(inventory).reduce((a, b) => a + b, 0) + 1;
 
@@ -29,7 +27,7 @@ function oracleTracks(inventory, box, run = 0) {
     .filter(route => {
       const spent = countPieces(chainTrack(route));
       const shape = shapeOf(route);
-      return POOLS.every(pool => spent[pool] === (inventory[pool] ?? 0))
+      return PIECE_TYPES.every(pool => spent[pool] === (inventory[pool] ?? 0))
         && (shape + shape).includes('S'.repeat(run));
     })
     .map(route => trackKey(shapeOf(route))));

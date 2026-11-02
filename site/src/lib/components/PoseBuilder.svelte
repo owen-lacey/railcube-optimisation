@@ -18,9 +18,9 @@
   import OrientationStepper from './OrientationStepper.svelte';
   import PieceKeys from './PieceKeys.svelte';
   import BuildPrompt from './BuildPrompt.svelte';
-  import { attachControls } from '../render/controls.js';
+  import { attachBuilderControls } from '../render/controls.js';
   import { openScene, extentOf } from '$lib/scenes.js';
-  import { describePose, poseReadout, trackCell } from '$lib/catalogue.js';
+  import { describePose, describeTrack, poseReadout, trackCell } from '$lib/catalogue.js';
   import { claimKeys } from '$lib/keys.js';
   import { LIMIT, seed, added, removed, keyAction } from '$lib/building.js';
   import { startCell } from '../../../../src/track.js';
@@ -82,9 +82,12 @@
   };
   const removeLast = () => { letters = removed(letters, pose); };
 
-  /** The keyboard: a letter or an arrow adds a piece, Backspace takes one off. */
+  /**
+   * The keyboard: a letter or an arrow adds a piece, Backspace takes one off — the
+   * arrows and Backspace only with focus in the builder.
+   */
   function onKeydown(event) {
-    const action = keyAction(event);
+    const action = keyAction(event, builder.contains(event.target));
     if (!action) return;
     if (action.remove) removeLast();
     else add(action.add);
@@ -104,7 +107,7 @@
 <div bind:this={builder}>
   <ExpandingCard
     footer={keys}
-    label="Pose builder: type S L R I O X or use the arrow keys to add a piece, Backspace to remove one"
+    label="Pose builder: type S L R I O X to add a piece; with focus in it, the arrow keys add one too and Backspace removes one"
     onkeydown={onKeydown}
     bind:expanded
     bind:handled
@@ -114,7 +117,7 @@
         pieces={view.pieces}
         transition={{ kind: 'grow', arrival: 'fade', start: pose }}
         alarm={view.offender?.id ?? null}
-        controls={handled && !empty ? attachControls : null}
+        controls={handled && !empty ? attachBuilderControls : null}
         tools={toggle}
         cornerTools={hand}
         aspect={expanded ? 'auto' : aspect}
@@ -123,7 +126,7 @@
         origin={empty ? null : { ...grid, cell: false }}
         outlines={empty ? [] : outlines}
         notes={empty ? [] : notes}
-        label="The track {letters || 'with no pieces'}, entered {describePose(start.pose)}, leaving the train {describePose(end.pose)}"
+        label="{letters ? describeTrack(letters) : 'A track with no pieces'}, entered {describePose(start.pose)}, leaving the train {describePose(end.pose)}"
       />
       {#if empty}<BuildPrompt />{/if}
     {/snippet}

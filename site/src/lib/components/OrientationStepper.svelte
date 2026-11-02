@@ -15,7 +15,7 @@
 
 <div class="poses" role="group" aria-label={label}>
   <button class="turn" aria-label="Previous orientation" onclick={() => turn(-1)}><ChevronLeft /></button>
-  <p class="caption">{describePose(pose)}</p>
+  <p class="caption" aria-live="polite">{describePose(pose)}</p>
   <button class="turn" aria-label="Next orientation" onclick={() => turn(1)}><ChevronRight /></button>
 </div>
 

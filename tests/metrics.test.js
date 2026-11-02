@@ -3,12 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LAYOUTS, routeOf } from '../src/layouts.js';
+import { LAYOUTS, mirrorOf, routeOf } from '../src/layouts.js';
 import { chainOpen, chainTrack } from '../src/track.js';
 import { closeCallsOf, metricsOf, posesIn, posesOf, repeatRuns, repeatsOf } from '../src/metrics.js';
 
 const of = shape => metricsOf(chainTrack(routeOf(shape)));
-const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
 
 // A flat ring: four left curves, a 4×1×4 footprint, every step starting three of
 // a kind (the wrap included), and all four steps riding on top, so on one face,

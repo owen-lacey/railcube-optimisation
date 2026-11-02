@@ -15,6 +15,7 @@
 // ported, and a polynomial of its own in place of topoly's.
 
 import { trackPath } from './render/rail.js';
+import { random } from './random.js';
 
 export const SAMPLES = 8;
 export const BUMP = 2;
@@ -76,21 +77,9 @@ export function knotOf(over, under) {
 // ---------------------------------------------------------------------------
 // Projections.
 
-/** mulberry32: a small seeded generator, so the projections are the same every run. */
-function generator(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 /** A uniformly random rotation (Shoemake's quaternion), as its three columns. */
-function rotation(random) {
-  const [u1, u2, u3] = [random(), random(), random()];
+function rotation(draw) {
+  const [u1, u2, u3] = [draw(), draw(), draw()];
   const [x, y] = [Math.sqrt(1 - u1) * Math.sin(2 * Math.PI * u2), Math.sqrt(1 - u1) * Math.cos(2 * Math.PI * u2)];
   const [z, w] = [Math.sqrt(u1) * Math.sin(2 * Math.PI * u3), Math.sqrt(u1) * Math.cos(2 * Math.PI * u3)];
   const rows = [
@@ -101,16 +90,74 @@ function rotation(random) {
   return [0, 1, 2].map(c => rows.map(r => r[c]));
 }
 
-// Fixed, so every reading is offered the same ones in the same order. A proof does
-// not need them random, only regular, which the tolerances look after.
+// Fixed — seeded, so the same every run — so every reading is offered the same
+// ones in the same order. A proof does not need them random, only regular, which
+// the tolerances look after.
 const PROJECTIONS = (() => {
-  const random = generator(7);
-  return Array.from({ length: 32 }, () => rotation(random));
+  const draw = random(7);
+  return Array.from({ length: 32 }, () => rotation(draw));
 })();
 
 const EPS = 1e-7;
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const turned = (points, columns) => points.map(p => columns.map(c => dot(p, c)));
+
+/**
+ * A closed polyline seen down the third of `columns`: its points' coordinates along
+ * each, and each segment's box in the plane of the first two (see `boxesOf`).
+ * @param {number[][]} points
+ * @param {number[][]} columns
+ */
+function flatten(points, columns) {
+  const [c0, c1, c2] = columns;
+  const n = points.length;
+  const x = new Float64Array(n), y = new Float64Array(n), z = new Float64Array(n);
+  for (let k = 0; k < n; k++) {
+    x[k] = dot(points[k], c0);
+    y[k] = dot(points[k], c1);
+    z[k] = dot(points[k], c2);
+  }
+  return { n, x, y, z, box: boxesOf(x, y, n) };
+}
+
+/**
+ * Each segment's box in the plane, `[left, right, bottom, top]` four to a segment,
+ * padded by more than `meet`'s tolerances reach: EPS of its length past either end,
+ * and the parallel test's 1e-9 over its length to either side. So two segments
+ * whose boxes miss do not meet, and are never tried. A segment too short to bound
+ * that way is boundless, and always tried.
+ */
+function boxesOf(x, y, n) {
+  const box = new Float64Array(4 * n);
+  for (let k = 0; k < n; k++) {
+    const l = (k + 1) % n;
+    const length = Math.hypot(x[l] - x[k], y[l] - y[k]);
+    const pad = length < 1e-6 ? Infinity : 1e-6 * (1 + length) + 1e-8 / length;
+    box[4 * k] = Math.min(x[k], x[l]) - pad;
+    box[4 * k + 1] = Math.max(x[k], x[l]) + pad;
+    box[4 * k + 2] = Math.min(y[k], y[l]) - pad;
+    box[4 * k + 3] = Math.max(y[k], y[l]) + pad;
+  }
+  return box;
+}
+
+/** Whether segments i and j's boxes miss each other. */
+const apart = (box, i, j) => box[4 * i] > box[4 * j + 1] || box[4 * j] > box[4 * i + 1]
+  || box[4 * i + 2] > box[4 * j + 3] || box[4 * j + 2] > box[4 * i + 3];
+
+/**
+ * Call `visit(i, j)` for every pair of segments that are not neighbours on the
+ * closed polyline and whose boxes meet, i before j, until it returns false.
+ * Whether it ran to the end.
+ */
+function eachNear({ n, box }, visit) {
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      if (!apart(box, i, j) && visit(i, j) === false) return false;
+    }
+  }
+  return true;
+}
 
 /**
  * The indices of the samples to keep: where `mergeable(i)`, a sample on a straight
@@ -128,35 +175,34 @@ function merged(points, mergeable) {
   });
 }
 
+const OVERLAP = 'overlap';
+
 /**
- * How segments i (from flat[i]) and j meet in a projection: null if they do not,
- * 'overlap' if they lie on one line sharing more than a point, else where along
- * each they cross, as `{ s, t }`.
+ * How segments i (from point i) and j of a flattened polyline meet: null if they
+ * do not, OVERLAP if they lie on one line sharing more than a point, else where
+ * along each they cross, as `{ s, t }`.
  */
-function meet(flat, i, j) {
-  const n = flat.length;
-  const [a, b] = [flat[i], flat[j]];
-  const [na, nb] = [flat[(i + 1) % n], flat[(j + 1) % n]];
-  const di = [na[0] - a[0], na[1] - a[1]], dj = [nb[0] - b[0], nb[1] - b[1]];
-  const w = [b[0] - a[0], b[1] - a[1]];
-  const den = di[0] * dj[1] - di[1] * dj[0];
-  const sn = w[0] * dj[1] - w[1] * dj[0];
+function meet({ n, x, y }, i, j) {
+  const ni = (i + 1) % n, nj = (j + 1) % n;
+  const dix = x[ni] - x[i], diy = y[ni] - y[i];
+  const djx = x[nj] - x[j], djy = y[nj] - y[j];
+  const wx = x[j] - x[i], wy = y[j] - y[i];
+  const den = dix * djy - diy * djx;
+  const sn = wx * djy - wy * djx;
   if (Math.abs(den) < 1e-12) {
     if (Math.abs(sn) >= 1e-9) return null;
-    const length = di[0] * di[0] + di[1] * di[1];
-    const u0 = (w[0] * di[0] + w[1] * di[1]) / length;
-    const u1 = ((w[0] + dj[0]) * di[0] + (w[1] + dj[1]) * di[1]) / length;
-    return Math.max(u0, u1) > EPS && Math.min(u0, u1) < 1 - EPS ? 'overlap' : null;
+    return alongside(dix, diy, djx, djy, wx, wy) ? OVERLAP : null;
   }
-  const s = sn / den, t = (w[0] * di[1] - w[1] * di[0]) / den;
+  const s = sn / den, t = (wx * diy - wy * dix) / den;
   return s > -EPS && s < 1 + EPS && t > -EPS && t < 1 + EPS ? { s, t } : null;
 }
 
-/** Every pair of segments that are not neighbours on a closed polyline of n. */
-function* pairs(n) {
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 2; j < n; j++) if (!(i === 0 && j === n - 1)) yield [i, j];
-  }
+/** Whether two segments on one line, j `w` from i, share more than a point. */
+function alongside(dix, diy, djx, djy, wx, wy) {
+  const length = dix * dix + diy * diy;
+  const u0 = (wx * dix + wy * diy) / length;
+  const u1 = ((wx + djx) * dix + (wy + djy) * diy) / length;
+  return Math.max(u0, u1) > EPS && Math.min(u0, u1) < 1 - EPS;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,33 +230,33 @@ export function certified(points, lobes) {
   const index = merged(points, inside);
   const at = index.map(i => points[i]);
   const own = index.map(i => labels[i]);
-  const roles = [...pairs(at.length)].map(([a, b]) => {
-    const [p, q] = [own[a], own[b]];
-    const passes = p.kind !== 0 && q.kind !== 0 && p.kind !== q.kind;
-    return {
-      a, b, passes,
-      centre: !passes && (p.middle || q.middle),
-      between: !passes && p.side !== q.side,
-      self: !passes && p.side === q.side ? p.side : -1,
-    };
+  return PROJECTIONS.some(projection => clears(flatten(at, projection), own));
+}
+
+/** Whether one projection, `flat`, of a reading labelled `own` proves it an unknot. */
+function clears(flat, own) {
+  const count = { all: 0, passes: 0, between: 0, centre: 0, selves: [0, 0] };
+  const regular = eachNear(flat, (a, b) => {
+    const hit = meet(flat, a, b);
+    if (hit === OVERLAP) return false;
+    if (hit !== null) tally(count, own[a], own[b]);
+    return true;
   });
-  return PROJECTIONS.some(projection => {
-    const flat = turned(at, projection);
-    let all = 0, passes = 0, between = 0, centre = 0;
-    const selves = [0, 0];
-    for (const role of roles) {
-      const hit = meet(flat, role.a, role.b);
-      if (hit === 'overlap') return false;
-      if (hit === null) continue;
-      all += 1;
-      if (role.passes) passes += 1;
-      if (role.between) between += 1;
-      if (role.centre) centre += 1;
-      if (role.self >= 0) selves[role.self] += 1;
-    }
-    if (all < 3) return true;
-    return passes === 1 && between === 0 && centre === 0 && selves.every(c => c < 3);
-  });
+  if (!regular) return false;
+  if (count.all < 3) return true;
+  return count.passes === 1 && count.between === 0 && count.centre === 0 && count.selves.every(c => c < 3);
+}
+
+/** Count a crossing between samples labelled `p` and `q`: in all, and by what it is between. */
+function tally(count, p, q) {
+  count.all += 1;
+  if (p.kind !== 0 && q.kind !== 0 && p.kind !== q.kind) {
+    count.passes += 1;
+    return;
+  }
+  if (p.middle || q.middle) count.centre += 1;
+  if (p.side !== q.side) count.between += 1;
+  else count.selves[p.side] += 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -281,21 +327,45 @@ function determinant(matrix) {
  * a crossing at a vertex, or the curve really meeting itself.
  */
 function crossingsIn(points, projection) {
-  const flat = turned(points, projection);
-  const n = flat.length;
-  const height = (k, s) => flat[k][2] + s * (flat[(k + 1) % n][2] - flat[k][2]);
+  const flat = flatten(points, projection);
   const found = [];
-  for (const [i, j] of pairs(n)) {
+  const regular = eachNear(flat, (i, j) => {
     const hit = meet(flat, i, j);
-    if (hit === null) continue;
-    if (hit === 'overlap') return null;
-    const { s, t } = hit;
-    if (s < EPS || s > 1 - EPS || t < EPS || t > 1 - EPS) return null;
-    const [hi, hj] = [height(i, s), height(j, t)];
-    if (Math.abs(hi - hj) < 1e-9) return null;
-    found.push({ i, s, j, t, iOver: hi > hj });
+    if (hit === null) return true;
+    const crossing = hit !== OVERLAP && crossingAt(flat, i, j, hit);
+    if (crossing) found.push(crossing);
+    return Boolean(crossing);
+  });
+  return regular ? { flat, found } : null;
+}
+
+/**
+ * Segment i at s crossing segment j at t, `{ i, s, j, t, iOver }`, or null if the
+ * crossing is at a vertex or the curve really meets itself there.
+ */
+function crossingAt({ n, z }, i, j, { s, t }) {
+  if (s < EPS || s > 1 - EPS || t < EPS || t > 1 - EPS) return null;
+  const height = (k, along) => z[k] + along * (z[(k + 1) % n] - z[k]);
+  const [hi, hj] = [height(i, s), height(j, t)];
+  if (Math.abs(hi - hj) < 1e-9) return null;
+  return { i, s, j, t, iOver: hi > hj };
+}
+
+/**
+ * The regular projection of `points`, of the fixed ones, with the fewest crossings,
+ * the first of them on a tie — or null as soon as one shows fewer than 3, since
+ * any diagram that small is an unknot and there is nothing to work out.
+ */
+function fewestCrossings(points) {
+  let best = null;
+  for (const projection of PROJECTIONS) {
+    const seen = crossingsIn(points, projection);
+    if (!seen) continue;
+    if (seen.found.length < 3) return null;
+    if (!best || seen.found.length < best.found.length) best = seen;
   }
-  return { flat, found };
+  if (!best) throw new Error(`every one of ${PROJECTIONS.length} projections is degenerate`);
+  return best;
 }
 
 /**
@@ -304,20 +374,17 @@ function crossingsIn(points, projection) {
  * coefficient positive — '1' for an unknot, '1 -1 1' a trefoil.
  *
  * Read off the regular projection, of the fixed ones, with the fewest crossings,
- * since the determinant's cost grows with them. Each crossing gives one row of
+ * since the determinant's cost grows with them, and '1' at once from the first
+ * with fewer than 3. Each crossing gives one row of
  * the Alexander matrix: its over-arc 1 − t, and the arcs that run into and out of
  * it underneath t and −1, or −1 and t, by the crossing's sign. One row and one
  * column struck out, the determinant is the polynomial up to a unit ±tᵏ.
  */
 export function alexander(points) {
-  const at = merged(points, () => true).map(i => points[i]);
-  const best = PROJECTIONS.map(p => crossingsIn(at, p))
-    .filter(Boolean)
-    .reduce((a, b) => (a && a.found.length <= b.found.length ? a : b), null);
-  if (!best) throw new Error(`every one of ${PROJECTIONS.length} projections is degenerate`);
+  const best = fewestCrossings(merged(points, () => true).map(i => points[i]));
+  if (!best) return '1';
   const { flat, found } = best;
   const n = found.length;
-  if (n === 0) return '1';
 
   // Every pass along the curve, in order, and the arcs between the under-passes.
   const passes = found.flatMap((c, k) => [
@@ -327,8 +394,8 @@ export function alexander(points) {
   const unders = passes.filter(p => !p.over);
   const arcOf = at => (unders.filter(u => u.at < at).length - 1 + n) % n;
 
-  const m = flat.length;
-  const along = k => [flat[(k + 1) % m][0] - flat[k][0], flat[(k + 1) % m][1] - flat[k][1]];
+  const { n: m, x, y } = flat;
+  const along = k => [x[(k + 1) % m] - x[k], y[(k + 1) % m] - y[k]];
   const matrix = Array.from({ length: n }, () => Array.from({ length: n }, () => []));
   unders.forEach((under, k) => {
     const c = found[under.crossing];

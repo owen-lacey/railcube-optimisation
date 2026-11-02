@@ -156,6 +156,13 @@ if (PIECE_TYPES.some(type => !(type in SCORES))) {
   throw new Error('the score table has drifted from the piece catalogue');
 }
 
+/**
+ * What a chained track is worth under SCORES, in plain JavaScript — never a
+ * solver variable. Counted in cubes: a revisit is no cube, so it scores nothing.
+ */
+export const scoreOf = placed => placed.reduce(
+  (total, piece) => total + (piece.revisit ? 0 : SCORES[piece.type]), 0);
+
 /** The cells one placed piece claims: its material, and the clearance its train needs. */
 export function cellsFor(type, pose, cell) {
   const move = MOVES[type];
@@ -376,31 +383,6 @@ export function chainOpen(route, startPose = 'DF') {
 }
 
 /**
- * What the sets ship (pieces.md:144-156). The white start cube is geometrically a
- * straight and is counted as one.
- *
- * Green and blue flat curves are counted separately, half the listed total each.
- * The product listings give them combined ("8/16"), and on paper they could share
- * one pool: a right curve fills the same cells and moves the head the same way as
- * a left curve, differing only in which face the rail ends on — so a reversible
- * piece could serve as either. Owen's set is not reversible. They are two
- * mouldings and you cannot spend one as the other.
- *
- * This matters to the answers, not just the bookkeeping: pooled, the solver spent
- * six right curves and two left ones on a layout that set cannot build.
- */
-export const POOL_OF = {
-  straight: 'straight',
-  cross: 'cross',
-  leftCurve: 'leftCurve',
-  rightCurve: 'rightCurve',
-  insideCurve: 'insideCurve',
-  outsideCurve: 'outsideCurve',
-};
-
-export const POOLS = [...new Set(Object.values(POOL_OF))];
-
-/**
  * The set. One inventory, not a catalogue of products — everything that asks
  * "what have I got to build with" asks this.
  *
@@ -424,6 +406,17 @@ export const POOLS = [...new Set(Object.values(POOL_OF))];
  * `src/routes.js`'s six-face inversion route fits this exactly: both straights and
  * every left, inside and outside curve.
  *
+ * Every piece type is counted on its own — what the sets ship (pieces.md:144-156),
+ * with the white start cube counted as the straight it is. Green and blue flat
+ * curves are counted separately, half the listed total each. The product listings
+ * give them combined ("8/16"), and on paper they could share one count: a right
+ * curve fills the same cells and moves the head the same way as a left curve,
+ * differing only in which face the rail ends on — so a reversible piece could
+ * serve as either. Owen's set is not reversible. They are two mouldings and you
+ * cannot spend one as the other. This matters to the answers, not just the
+ * bookkeeping: pooled, the solver spent six right curves and two left ones on a
+ * layout that set cannot build.
+ *
  * No cross. A crossing needs a cube with two rails and the set holds none, so
  * crossings are exercised by test fixtures rather than by this set — the encoding
  * stays, and `src/layouts.js` keeps the figure-of-eight it found when there was a
@@ -434,39 +427,37 @@ export const SET = {
 };
 
 /**
- * Count entries in a route by inventory pool. Counts the traversal, so a crossed
- * cross counts twice — use countPieces for what is actually spent out of the box.
+ * Count a list of piece types by type. Over a route that counts the traversal,
+ * so a crossed cross counts twice — use countPieces for what is actually spent
+ * out of the box.
  */
-export function countPools(route) {
-  const used = Object.fromEntries(POOLS.map(p => [p, 0]));
-  for (const type of route) used[POOL_OF[type]] += 1;
+export function countTypes(types) {
+  const used = Object.fromEntries(PIECE_TYPES.map(t => [t, 0]));
+  for (const type of types) used[type] += 1;
   return used;
 }
 
 /**
- * Count the physical pieces a chained track spends, by inventory pool. This is
- * the count an inventory limit or a "dropped pieces" objective must use: a
- * crossed cross is in the route twice and in the box once, and counting the
- * route instead is how a model mints pieces it does not own.
+ * Count the physical pieces a chained track spends, by type. This is the count
+ * an inventory limit or a "dropped pieces" objective must use: a crossed cross is
+ * in the route twice and in the box once, and counting the route instead is how
+ * a model mints pieces it does not own.
  */
-export function countPieces(placed) {
-  const used = Object.fromEntries(POOLS.map(p => [p, 0]));
-  for (const piece of placed) if (!piece.revisit) used[POOL_OF[piece.type]] += 1;
-  return used;
-}
+export const countPieces = placed =>
+  countTypes(placed.filter(piece => !piece.revisit).map(piece => piece.type));
 
 /**
- * Does this route fit in this inventory? Returns the pool that overflows, or
+ * Does this route fit in this inventory? Returns the piece type that overflows, or
  * null. Counts physical pieces, so it chains the route — which means the route
  * has to be a legal closed track.
  */
 export function overflowingPool(route, inventory, startPose = 'DF') {
   const used = countPieces(chainTrack(route, startPose));
-  return POOLS.find(pool => used[pool] > (inventory[pool] ?? 0)) ?? null;
+  return PIECE_TYPES.find(type => used[type] > (inventory[type] ?? 0)) ?? null;
 }
 
 /** The same question for a list of piece types that need not close. */
 export function overflowingPoolByType(route, inventory) {
-  const used = countPools(route);
-  return POOLS.find(pool => used[pool] > (inventory[pool] ?? 0)) ?? null;
+  const used = countTypes(route);
+  return PIECE_TYPES.find(type => used[type] > (inventory[type] ?? 0)) ?? null;
 }

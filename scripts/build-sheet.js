@@ -8,7 +8,7 @@
 // are looking at a pile of plastic, not a spreadsheet.
 
 import { LAYOUTS, routeOf } from '../src/layouts.js';
-import { chainTrack, countPieces, cubeOf, OPPOSITE, POOLS } from '../src/track.js';
+import { chainTrack, countPieces, cubeOf, OPPOSITE, PIECE_TYPES } from '../src/track.js';
 
 const COLOUR = {
   straight: 'yellow', leftCurve: 'green', rightCurve: 'blue',
@@ -66,8 +66,8 @@ function sheet(name) {
     `${Object.values(held).reduce((a, b) => a + b, 0) - placed.filter(p => !p.revisit).length} left in the box.\n`);
 
   console.log('Pieces to dig out first:');
-  for (const pool of POOLS) {
-    if (spent[pool]) console.log(`  ${String(spent[pool]).padStart(2)} × ${PIECE[pool]} (${COLOUR[pool]})`);
+  for (const type of PIECE_TYPES) {
+    if (spent[type]) console.log(`  ${String(spent[type]).padStart(2)} × ${PIECE[type]} (${COLOUR[type]})`);
   }
 
   console.log(`\nStanding room: ${shape.tallest + 1} cubes tall.`,

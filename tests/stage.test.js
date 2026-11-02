@@ -36,7 +36,7 @@ import { toWorld, cubePosition, poseRotation, through } from '../site/src/lib/re
 import { screenAxes, CAMERA } from '../site/src/lib/render/camera.js';
 import { trackPath } from '../site/src/lib/render/rail.js';
 import { CENTROID } from '../site/src/lib/shapes.js';
-import { orbit, slid, zoomed } from '../site/src/lib/render/controls.js';
+import { orbit, slid, zoomed, STEPS } from '../site/src/lib/render/controls.js';
 
 // ---- The watched stage -----------------------------------------------------
 
@@ -175,6 +175,77 @@ test('a camera move on a still stage is drawn', () => {
   stage.frameTo({ zoom: 2 });
   clock.run(1);
   assert.equal(renderer.draws, drawn + 1, 'a reframe was not drawn, or drawn more than once');
+});
+
+// A reader who has asked for reduced motion gets `trackPhase` from every
+// transition, and a driven one never finishes — so it is the gate, not the phase,
+// that stops a viewer nobody can see.
+test('a stage that cannot be seen asks for no frames, whatever starts it, until it can', () => {
+  const clock = fakeClock();
+  const { stage, renderer } = staged({ visible: false });
+  stage.run([trackPhase(stage, piecesOf(SET), { drive: true })]);
+  stage.start();
+  stage.setPaused(true);
+  stage.start();
+  stage.setPaused(false);
+  stage.frameTo({ zoom: 1, target: '0,0,0' });
+  stage.panTo({ zoom: 2, target: '0,0,0' }, 0.5);
+  stage.start();
+  stage.adjust({ ...stage.view(), rotX: 30 });
+  stage.reset();
+  stage.reserve([{ edge: 'bottom', width: 900, height: 80 }]);
+  stage.reserve([]);
+  clock.run(1);
+  // The cubes and the camera each asked for their one frame, and that was all.
+  assert.equal(renderer.draws, 1, `${renderer.draws} draws while unseen`);
+  assert.equal(clock.running(), false, 'an unseen stage kept asking for frames');
+
+  stage.setVisible(true);
+  clock.run(1);
+  assert.ok(renderer.draws > 50, `only ${renderer.draws} draws in a second of driving once seen`);
+
+  stage.setVisible(false);
+  clock.run(0.1);
+  const hidden = renderer.draws;
+  stage.start();
+  clock.run(1);
+  assert.equal(renderer.draws, hidden, 'a stage hidden again was started');
+  assert.equal(clock.running(), false, 'a stage hidden again kept asking for frames');
+});
+
+test('disposing a stage frees what it made and leaves the shared geometry', () => {
+  const clock = fakeClock();
+  const { stage, handles, renderer } = staged();
+  const pieces = piecesOf(SET);
+  stage.run([trackPhase(stage, pieces, { drive: false })]);
+  stage.setGrid(gridLines(extentOf(pieces)));
+  stage.setOrigin({ ...extentOf(pieces) });
+  stage.setGhosts([{ type: 'straight', cell: [0, 1, 0], pose: 'DF' }]);
+  stage.setOrientations([{ cell: [0, 1, 0], pose: 'DF' }]);
+  stage.setFill([[0, 1, 0]]);
+  stage.setOutlines([{ cell: [0, 0, 0], tint: 'after' }, { cell: [2, 0, 0], tint: 'before', changing: 'in' }]);
+  stage.start();
+  clock.run(0.5);
+
+  const disposed = new Set();
+  const watchDispose = thing => thing.addEventListener('dispose', () => disposed.add(thing));
+  const meshes = handles.map(h => h.mesh);
+  const materials = new Set(meshes.flatMap(m => [m.material, ...m.children.map(c => c.material)]));
+  const geometries = new Set(meshes.flatMap(m => [m.geometry, ...m.children.map(c => c.geometry)]));
+  for (const thing of [...materials, ...geometries]) watchDispose(thing);
+  const shared = new Set([...stage.cubes.values()].map(cube => cube.mesh.mesh.geometry));
+
+  const drawn = renderer.draws;
+  stage.dispose();
+  clock.run(1);
+
+  assert.equal(stage.scene.children.filter(c => c.isMesh).length, 0, 'a mesh was left in the scene');
+  for (const material of materials) assert.ok(disposed.has(material), `a ${material.type} was not disposed`);
+  for (const geometry of shared) assert.ok(!disposed.has(geometry), 'a piece geometry every stage shares was disposed');
+  const owned = [...geometries].filter(g => !shared.has(g) && !meshes.some(m => m.name === OVERLAY.ghost && m.geometry === g));
+  for (const geometry of owned) assert.ok(disposed.has(geometry), 'an overlay geometry was not disposed');
+  assert.equal(renderer.draws, drawn, 'a disposed stage was drawn');
+  assert.equal(clock.running(), false, 'a disposed stage kept asking for frames');
 });
 
 // ---- A finished track -----------------------------------------------------
@@ -2087,6 +2158,41 @@ test('a reset eases the hand-moved view back the short way round, and a gesture 
 
   stage.reset({ instant: true });
   assert.equal(stage.touched(), false, 'an instant reset is there at once');
+});
+
+test('a nudge eases the view one step from wherever it is heading, so steps add up', () => {
+  const clock = fakeClock();
+  const { stage } = staged();
+  stage.frameTo({ zoom: 2, target: '0,0,0' });
+  const home = stage.view();
+
+  // Two steps asked for before the first has landed come to two steps, not one.
+  stage.nudge(STEPS.zoomIn);
+  clock.run(0.05);
+  assert.ok(stage.view().zoomBy > 1 && stage.view().zoomBy < 1.25, 'eased, not jumped');
+  stage.nudge(STEPS.zoomIn);
+  clock.run(1);
+  assert.ok(Math.abs(stage.view().zoomBy - 1.25 ** 2) < 1e-9, `two steps: ${stage.view().zoomBy}`);
+  assert.equal(clock.running(), false, 'a settled nudge stops asking for frames');
+
+  stage.nudge(STEPS.turnLeft);
+  stage.nudge(STEPS.turnRight);
+  clock.run(1);
+  const turn = rotY => ((rotY % 360) + 360) % 360;
+  assert.ok(Math.abs(turn(stage.view().rotY) - turn(home.rotY)) < 1e-9, 'a turn and its opposite cancel');
+
+  // The reset button undoes it, as it does a gesture.
+  stage.reset();
+  clock.run(1);
+  assert.equal(stage.touched(), false);
+});
+
+test('under reduced motion a nudge is there at once', () => {
+  fakeClock();
+  const { stage } = staged({ reduced: true });
+  stage.frameTo({ zoom: 2, target: '0,0,0' });
+  stage.nudge(STEPS.zoomOut);
+  assert.ok(Math.abs(stage.view().zoomBy - 1 / 1.25) < 1e-9);
 });
 
 test('a reset moves while everything else is paused', () => {

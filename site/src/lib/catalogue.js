@@ -5,13 +5,13 @@
 
 import { COLORS } from "./render/dimensions.js";
 import { step, startCell, cubeOf } from "../../../src/track.js";
+import { LETTER_OF } from "../../../src/layouts.js";
 
 export const PIECES = [
 	{
 		type: "straight",
 		name: "Straight",
 		colour: "yellow",
-		letter: "S",
 		starter: 15,
 		effect: "Nothing — the train passes straight through.",
 		detail:
@@ -23,7 +23,6 @@ export const PIECES = [
 		type: "leftCurve",
 		name: "Left curve",
 		colour: "green",
-		letter: "L",
 		starter: 4,
 		effect:
 			"A 90° turn to the left, in the plane the train is already riding in.",
@@ -35,7 +34,6 @@ export const PIECES = [
 		type: "rightCurve",
 		name: "Right curve",
 		colour: "blue",
-		letter: "R",
 		starter: 4,
 		effect: "A 90° turn to the right — the mirror image of the green one.",
 		detail:
@@ -48,7 +46,6 @@ export const PIECES = [
 		type: "insideCurve",
 		name: "Inside curve",
 		colour: "orange",
-		letter: "I",
 		starter: 4,
 		effect:
 			"A 90° turn out of the surface, valley-style — the inside of a corner.",
@@ -61,7 +58,6 @@ export const PIECES = [
 		type: "outsideCurve",
 		name: "Outside curve",
 		colour: "red",
-		letter: "O",
 		starter: 4,
 		effect:
 			"A 90° turn out of the surface, crest-style — over the brow of a hill.",
@@ -75,7 +71,6 @@ export const PIECES = [
 		type: "cross",
 		name: "Cross",
 		colour: "purple",
-		letter: "X",
 		starter: 0,
 		effect: "Nothing — but the track can pass through the same cube twice.",
 		detail:
@@ -83,7 +78,7 @@ export const PIECES = [
 			"train cannot choose a branch, it carries on along whichever rail it entered on. The " +
 			"starter set has none; the deluxe set has two."
 	}
-].map((p) => ({ ...p, hex: COLORS[p.type] }));
+].map((p) => ({ ...p, letter: LETTER_OF[p.type], hex: COLORS[p.type] }));
 
 // ---- What a piece does to the train, in words -------------------------------
 
@@ -156,6 +151,19 @@ export const describePose = (pose) => {
 	const [face, heading] = poseAxes(pose);
 	return `${FACE_WORD[pose[0]]} face (${face}), heading ${HEADING_WORD[pose[1]]} (${heading})`;
 };
+
+/** A piece's name in a sentence: "a straight", "an inside curve". */
+export const withArticle = (name) => `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name.toLowerCase()}`;
+
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st. */
+export const ordinal = (n) => `${n}${n % 100 - n % 10 === 10 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
+
+/**
+ * A track as a sentence, for a picture's label: "A track of 4 pieces: L L L L".
+ * Spaced, so the letters are read out one at a time.
+ */
+export const describeTrack = (letters) =>
+	`A track of ${letters.length} ${letters.length === 1 ? "piece" : "pieces"}: ${[...letters].join(" ")}`;
 
 // ---- A position, in the reader's frame --------------------------------------
 

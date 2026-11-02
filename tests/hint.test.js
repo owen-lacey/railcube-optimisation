@@ -18,9 +18,7 @@ import { solveTrack } from '../src/solver/index.js';
 import { LAYOUTS, routeOf, shapeOf } from '../src/layouts.js';
 import { inversionRoute } from '../src/routes.js';
 import { SET, chainTrack, countPieces } from '../src/track.js';
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
+import { slow } from './fixtures.js';
 
 const total = set => Object.values(set).reduce((a, b) => a + b, 0);
 

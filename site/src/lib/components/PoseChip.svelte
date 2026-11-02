@@ -121,15 +121,6 @@
 		z-index: 1;
 	}
 
-	.visually-hidden {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-	}
-
 	@media (prefers-reduced-motion: reduce) {
 		.item :global(.chip),
 		.badge {

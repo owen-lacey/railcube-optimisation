@@ -1,5 +1,8 @@
 // A viewer you can handle: drag to turn it, pinch or scroll to zoom, two fingers
-// (or a right- or shift-drag) to slide it about.
+// (or a right- or shift-drag) to slide it about. The keys do it too, while the
+// viewer has focus: + and − zoom, and the arrows turn and tilt it — except in a
+// builder, whose arrows lay pieces, so there only + and − (see `attachBuilderControls`).
+// The viewer's own buttons step it the same way (`STEPS`).
 //
 // The gestures come from `@use-gesture`, and what they do goes through
 // `stage.adjust` as a hand-moved *view* composed on top of whatever the stage has
@@ -54,11 +57,40 @@ export function slid(view, dx, dy, zoom) {
   };
 }
 
+// One step of a button or a key: a turn of 15 degrees, as a drag of that many
+// degrees' pixels, or a zoom by a quarter.
+const TURN_STEP = 15 / DEGREES_PER_PIXEL;
+const ZOOM_STEP = 1.25;
+
+/** What each of the viewer's buttons and keys does to the view, by name. */
+export const STEPS = {
+  zoomIn: view => zoomed(view, view.zoomBy * ZOOM_STEP),
+  zoomOut: view => zoomed(view, view.zoomBy / ZOOM_STEP),
+  turnLeft: view => orbit(view, -TURN_STEP, 0),
+  turnRight: view => orbit(view, TURN_STEP, 0),
+  tiltUp: view => orbit(view, 0, -TURN_STEP),
+  tiltDown: view => orbit(view, 0, TURN_STEP),
+};
+
+// The keys, by `event.key`: + and − (with or without shift), and the arrows.
+const ZOOM_KEYS = { '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut', '_': 'zoomOut' };
+const ARROW_KEYS = { ArrowLeft: 'turnLeft', ArrowRight: 'turnRight', ArrowUp: 'tiltUp', ArrowDown: 'tiltDown' };
+
 /**
- * Let a viewer be handled. `host` is what the gestures are read off; a pan is
- * measured in the stage's applied zoom.
+ * The step a key asks for, by name, or null: a modified key is never one, and the
+ * arrows are one only when `arrows`.
  */
-export function attachControls(host, stage) {
+export function keyStep(event, { arrows = true } = {}) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  return ZOOM_KEYS[event.key] ?? (arrows ? ARROW_KEYS[event.key] : undefined) ?? null;
+}
+
+/**
+ * Let a viewer be handled. `host` is what the gestures are read off, and it takes
+ * focus and the keys while handled; a pan is measured in the stage's applied zoom.
+ * `arrows` says whether the arrows turn it.
+ */
+export function attachControls(host, stage, { arrows = true } = {}) {
   const appliedZoom = () => stage.zoom();
 
   const gesture = new Gesture(host, {
@@ -95,10 +127,27 @@ export function attachControls(host, stage) {
   const noMenu = event => event.preventDefault();
   host.addEventListener('contextmenu', noMenu);
 
+  // A key something inside the viewer has already used (a tile's arrows) is not one.
+  const onKey = event => {
+    const step = !event.defaultPrevented && keyStep(event, { arrows });
+    if (!step) return;
+    event.preventDefault();
+    stage.nudge(STEPS[step]);
+  };
+  host.addEventListener('keydown', onKey);
+  host.tabIndex = 0;
+  host.setAttribute('aria-keyshortcuts', arrows ? '+ - ArrowLeft ArrowRight ArrowUp ArrowDown' : '+ -');
+
   return {
     destroy() {
       gesture.destroy();
       host.removeEventListener('contextmenu', noMenu);
+      host.removeEventListener('keydown', onKey);
+      host.removeAttribute('tabindex');
+      host.removeAttribute('aria-keyshortcuts');
     },
   };
 }
+
+/** `attachControls` for a builder, whose arrows lay pieces: + and − only. */
+export const attachBuilderControls = (host, stage) => attachControls(host, stage, { arrows: false });

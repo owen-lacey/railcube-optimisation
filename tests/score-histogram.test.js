@@ -5,7 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SWEEP_CROSSED_RANKED as ranked, SWEEP_CROSSED_SCORES as scores } from '../site/src/lib/sweeps.js';
+import { SWEEP_CROSSED_RANKED as ranked } from '../site/src/lib/sweeps/ranked.js';
+import { SWEEP_CROSSED_SCORES as scores } from '../site/src/lib/sweeps/scores.js';
 
 test('its counts are its population, one bar per score in order', () => {
   assert.equal(scores.counts.reduce((sum, [, n]) => sum + n, 0), scores.population);

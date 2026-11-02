@@ -29,6 +29,7 @@ import { cubePosition, poseRotation, axisAngle, compose, turnToward, add, throug
 import { createDriver } from './drive.js';
 import { originAt, comAt } from '../shapes.js';
 import { identify } from '../../../../src/layouts.js';
+import { withDefaults } from '../../../../src/defaults.js';
 
 // The beat. FLIGHT is longer than PACE, so several pieces are in the air at once
 // and arrivals read as a stream rather than as a row of separate events; at these
@@ -461,6 +462,11 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
   };
 }
 
+const GROWING = Object.freeze({
+  pace: PACE, speed: 1, drive: false, alarm: null, highlight: null, instant: false,
+  leaving: Object.freeze([]), arrival: 'flip',
+});
+
 /**
  * A track being *extended*: whatever is already standing stays exactly where it
  * is, and only the pieces that are new arrive.
@@ -486,9 +492,8 @@ export function trackPhase(stage, pieces, { drive = true, trainAt, onTrainAt, al
  *
  * `arrival` is how pieces come and go — a name in `ARRIVALS`.
  */
-export function growPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = false, alarm = null, highlight = null, instant = false, leaving = [], arrival = 'flip',
-} = {}) {
+export function growPhase(stage, pieces, options) {
+  const { pace, speed, drive, alarm, highlight, instant, leaving, arrival } = withDefaults(options, GROWING);
   const motion = ARRIVALS[arrival];
   const timing = timingFor(pace, speed, 0);
   const slots = slotsFor(stage, pieces, timing);
@@ -541,6 +546,35 @@ export function growPhase(stage, pieces, {
 
   const leavingStill = () => departing.some(d => !d.gone);
 
+  /** Set off whatever is due, and move everything in the air on, or home. */
+  function fly(elapsed) {
+    leave(elapsed);
+    while (next < arriving.length && elapsed >= arriving[next].at) {
+      const slot = arriving[next++];
+      slot.cube = stage.cube(slot.id, slot);
+      flying.push(slot);
+    }
+    flying = flying.filter(slot => {
+      if (elapsed >= slot.lands) {
+        motion.land(slot);   // home, exactly
+        return false;
+      }
+      (slot.pickUp ? motion.resume : motion.slide)(slot, (elapsed - slot.at) / timing.flight);
+      return true;
+    });
+  }
+
+  const settled = () => next === arriving.length && !flying.length && !leavingStill();
+
+  /** Set the train off once the loop has closed, and drive it on. */
+  function driveOn(elapsed) {
+    if (closedAt === null && elapsed >= (instant ? 0 : closes)) {
+      closedAt = elapsed;
+      driver.setRoute(pieces);
+    }
+    driver.at(elapsed - closedAt);
+  }
+
   if (instant) {
     for (const d of departing) { d.cube.dispose(); d.gone = true; }
     for (const slot of arriving) stage.cube(slot.id, slot).place(slot.basis, slot.position);
@@ -548,34 +582,11 @@ export function growPhase(stage, pieces, {
 
   return {
     advance(_, elapsed) {
-      if (!instant) {
-        leave(elapsed);
-        while (next < arriving.length && elapsed >= arriving[next].at) {
-          const slot = arriving[next++];
-          slot.cube = stage.cube(slot.id, slot);
-          flying.push(slot);
-        }
-        flying = flying.filter(slot => {
-          if (elapsed >= slot.lands) {
-            motion.land(slot);   // home, exactly
-            return false;
-          }
-          (slot.pickUp ? motion.resume : motion.slide)(slot, (elapsed - slot.at) / timing.flight);
-          return true;
-        });
-      }
-
+      if (!instant) fly(elapsed);
       // A marked piece keeps saying so, and a train drives on round it.
       const pulsing = flag?.(elapsed);
-      if (!driver) {
-        const settled = next === arriving.length && !flying.length && !leavingStill();
-        return !pulsing && (instant || settled) ? false : undefined;
-      }
-      if (closedAt === null && elapsed >= (instant ? 0 : closes)) {
-        closedAt = elapsed;
-        driver.setRoute(pieces);
-      }
-      driver.at(elapsed - closedAt);
+      if (!driver) return !pulsing && (instant || settled()) ? false : undefined;
+      driveOn(elapsed);
     },
     dispose() {
       driver?.dispose();
@@ -584,14 +595,17 @@ export function growPhase(stage, pieces, {
   };
 }
 
+const BUILDING = Object.freeze({
+  pace: PACE, speed: 1, drive: true, delay: 0, onPickUp: null, alarm: null, highlight: null,
+});
+
 /**
  * A track clicking itself together. Pieces already on the stage are picked up off
  * the floor; anything else is minted from off-frame. `alarm` is a rejected piece to
  * flag once it has landed — see `pulseFor` — and `highlight` pieces picked out.
  */
-export function buildPhase(stage, pieces, {
-  pace = PACE, speed = 1, drive = true, delay = 0, onPickUp = null, alarm = null, highlight = null,
-} = {}) {
+export function buildPhase(stage, pieces, options) {
+  const { pace, speed, drive, delay, onPickUp, alarm, highlight } = withDefaults(options, BUILDING);
   const timing = timingFor(pace, speed, delay);
   const slots = slotsFor(stage, pieces, timing);
   const flag = pulseFor(stage, slots, marksOf(alarm, highlight), slot => slot.lands);
@@ -620,33 +634,42 @@ export function buildPhase(stage, pieces, {
     flying.push(slot);
   }
 
+  /** Set off whatever is due, and move everything in the air on, or home. */
+  function fly(elapsed) {
+    while (next < slots.length && elapsed >= slots[next].at) begin(slots[next++]);
+
+    flying = flying.filter(slot => {
+      if (elapsed >= slot.lands) {
+        slot.cube.place(slot.basis, slot.position);   // home, exactly
+        return false;
+      }
+      const since = elapsed - slot.at;
+      if (slot.pickUp && since < timing.lift) {
+        arcTo(slot.cube, slot.from, { basis: slot.basis, com: slot.to }, since / timing.lift);
+      }
+      else slide(slot, (since - (slot.pickUp ? timing.lift : 0)) / timing.flight);
+      return true;
+    });
+  }
+
+  /** Set the train off once the loop has closed, and drive it on. */
+  function driveOn(elapsed) {
+    if (closedAt === null && slots.length && elapsed >= closes) {
+      closedAt = elapsed;
+      driver.setRoute(pieces);
+    }
+    if (closedAt !== null) driver.at(elapsed - closedAt);
+  }
+
   // Everything here is a function of how long the phase has been running, which
   // is what makes it a tween: no state accumulates between frames but the list of
   // what is in the air.
   return {
     advance(_, elapsed) {
-      while (next < slots.length && elapsed >= slots[next].at) begin(slots[next++]);
-
-      flying = flying.filter(slot => {
-        if (elapsed >= slot.lands) {
-          slot.cube.place(slot.basis, slot.position);   // home, exactly
-          return false;
-        }
-        const since = elapsed - slot.at;
-        if (slot.pickUp && since < timing.lift) {
-          arcTo(slot.cube, slot.from, { basis: slot.basis, com: slot.to }, since / timing.lift);
-        }
-        else slide(slot, (since - (slot.pickUp ? timing.lift : 0)) / timing.flight);
-        return true;
-      });
-
+      fly(elapsed);
       const pulsing = flag?.(elapsed);
       if (!driver) return !pulsing && next === slots.length && !flying.length ? false : undefined;
-      if (closedAt === null && slots.length && elapsed >= closes) {
-        closedAt = elapsed;
-        driver.setRoute(pieces);
-      }
-      if (closedAt !== null) driver.at(elapsed - closedAt);
+      driveOn(elapsed);
     },
     dispose() { driver?.dispose(); },
   };

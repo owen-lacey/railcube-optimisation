@@ -11,7 +11,7 @@
 
   const rows = $derived(PIECES
     .filter(piece => (inventory[piece.type] ?? 0) > 0)
-    .map(piece => ({ piece, count: used[piece.type] ?? 0, total: inventory[piece.type] })));
+    .map(piece => ({ piece, count: used[piece.type], total: inventory[piece.type] })));
 </script>
 
 <dl class="inventory" aria-label="Pieces used">

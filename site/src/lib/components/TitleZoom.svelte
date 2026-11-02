@@ -7,7 +7,7 @@
   // `render/zoom.js`.
   import { onMount } from 'svelte';
   import { createStage } from '../render/stage.js';
-  import { readTheme } from '../render/renderer.js';
+  import { readTheme, releaseRenderer } from '../render/renderer.js';
   import { trackPhase } from '../render/build.js';
   import { pinnedShot } from '../render/camera.js';
   import { endOf, shotBetween } from '../render/zoom.js';
@@ -56,10 +56,13 @@
     stage.start();
     // The stage asked for its frame first, so it has drawn by the time this runs.
     frame = requestAnimationFrame(() => onready());
+    // Gone once the viewer has taken over, and with it the only picture the size of
+    // the screen, so the shared renderer need no longer be.
     return () => {
       cancelAnimationFrame(frame);
-      stage.clear();
+      stage.dispose();
       stage = null;
+      releaseRenderer();
     };
   });
 </script>

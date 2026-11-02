@@ -27,13 +27,9 @@
 
 import { readFileSync } from 'node:fs';
 import { solveTrack } from '../src/solver/index.js';
-import { routeOf, shapeOf } from '../src/layouts.js';
+import { LETTER_OF, routeOf, shapeOf } from '../src/layouts.js';
 import { chainTrack, SCORES } from '../src/track.js';
 
-const POOL_LETTER = {
-  straight: 'S', cross: 'X', leftCurve: 'L',
-  rightCurve: 'R', insideCurve: 'I', outsideCurve: 'O',
-};
 const total = set => Object.values(set).reduce((a, b) => a + b, 0);
 
 /**
@@ -180,7 +176,7 @@ console.log(`Ladder: ${LADDER}.\n`);
 for (const set of CANDIDATES) {
   const held = total(set);
   const inventory = Object.entries(set)
-    .filter(([, n]) => n > 0).map(([pool, n]) => `${POOL_LETTER[pool]}${n}`).join(' ');
+    .filter(([, n]) => n > 0).map(([pool, n]) => `${LETTER_OF[pool]}${n}`).join(' ');
   console.log(`── ${held} cubes  ${inventory}`);
 
   for (let rep = 0; rep < REPS; rep++) {

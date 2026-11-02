@@ -5,6 +5,7 @@
   import TrackViewer from './TrackViewer.svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { layoutScene } from '$lib/scenes.js';
+  import { describeTrack } from '$lib/catalogue.js';
 
   // `tracks` is `{ id, shape, score }`, best first; `picked` the index of the one
   // shown large; `label` names the group.
@@ -59,6 +60,22 @@
   });
 
   const score = s => `${s < 0 ? '−' : ''}${Math.abs(s)}`;
+
+  // One tab stop for the strip, the tile last focused (a roving tabindex), and the
+  // arrows, Home and End to move along it. Moving is not picking: Enter or Space does.
+  let cursor = $state(0);
+  $effect(() => {
+    tracks;
+    cursor = 0;
+  });
+  const MOVES = { ArrowLeft: -1, ArrowRight: 1, Home: -Infinity, End: Infinity };
+  function move(event) {
+    const by = MOVES[event.key];
+    if (by === undefined) return;
+    event.preventDefault();
+    cursor = Math.max(0, Math.min(tracks.length - 1, cursor + by));
+    scroller.querySelector(`[data-index="${cursor}"]`).focus();
+  }
 </script>
 
 <div class="strip">
@@ -70,12 +87,15 @@
         aria-pressed={i === picked}
         aria-label="Layout {i + 1} of {tracks.length}, scoring {score(track.score)}"
         data-index={i}
+        tabindex={i === cursor ? 0 : -1}
+        onfocus={() => (cursor = i)}
+        onkeydown={move}
         onclick={() => (picked = i)}
         {@attach watched}
       >
         {#if near.has(i)}
           {@const scene = layoutScene(track.shape)}
-          <TrackViewer pieces={scene.pieces} camera={scene.camera} aspect="1 / 1" label="The layout {track.shape}" />
+          <TrackViewer pieces={scene.pieces} camera={scene.camera} aspect="1 / 1" label={describeTrack(track.shape)} />
         {:else}
           <span class="unmounted"></span>
         {/if}
@@ -93,7 +113,7 @@
 
 <style>
   /* No scrollbar: the half tile at the end says there is more, and a swipe, a
-     wheel or the keyboard (each tile is a button) still scrolls. */
+     wheel or the keyboard (the arrows move along the tiles) still scrolls. */
   .strip {
     position: relative;
   }
@@ -153,6 +173,12 @@
 
   .tile[aria-pressed='true'] {
     border-color: var(--grid-color);
+  }
+
+  /* Over its own border, so the strip's scroller, which clips, never cuts it off. */
+  .tile:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: -2px;
   }
 
   .unmounted {

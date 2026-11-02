@@ -4,7 +4,7 @@
 // `drive` marks the scenes that are a real route, and so can have a train run
 // on them: a single piece and the pose gallery are catalogues, not tracks.
 
-import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step, SCORES } from '../../../src/track.js';
+import { chainTrack, chainOpen, cellsFor, cubeOf, startCell, step } from '../../../src/track.js';
 import { routeOf, identify, halvesOf } from '../../../src/layouts.js';
 import { repeatRuns } from '../../../src/metrics.js';
 import { COLORS, ALARM, ALARM_PERIOD, KNOT_TURN, CUBE } from './render/dimensions.js';
@@ -18,10 +18,6 @@ export const paint = placed => placed.map(piece => ({ ...piece, color: COLORS[pi
 
 /** How many cubes a chained route actually spends — revisits are not cubes. */
 export const cubesIn = pieces => pieces.filter(p => !p.revisit).length;
-
-/** What a chained route is worth under SCORES, counted the same way. */
-export const scoreOf = pieces =>
-  pieces.reduce((total, p) => total + (p.revisit ? 0 : SCORES[p.type]), 0);
 
 /**
  * Point the camera at the middle of a layout and back off far enough to see it

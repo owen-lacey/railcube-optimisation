@@ -9,13 +9,8 @@
 </main>
 
 <style>
-  /* The colours are the renderer's own, from lib/render/dimensions.js, so the
-     post and the viewers eventually sitting in it read as one scheme. */
+  /* The colours are app.css's tokens. */
   main {
-    --ink: #e8eef8;
-    --muted: #a0b1cd;
-    --rule: #34476a;
-    --wash: #19263d;
     /* The post's running text, wherever it is laid out. */
     --prose-size: 1.0625rem;
     --prose-leading: 1.65;
@@ -30,8 +25,9 @@
 
   /* A page that opens on a splash starts at the top of the screen, so the splash
      fills the first screen exactly. So does one that opens on a stepped section,
-     which is what /post becomes once its splash is sent away. */
-  main:has(> :global(:is(.splash, .stepped):first-child)) {
+     which is what /post becomes once its splash is sent away. The first section,
+     not the first child: an unseen heading may come before it. */
+  main:has(> :global(:is(.splash, .stepped):first-of-type)) {
     padding-top: 0;
   }
 

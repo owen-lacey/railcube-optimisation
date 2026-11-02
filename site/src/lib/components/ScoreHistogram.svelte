@@ -42,7 +42,7 @@
 <figure>
   <div class="plot">
     <svg viewBox="0 0 {bins} 100" preserveAspectRatio="none" aria-hidden="true">
-      {#each { length: bins } as _, i}
+      {#each { length: bins }, i}
         {@const s = low + i}
         {@const n = tally.get(s) ?? 0}
         <rect class:picked={s === score} x={i + 0.1} width="0.8" y={100 - heightOf(n)} height={heightOf(n)}>
@@ -68,7 +68,7 @@
     position: relative;
     height: 5rem;
     margin-top: 1.5rem;
-    border-bottom: 1px solid var(--rule);
+    border-bottom: 1px solid var(--card-border);
   }
 
   svg {

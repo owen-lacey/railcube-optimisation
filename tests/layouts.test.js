@@ -12,8 +12,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LAYOUTS, routeOf, shapeOf, identify, trackKey, halvesOf, loopsOf } from '../src/layouts.js';
-import { chainOpen, chainTrack, countPieces, POOLS, POOL_OF } from '../src/track.js';
+import { LAYOUTS, routeOf, shapeOf, identify, trackKey, halvesOf, loopsOf, mirrorOf } from '../src/layouts.js';
+import { chainOpen, chainTrack, countPieces, PIECE_TYPES } from '../src/track.js';
 import { knotInput, knotReader } from '../scripts/knot-curves.js';
 import { knotOf } from '../site/src/lib/knots.js';
 
@@ -33,18 +33,18 @@ for (const [name, layout] of entries) {
   // itself now, so there is no name to resolve and no map to fall out of date.
   test(`${name} can be built from the set it was solved against`, () => {
     const spent = countPieces(chainTrack(routeOf(layout.shape)));
-    for (const pool of POOLS) {
-      assert.ok(spent[pool] <= layout.set[pool],
-        `${name} needs ${spent[pool]} ${pool} but its set holds ${layout.set[pool]}`);
+    for (const type of PIECE_TYPES) {
+      assert.ok(spent[type] <= layout.set[type],
+        `${name} needs ${spent[type]} ${type} but its set holds ${layout.set[type]}`);
     }
   });
 
-  // An inventory that omits a pool it happens not to use — `cross: 0` left off,
-  // say — passes every check above, because the route never asks about that pool.
+  // An inventory that omits a type it happens not to use — `cross: 0` left off,
+  // say — passes every check above, because the route never asks about that type.
   // It would then quietly permit a crossing the next time the shape changed.
   test(`${name} says which inventory it was solved against, in full`, () => {
-    for (const pool of POOLS) {
-      assert.equal(typeof layout.set[pool], 'number', `${name} has no ${pool} count`);
+    for (const type of PIECE_TYPES) {
+      assert.equal(typeof layout.set[type], 'number', `${name} has no ${type} count`);
     }
   });
 
@@ -61,15 +61,14 @@ for (const [name, layout] of entries) {
     // give what countPieces gives — which is what makes matching by ID the same
     // thing as matching cube for cube.
     const spent = countPieces(placed);
-    for (const pool of POOLS) {
-      const letter = shapeOf([pool]);
+    for (const type of PIECE_TYPES) {
+      const letter = shapeOf([type]);
       const named = ids.filter(id => id.endsWith(letter));
-      assert.equal(named.length, spent[pool], `${name} has ${named.length} ${pool} IDs`);
+      assert.equal(named.length, spent[type], `${name} has ${named.length} ${type} IDs`);
       assert.deepEqual(named.map(id => Number(id.slice(0, -1))).sort((a, b) => a - b),
-        Array.from({ length: spent[pool] }, (_, i) => i + 1),
-        `${name}'s ${pool} IDs are not 1..n`);
+        Array.from({ length: spent[type] }, (_, i) => i + 1),
+        `${name}'s ${type} IDs are not 1..n`);
     }
-    assert.equal(Object.keys(POOL_OF).length, POOLS.length, 'a pool holds more than one type');
   });
 
   test(`${name} fits the box it claims`, () => {
@@ -94,7 +93,6 @@ test('every layout says whether it was proved optimal', () => {
 // `trackKey` says when two shape strings are one physical track. What it has to
 // get right, in both directions: every reading of a loop agrees, and nothing that
 // is a different build does.
-const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
 
 test('a track is the same track entered at any piece', () => {
   // A shift of the route starts the same loop at another cube, which lands the

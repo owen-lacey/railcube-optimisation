@@ -11,7 +11,7 @@
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 	import WeightedTracks from "$lib/components/WeightedTracks.svelte";
 	import { knotScene, lengthsScene, repeatsScene } from "$lib/scenes.js";
-	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
+	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps/ranked.js";
 	import PieceTag from "$lib/components/PieceTag.svelte";
 
 	// Called once the challenge is over, with whether a track was submitted.

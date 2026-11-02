@@ -68,7 +68,7 @@ export function channeledCube(color) {
   const eq = (a, b) => Math.abs(a - b) < 1e-6;
   // Every removed polygon lies entirely in {z = top} ∪ {|y| = front/back}.
   const polys = chamferedBox([CUBE, CUBE, CUBE], BEVEL, color)
-    .filter(p => !p.vertices.every(([x, y, z]) => eq(z, h) || eq(Math.abs(y), h)));
+    .filter(p => !p.vertices.every(([, y, z]) => eq(z, h) || eq(Math.abs(y), h)));
   const add = vs => polys.push({ vertices: oriented(vs), color });
 
   for (const s of [-1, 1]) {
@@ -163,12 +163,35 @@ export function crossCube(color) {
 // the same centre: the hull rounding at EDGE_R, its chamfer band at
 // EDGE_R − BEVEL (which lands exactly on the side faces' inset boundary),
 // and the metal floor at EDGE_R − CHANNEL_D.
+// How many of a polygon's vertices lie on each face of the outside curve's
+// hull, of half-extent h: top, bottom, front, back-or-front and either side.
+function hullContact(vertices, h) {
+  const eq = (a, b) => Math.abs(a - b) < 1e-6;
+  const cnt = f => vertices.filter(f).length;
+  return {
+    vertices: vertices.length,
+    top: cnt(v => eq(v[2], h)), bottom: cnt(v => eq(v[2], -h)),
+    front: cnt(v => eq(v[1], h)), backOrFront: cnt(v => eq(Math.abs(v[1]), h)),
+    side: cnt(v => eq(Math.abs(v[0]), h)),
+  };
+}
+
+// A polygon lying wholly in the top, the bottom, the back or front, or a side.
+const onWholeFace = ({ vertices, top, bottom, backOrFront, side }) =>
+  [top, bottom, backOrFront, side].includes(vertices);
+
+// The bevels along the edges the channel or the rounding touches, and the two
+// top-front corner triangles.
+const onTouchedBevel = ({ top, bottom, front, backOrFront, side }) =>
+  (top >= 2 && (backOrFront >= 2 || side >= 2))   // back-top (front-top too), side-top
+  || (front >= 2 && (bottom >= 2 || side >= 2))   // front-bottom, side-front
+  || (top >= 1 && front >= 1);                    // top-front corner triangles
+
 export const EDGE_R = 13;            // radius the top-front edge is rounded off to
 export const OUT_C = CUBE / 2 - EDGE_R; // its arc centre (y, z) = (c, c); flat faces end here
 export function outsideCurve(color) {
   const h = CUBE / 2, i = h - BEVEL;
   const wc = CHANNEL_W / 2, floor = h - CHANNEL_D;
-  const eq = (a, b) => Math.abs(a - b) < 1e-6;
   const NE = 8;               // facets per quarter turn
   const c = OUT_C;
   const arcPts = r => Array.from({ length: NE + 1 }, (_, j) => {
@@ -182,18 +205,8 @@ export function outsideCurve(color) {
   // outright removed below, plus the bevels along the affected edges and
   // the two top-front corner triangles.
   const polys = chamferedBox([CUBE, CUBE, CUBE], BEVEL, color).filter(p => {
-    const cnt = f => p.vertices.filter(f).length;
-    const all = f => p.vertices.every(f);
-    const top = cnt(v => eq(v[2], h)), bot = cnt(v => eq(v[2], -h));
-    const front = cnt(v => eq(v[1], h)), backOrFront = cnt(v => eq(Math.abs(v[1]), h));
-    const side = cnt(v => eq(Math.abs(v[0]), h));
-    return !(all(v => eq(v[2], h)) || all(v => eq(v[2], -h))
-      || all(v => eq(Math.abs(v[1]), h)) || all(v => eq(Math.abs(v[0]), h))
-      || (top >= 2 && backOrFront >= 2)  // back-top bevel (front-top too)
-      || (bot >= 2 && front >= 2)        // front-bottom bevel
-      || (top >= 2 && side >= 2)         // side-top bevels
-      || (front >= 2 && side >= 2)       // side-front bevels
-      || (top >= 1 && front >= 1));      // top-front corner triangles
+    const on = hullContact(p.vertices, h);
+    return !(onWholeFace(on) || onTouchedBevel(on));
   });
   const add = vs => polys.push({ vertices: oriented(vs), color });
 

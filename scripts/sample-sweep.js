@@ -20,7 +20,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { assertSpends, DB_PATH, derive, openDb, random } from './sweep-data.js';
+import { assertSpends, DB_PATH, derive, openDb } from './sweep-data.js';
+import { random } from '../site/src/lib/random.js';
 import { knotInput, knotPool } from './knot-curves.js';
 import { knotOf, knotType } from '../site/src/lib/knots.js';
 

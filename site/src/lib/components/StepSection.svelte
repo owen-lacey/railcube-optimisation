@@ -16,10 +16,14 @@
 	// the section's and is never remounted, a step change swaps only the figure's
 	// footer, and the camera eases to the new step's frame.
 	//
-	// On the last step, forwards is "All aboard!": the section fades away, then calls
-	// `onaboard` — at once under reduced motion. Removing it is the page's business.
-	// Until then the layout holds the page to this one screen.
-	import { onMount } from "svelte";
+	// On the last step, forwards is "All aboard!" — the same button, so focus stays on
+	// it: the section fades away, then calls `onaboard` — at once under reduced motion.
+	// Removing it is the page's business. Until then the layout holds the page to this
+	// one screen, and prose too tall for its room scrolls inside it.
+	//
+	// A new step's prose is read out (a polite live region), since the step it
+	// replaces is still where focus is.
+	import { onMount, tick } from "svelte";
 	import { Tween, prefersReducedMotion } from "svelte/motion";
 	import { cubicOut } from "svelte/easing";
 	import LayoutViewer from "./LayoutViewer.svelte";
@@ -56,6 +60,10 @@
 	let settling = $state(false);
 	// Fading away, once "All aboard!" is pressed.
 	let leaving = $state(false);
+	// Each step's prose, and the words of the one last stepped to, read out: empty
+	// until a step changes, so landing on the section reads nothing twice.
+	const stepEls = [];
+	let spoken = $state("");
 
 	/** @type {import('$lib/figure.js').FigureView | undefined} */
 	let view = $state();
@@ -83,12 +91,17 @@
 		shown = true;
 	}
 
+	function go(next) {
+		active = next;
+		spoken = stepEls[next].textContent.replace(/\s+/g, " ").trim();
+	}
+
 	function back() {
-		if (active > 0) active -= 1;
+		if (active > 0) go(active - 1);
 	}
 
 	function forwards() {
-		if (!last) active += 1;
+		if (!last) go(active + 1);
 		else if (prefersReducedMotion.current) onaboard();
 		else leaving = true;
 	}
@@ -141,6 +154,15 @@
 		requestAnimationFrame(() => requestAnimationFrame(() => (settling = false)));
 	}
 
+	/**
+	 * Focus on the section, for a reader who has just been sent on to it: once it is
+	 * drawn, since a section still held out of sight cannot take focus.
+	 */
+	export async function focus() {
+		await tick();
+		section.focus({ preventScroll: true });
+	}
+
 	onMount(() => {
 		// The bar is always there, empty on a step without a footer, so it can be
 		// measured before any step needs it.
@@ -167,6 +189,7 @@
 	class:settling
 	class:leaving
 	bind:this={section}
+	tabindex="-1"
 	ontransitionend={faded}
 	style:--settle="{SETTLE}s"
 	style:--words="{WORDS}s"
@@ -200,33 +223,33 @@
 	<div class="text">
 		<div class="steps">
 			{#each steps as step, i}
-				<div class="step" class:current={i === active} inert={i !== active}>
+				<div class="step" class:current={i === active} inert={i !== active} bind:this={stepEls[i]}>
 					{@render step.body()}
 				</div>
 			{/each}
 		</div>
+		<p class="visually-hidden" aria-live="polite">{spoken}</p>
+		<!-- Back is never disabled outright, which would drop focus from it on the
+			 first step: it says so, and does nothing. -->
 		<nav class="nav">
 			<button
 				type="button"
 				onclick={back}
-				disabled={active === 0}
+				aria-disabled={active === 0}
 				aria-label="Back"
 				title="Back"
 			>
 				<ChevronLeft aria-hidden="true" />
 			</button>
-			{#if last}
-				<button type="button" class="aboard" onclick={forwards}>All aboard!</button>
-			{:else}
-				<button
-					type="button"
-					onclick={forwards}
-					aria-label="Forwards"
-					title="Forwards"
-				>
-					<ChevronRight aria-hidden="true" />
-				</button>
-			{/if}
+			<button
+				type="button"
+				class:aboard={last}
+				onclick={forwards}
+				aria-label={last ? undefined : "Forwards"}
+				title={last ? undefined : "Forwards"}
+			>
+				{#if last}All aboard!{:else}<ChevronRight aria-hidden="true" />{/if}
+			</button>
 		</nav>
 	</div>
 </section>
@@ -248,6 +271,11 @@
 
 	.held {
 		visibility: hidden;
+	}
+
+	/* Focused only from script, to send a reader on to it: not a control. */
+	.stepped:focus {
+		outline: none;
 	}
 
 	/* Settling: what the zoom did not draw — the border, the viewer's background, the
@@ -331,8 +359,12 @@
 		display: none;
 	}
 
+	/* Never taller than the screen: zoomed in, or on a short screen, the prose scrolls
+	   inside its own room rather than running off the clipped page. */
 	.text {
-		flex: 0 0 auto;
+		flex: 0 1 auto;
+		min-height: 0;
+		max-height: 100svh;
 		display: flex;
 		flex-direction: column;
 	}
@@ -340,6 +372,8 @@
 	/* Every step in the one cell, so the stack is the tallest step's height. */
 	.steps {
 		display: grid;
+		min-height: 0;
+		overflow-y: auto;
 		padding-top: 0.75rem;
 	}
 
@@ -389,11 +423,11 @@
 		transition: background-color 0.15s ease-out;
 	}
 
-	button:active:not(:disabled) {
+	button:active:not([aria-disabled="true"]) {
 		background: var(--card-border);
 	}
 
-	button:disabled {
+	button[aria-disabled="true"] {
 		opacity: 0.35;
 		cursor: default;
 	}

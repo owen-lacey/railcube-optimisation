@@ -2,7 +2,6 @@
   // A ranked list of tracks, and the reader's own wherever it ranks: rank, name,
   // score and the track, which opens in the front page's builder, read-only. A row with no
   // name is "Unnamed". Notes are never shown — the Worker does not serve them.
-  import { base } from '$app/paths';
 
   // `rows` are `{ id, rank, name, score, shape }`, best first; `entry` is the
   // reader's row or null.
@@ -10,7 +9,7 @@
 
   const below = $derived(entry && !rows.some(row => row.id === entry.id));
   // Opened only to be looked at: a track already listed is not the reader's to submit.
-  const linkOf = shape => `${base}/?track=${shape}&view=1`;
+  const linkOf = shape => `/?track=${shape}&view=1`;
 </script>
 
 <table>
@@ -30,7 +29,7 @@
 </table>
 
 {#snippet line(row)}
-  <tr class:yours={row.id === entry?.id}>
+  <tr class:yours={row.id === entry?.id} aria-current={row.id === entry?.id ? 'true' : undefined}>
     <td>{row.rank}</td>
     <td class="name" class:unnamed={!row.name}>{row.name ?? 'Unnamed'}</td>
     <td>{row.score}</td>
@@ -56,7 +55,7 @@
   th,
   td {
     padding: 0.35rem 0.5rem;
-    border-bottom: 1px solid var(--rule);
+    border-bottom: 1px solid var(--card-border);
     text-align: left;
   }
 
@@ -92,7 +91,7 @@
   }
 
   .yours {
-    background: var(--wash);
+    background: var(--card-footer);
     font-weight: 700;
   }
 

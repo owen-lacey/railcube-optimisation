@@ -7,7 +7,7 @@
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Frame from './Frame.svelte';
-  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
+  import { SWEEP_CROSSED_RANKED } from '$lib/sweeps/ranked.js';
 
   // `end` is 'best' or 'worst'. `train` is the viewer's: its callbacks, or null for no train.
   // `overlay` is laid over the viewer's top-left corner, given the shape on show; on
@@ -38,7 +38,7 @@
   {#snippet footer()}
     <div class="ranked" role="group" aria-label="{end === 'best' ? 'Best' : 'Worst'} layouts">
       <button type="button" class="turn" aria-label="Previous {end} layout" onclick={() => turn(-1)}><ChevronLeft /></button>
-      <span class="position">{index + 1} / {tracks.length}</span>
+      <span class="position" aria-live="polite">{index + 1} / {tracks.length}</span>
       <button type="button" class="turn" aria-label="Next {end} layout" onclick={() => turn(1)}><ChevronRight /></button>
     </div>
   {/snippet}

@@ -16,10 +16,11 @@
 
 import { CpModel, CpSolver, CpSolverStatus, LinearExpr } from 'cpsat-js';
 import {
-  POSES, FACES, PIECE_TYPES, POOLS, POOL_OF, PROJ, SCORES, cellsFor, chainTrack, startCell,
+  POSES, FACES, PIECE_TYPES, PROJ, SCORES, cellsFor, chainTrack, scoreOf, startCell,
 } from '../track.js';
 import { METRICS, SIGNS, combinedWeights } from '../metrics.js';
 import { solveNative } from './native.js';
+import { withDefaults } from '../defaults.js';
 import { transitionTable } from './transitions.js';
 
 /** The most cells any one piece's material fills — the 2×2 curves. */
@@ -278,10 +279,6 @@ function capRuns(model, selectors, typeIs, at) {
   }
 }
 
-/** What a chained track is worth, in plain JavaScript. Never a solver variable. */
-const scoreOf = placed => placed.reduce(
-  (total, piece) => total + (piece.revisit ? 0 : SCORES[piece.type]), 0);
-
 /**
  * Break the mirror symmetry: allow a right curve only after a left one has
  * already appeared.
@@ -441,12 +438,12 @@ function addCrossings({
  * the revisits come back off the total.
  */
 function addInventory(model, rows, selectors, inventory, revisit) {
-  for (const pool of POOLS) {
-    const inPool = selectors.flatMap(vars =>
-      vars.flatMap((v, r) => (POOL_OF[PIECE_TYPES[rows[r].type]] === pool ? [v] : [])));
-    if (!inPool.length) continue;
-    const spent = pool === 'cross' && revisit ? sum(inPool).minus(sum(revisit)) : sum(inPool);
-    model.add(spent.le(inventory[pool] ?? 0));
+  for (const type of PIECE_TYPES) {
+    const ofType = selectors.flatMap(vars =>
+      vars.flatMap((v, r) => (PIECE_TYPES[rows[r].type] === type ? [v] : [])));
+    if (!ofType.length) continue;
+    const spent = type === 'cross' && revisit ? sum(ofType).minus(sum(revisit)) : sum(ofType);
+    model.add(spent.le(inventory[type] ?? 0));
   }
 }
 
@@ -592,29 +589,15 @@ function addClearance(model, material, train) {
 }
 
 /**
- * Build the model. Returns the variables the caller needs to read a solution
- * back out, so that reading stays in one place.
+ * Head position and pose before each step, plus one more for after the last:
+ * that final head is what has to be back where it started. The head's own
+ * domain is one wider than the region, because the region binds material cells
+ * and a head is the train's cell, one beyond the cube it stands on — except
+ * below the floor, where the train cannot be either: riding under a cube on the
+ * ground would put it inside the ground. No piece books a train cell lower than
+ * both of its heads, so bounding the heads bounds the whole train.
  */
-function buildModel({
-  steps, box, minY, exclude, startPose, collisions, checkTrain,
-  inventory, objective, symmetryBreaking, crossings, minCrossings, minLoopLength,
-  require: forced, hint, fill, ranges, limits, spans, direction,
-}) {
-  const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
-  const model = new CpModel();
-  const start = POSES.indexOf(startPose);
-
-  // Everything is built over the region, never the whole box: a narrower span
-  // is a smaller model, not just a capped one.
-  const region = regionOf(box, minY, spans);
-
-  // Head position and pose before each step, plus one more for after the last:
-  // that final head is what has to be back where it started. The head's own
-  // domain is one wider than the region, because the region binds material cells
-  // and a head is the train's cell, one beyond the cube it stands on — except
-  // below the floor, where the train cannot be either: riding under a cube on the
-  // ground would put it inside the ground. No piece books a train cell lower than
-  // both of its heads, so bounding the heads bounds the whole train.
+function addHeads(model, steps, region, minY) {
   const reach = region.map(([lo, hi], a) =>
     [a === UP && minY !== null ? Math.max(lo - 1, minY) : lo - 1, hi + 1]);
   const x = [], y = [], z = [], pose = [];
@@ -622,19 +605,13 @@ function buildModel({
     [x, y, z].forEach((axis, a) => axis.push(model.newIntVar(...reach[a], `${'xyz'[a]}_${i}`)));
     pose.push(model.newIntVar(0, POSES.length - 1, `pose_${i}`));
   }
+  return { reach, x, y, z, pose };
+}
 
-  const active = activeSteps(model, steps);
-  // Every step used, which turns "the most cubes you can spend" from something an
-  // objective reaches for into something the model demands. One equation does it: the
-  // active steps are a contiguous prefix, so pinning the last one on pins them all.
-  //
-  // With crossings off — the case this exists for — a step is a cube, so this is
-  // exactly "spend the whole inventory". With crossings on it is weaker than that: a
-  // revisit is a step that costs no cube, so a filled route could still leave one in
-  // the box.
-  if (fill) model.add(active[steps - 1].equals(1));
+/** Each step's selectors, chained: every step leaves the head where the next one starts. */
+function chainSteps(model, rows, { x, y, z, pose }, active) {
   const selectors = [];
-  for (let i = 0; i < steps; i++) {
+  for (let i = 0; i < active.length; i++) {
     const vars = stepSelectors(model, rows, i, active[i]);
     selectors.push(vars);
     // At most one selector is true, so each of these reads off that row — and
@@ -651,22 +628,29 @@ function buildModel({
     model.add(pose[i + 1].equals(pick(vars, rows, r => r.nextPose))).onlyEnforceIf(active[i]);
     model.add(pose[i + 1].equals(pose[i])).onlyEnforceIf(active[i].not());
   }
+  return selectors;
+}
 
-  // The loop closes on cell AND pose: coming home with the wrong face or heading
-  // means the last piece cannot click into the first (coordinates.md:95-100).
-  // Both ends are the train's cell above the start cube, which is the origin.
+/**
+ * The loop closes on cell AND pose: coming home with the wrong face or heading
+ * means the last piece cannot click into the first (coordinates.md:95-100).
+ * Both ends are the train's cell above the start cube, which is the origin.
+ */
+function closeLoop(model, { x, y, z, pose }, steps, startPose) {
+  const start = POSES.indexOf(startPose);
   const [hx, hy, hz] = startCell(startPose);
   for (const [v, want] of [[x[0], hx], [y[0], hy], [z[0], hz], [pose[0], start],
                            [x[steps], hx], [y[steps], hy], [z[steps], hz], [pose[steps], start]]) {
     model.add(v.equals(want));
   }
+}
 
-  // The box and the floor apply whether or not the collision rules are on, so
-  // that switching a rule off changes exactly one thing.
-  const material = boundMaterial({ model, rows, selectors, x, y, z, region });
-
-  // How many crossings could there be at most? One per cross in the box; with no
-  // inventory the only limit is that a crossing takes two steps.
+/**
+ * How many crossings there could be at most: one per cross in the box; with no
+ * inventory the only limit is that a crossing takes two steps. Refuses the
+ * crossing options that would be silently ignored with the encoding off.
+ */
+function crossesIn({ inventory, steps, crossings, minCrossings, minLoopLength }) {
   const crosses = inventory ? (inventory.cross ?? 0) : Math.floor(steps / 2);
   if (minCrossings) {
     if (!crossings) {
@@ -682,66 +666,121 @@ function buildModel({
   if (minLoopLength !== null && !crossings) {
     throw new Error('minLoopLength needs crossings: true — with the encoding off there is no crossing to bound');
   }
+  return crosses;
+}
 
-  // Crossings first: whether a step is a revisit decides whether it claims.
-  const revisit = crossings
-    ? addCrossings({ model, rows, selectors, x, y, z, active, reach, crosses,
-                     minCrossings, minLoopLength })
-    : null;
-
+/** At most one piece per cell and, with `checkTrain`, no cell both material and train. */
+function addCollisions({ model, rows, selectors, heads: { x, y, z }, revisit, region, steps, checkTrain }) {
   const g = grid(region);
   const slots = kind => claimSlots({
     model, rows, selectors, x, y, z, g, kind, revisit,
     sentinel: g.size + (kind === 'train' ? steps * MAX_FOOT : 0),
   });
+  const material = slots('material');
+  model.addAllDifferent(material.map(c => c.claim));
+  if (checkTrain) addClearance(model, material, slots('train'));
+}
 
-  if (collisions) {
-    const material = slots('material');
-    model.addAllDifferent(material.map(c => c.claim));
-    if (checkTrain) addClearance(model, material, slots('train'));
-  }
-
+/**
+ * The rules a question may switch: collisions, the inventory and the mirror
+ * break. The box and the floor are not among them — they apply whether or not
+ * the collision rules are on, so that switching a rule off changes exactly one
+ * thing.
+ */
+function addRules(built, { collisions, checkTrain, inventory, symmetryBreaking, steps }) {
+  const { model, rows, selectors, revisit } = built;
+  if (collisions) addCollisions({ ...built, steps, checkTrain });
   if (inventory) addInventory(model, rows, selectors, inventory, revisit);
   if (symmetryBreaking) breakMirrorSymmetry(model, rows, selectors);
+}
 
-  if (objective) {
-    const apply = OBJECTIVES[objective];
-    if (!apply) throw new Error(`unknown objective ${objective}`);
-    // The metrics rank arrangements of one whole inventory. Leave the length free
-    // and the best volume is a four-piece ring, and the wrap would read the
-    // switched-off tail as track.
-    if (objective !== 'maximiseScore' && !fill) {
-      throw new Error(`the ${objective} objective needs fill: true — it compares full-length loops`);
-    }
-    if (direction === 'worst' && !twoWay(objective, ranges)) {
-      throw new Error(`the ${objective} objective is sound only in its good direction, so its worst cannot be asked for`);
-    }
-    apply({ model, active, revisit, rows, selectors, material, region, ranges, direction, y });
+/** Post the objective, refusing one the question cannot soundly ask. */
+function applyObjective(context, objective, fill) {
+  const apply = OBJECTIVES[objective];
+  if (!apply) throw new Error(`unknown objective ${objective}`);
+  // The metrics rank arrangements of one whole inventory. Leave the length free
+  // and the best volume is a four-piece ring, and the wrap would read the
+  // switched-off tail as track.
+  if (objective !== 'maximiseScore' && !fill) {
+    throw new Error(`the ${objective} objective needs fill: true — it compares full-length loops`);
   }
+  if (context.direction === 'worst' && !twoWay(objective, context.ranges)) {
+    throw new Error(`the ${objective} objective is sound only in its good direction, so its worst cannot be asked for`);
+  }
+  apply(context);
+}
 
+/** What the question asks of the track's metrics: the objective, limits and spans. */
+function addAims(context, { objective, fill, limits, spans }) {
+  if (objective) applyObjective(context, objective, fill);
   if (limits) {
     if (!fill) throw new Error('limits need fill: true — the metrics compare full-length loops');
-    addLimits({ model, active, revisit, rows, selectors, material, region, ranges, direction, y }, limits);
+    addLimits(context, limits);
   }
-
   // A box per axis: the region only says where the material may be, which for a
   // span of n is 2n − 1 cells wide, so the extent itself is capped as well.
   if (spans) {
-    materialExtent({ model, material, region })
-      .forEach(({ at }, a) => model.add(at.le(spans[a])));
+    materialExtent(context).forEach(({ at }, a) => context.model.add(at.le(spans[a])));
   }
+}
 
+/** Start from a route, or pin the piece type at each step to ask whether one particular track is feasible. */
+function addPins({ model, rows, selectors, active }, { hint, require: forced, startPose }) {
   if (hint) hintRoute({ model, rows, selectors, active, route: hint, startPose });
-
-  // Pin the route, for asking whether one particular track is feasible.
   if (forced) {
     forced.forEach((type, i) => {
       model.addBoolOr(rows.flatMap((row, r) =>
         (PIECE_TYPES[row.type] === type ? [selectors[i][r]] : [])));
     });
   }
+}
 
-  return { model, rows, selectors, active, revisit };
+/**
+ * Build the model. Returns the variables the caller needs to read a solution
+ * back out, so that reading stays in one place.
+ */
+function buildModel(question) {
+  const {
+    steps, box, minY, exclude, startPose, fill, crossings, minCrossings, minLoopLength, spans,
+  } = question;
+  const rows = transitionTable().filter(row => !exclude.includes(PIECE_TYPES[row.type]));
+  const model = new CpModel();
+
+  // Everything is built over the region, never the whole box: a narrower span
+  // is a smaller model, not just a capped one.
+  const region = regionOf(box, minY, spans);
+  const heads = addHeads(model, steps, region, minY);
+  const { x, y, z, reach } = heads;
+
+  const active = activeSteps(model, steps);
+  // Every step used, which turns "the most cubes you can spend" from something an
+  // objective reaches for into something the model demands. One equation does it: the
+  // active steps are a contiguous prefix, so pinning the last one on pins them all.
+  //
+  // With crossings off — the case this exists for — a step is a cube, so this is
+  // exactly "spend the whole inventory". With crossings on it is weaker than that: a
+  // revisit is a step that costs no cube, so a filled route could still leave one in
+  // the box.
+  if (fill) model.add(active[steps - 1].equals(1));
+  const selectors = chainSteps(model, rows, heads, active);
+  closeLoop(model, heads, steps, startPose);
+
+  // The box and the floor apply whether or not the collision rules are on.
+  const material = boundMaterial({ model, rows, selectors, x, y, z, region });
+
+  const crosses = crossesIn(question);
+  // Crossings first: whether a step is a revisit decides whether it claims.
+  const revisit = crossings
+    ? addCrossings({ model, rows, selectors, x, y, z, active, reach, crosses,
+                     minCrossings, minLoopLength })
+    : null;
+
+  const built = { model, rows, selectors, active, revisit, heads, region };
+  addRules(built, question);
+  addAims({ model, active, revisit, rows, selectors, material, region,
+            ranges: question.ranges, direction: question.direction, y }, question);
+  addPins(built, question);
+  return built;
 }
 
 const STATUS = {
@@ -752,6 +791,9 @@ const STATUS = {
   [CpSolverStatus.UNKNOWN]: 'UNKNOWN',
 };
 
+/** Whether a status carries a solution. */
+const solved = status => status === 'OPTIMAL' || status === 'FEASIBLE';
+
 /**
  * Which row each step chose, read back from the selector booleans. An inactive
  * step chose none, and shows up as -1 — dropped from the route, but kept in the
@@ -759,6 +801,136 @@ const STATUS = {
  */
 const chosenRows = (result, selectors) =>
   selectors.map(vars => vars.findIndex(v => result.value(v) === 1));
+
+/** What every option of `solveTrack` defaults to — see `withDefaults`. */
+const DEFAULTS = Object.freeze({
+  box: 6, minY: null, exclude: Object.freeze([]), startPose: 'DF',
+  collisions: true, checkTrain: true, symmetryBreaking: false, crossings: false,
+  minLoopLength: null, fill: false, enumerateAllSolutions: false, allSolutions: false,
+  engine: 'wasm', direction: 'best',
+});
+
+const isPositive = n => Number.isInteger(n) && n >= 1;
+
+// Check the numbers before handing them to the solver: a NaN reaches cpsat-js
+// as a BigInt conversion error several frames deep, which says nothing useful.
+function checkSizes({ steps, box, minY }) {
+  for (const [name, value] of [['steps', steps], ['box', box]]) {
+    if (!isPositive(value)) {
+      throw new Error(`${name} must be a positive integer, got ${value}`);
+    }
+  }
+  if (minY !== null && !Number.isInteger(minY)) {
+    throw new Error(`minY must be an integer or null, got ${minY}`);
+  }
+}
+
+function checkBounds({ spans, minLoopLength }) {
+  if (spans && !(spans.length === 3 && spans.every(isPositive))) {
+    throw new Error(`spans must be three positive integers, got ${spans}`);
+  }
+  if (minLoopLength !== null && !isPositive(minLoopLength)) {
+    throw new Error(`minLoopLength must be a positive integer or null, got ${minLoopLength}`);
+  }
+}
+
+function checkChoices({ direction, engine }) {
+  if (!['best', 'worst'].includes(direction)) {
+    throw new Error(`direction must be best or worst, got ${direction}`);
+  }
+  if (!(engine in ENGINES)) {
+    throw new Error(`engine must be one of ${Object.keys(ENGINES).join(', ')}, got ${engine}`);
+  }
+}
+
+/**
+ * How a solution is read back: as a route, then chained, scored and counted —
+ * so an incumbent and an answer are one shape.
+ */
+function readerOf({ startPose, inventory, onSolution }, { rows, selectors }) {
+  const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);
+  // Chain the route back through the model to find out what it really costs.
+  // Not `steps - route.length`: a crossed cross is two steps and one cube, so
+  // counting steps is precisely how a model mints pieces it does not own. And
+  // not read off a solver variable either — chainTrack works the revisits out
+  // from the geometry, so it is an independent count. If the route is illegal it
+  // throws, which is the right thing to do with a bug of that kind.
+  const report = route => {
+    const pieces = chainTrack(route, startPose);
+    const cubes = pieces.filter(p => !p.revisit).length;
+    const held = inventory ? Object.values(inventory).reduce((a, b) => a + b, 0) : null;
+    return {
+      route, pieces, score: scoreOf(pieces),
+      dropped: held === null ? null : held - cubes,
+    };
+  };
+  const answer = result => report(routeOf(chosenRows(result, selectors)));
+
+  // Each improving solution, read the same way an answer is read: through the
+  // selectors and then through `report`, so it arrives chained, scored and counted
+  // rather than as solver variables. That ordering is the point — an illegal
+  // incumbent throws out of `chainTrack` at the moment it appears, before anything
+  // can draw it. A live callback runs inside the solve, so that throw unwinds
+  // through WASM and abandons the search, which is the right outcome for a model bug
+  // and a poor one to catch and carry on from.
+  let seen = 0;
+  const observe = onSolution && (solution => onSolution({
+    index: seen++,
+    live: solution.live,
+    seconds: solution.wallTime,
+    bound: solution.bestObjectiveBound,
+    ...answer(solution),
+  }));
+  return { routeOf, answer, observe };
+}
+
+// numWorkers picks which subsolver portfolio runs, not just how much
+// parallelism: 1 or >= 6, never in between. Left unset it is 8 in Node, and
+// clamped to 1 in the browser, which has no threads — and that clamp is also what
+// decides whether onSolution is live, since only a single-worker search can enter
+// JS from inside itself.
+const paramsOf = ({ maxTimeInSeconds, numWorkers, enumerateAllSolutions }, observe) => ({
+  ...(maxTimeInSeconds ? { maxTimeInSeconds } : {}),
+  ...(numWorkers ? { numWorkers } : {}),
+  ...(enumerateAllSolutions ? { enumerateAllSolutions } : {}),
+  ...(observe ? { onSolution: observe } : {}),
+});
+
+async function solveOnce(solve, { model }, params, objective, { answer }) {
+  const result = await solve(model, params);
+  const status = STATUS[result.status];
+  if (!solved(status)) {
+    return { status, route: null, pieces: null, dropped: null, score: null };
+  }
+  // The solver's own objective and bound, for reporting how far from proved an
+  // answer is. Never the number an answer is judged by — that is a recount.
+  const gap = objective ? { value: result.objectiveValue, bound: result.bestObjectiveBound } : {};
+  return { status, ...gap, ...answer(result) };
+}
+
+// No-good cuts: forbid the exact set of selectors just used, and solve again.
+// Each round adds a clause, so this is quadratic in the number of solutions —
+// fine for the small cases, worth capping for the large ones.
+async function solveAll(solve, { model, selectors, active }, params, maxSolutions, { routeOf }) {
+  // An inactive step is forbidden by its active flag; an active one by its row.
+  const noGood = chosen => chosen.map((r, i) => (r < 0 ? active[i] : selectors[i][r].not()));
+  const routes = [];
+  for (;;) {
+    if (routes.length === maxSolutions) return { status: 'OPTIMAL', routes, truncated: true };
+    const result = await solve(model, params);
+    const status = STATUS[result.status];
+    if (!solved(status)) {
+      if (status !== 'INFEASIBLE') throw new Error(`enumeration stopped on ${status}`);
+      return { status: 'OPTIMAL', routes, truncated: false };
+    }
+    const chosen = chosenRows(result, selectors);
+    routes.push(routeOf(chosen));
+    model.addBoolOr(noGood(chosen));
+    // The hint told the solver where to start; from here on it points at a solution
+    // the cuts have just forbidden, which is the one place it is worse than nothing.
+    model.clearHints();
+  }
+}
 
 /**
  * Solve for a closed track.
@@ -774,7 +946,7 @@ const chosenRows = (result, selectors) =>
  *   collisions   enforce at most one piece per cell. Off is only useful for
  *                comparing against an oracle run with the rule off too
  *   checkTrain   enforce clearance as well: no cell both material and train
- *   inventory    pool counts the loop may spend, e.g. SET. Omit for a
+ *   inventory    piece counts the loop may spend, e.g. SET. Omit for a
  *                bottomless box of pieces
  *   objective    a key of OBJECTIVES, e.g. 'maximiseScore', or one of the metrics
  *                of src/metrics.js ('faces', 'volume', 'repeats', 'faceUp',
@@ -861,127 +1033,24 @@ const chosenRows = (result, selectors) =>
  * the route is worth under SCORES. With an objective it also carries `value` and
  * `bound`, the solver's own objective and best bound, for reporting a gap.
  */
-export async function solveTrack({
-  steps, box = 6, minY = null, exclude = [], startPose = 'DF',
-  collisions = true, checkTrain = true, inventory,
-  objective, symmetryBreaking = false, crossings = false, minCrossings,
-  minLoopLength = null, require, hint,
-  fill = false, ranges, limits, spans, enumerateAllSolutions = false,
-  allSolutions = false, maxSolutions, maxTimeInSeconds, numWorkers, onSolution,
-  engine = 'wasm', direction = 'best',
-}) {
-  // Check the numbers before handing them to the solver: a NaN reaches cpsat-js
-  // as a BigInt conversion error several frames deep, which says nothing useful.
-  for (const [name, value] of [['steps', steps], ['box', box]]) {
-    if (!Number.isInteger(value) || value < 1) {
-      throw new Error(`${name} must be a positive integer, got ${value}`);
-    }
-  }
-  if (minY !== null && !Number.isInteger(minY)) {
-    throw new Error(`minY must be an integer or null, got ${minY}`);
-  }
-  if (spans && !(spans.length === 3 && spans.every(n => Number.isInteger(n) && n >= 1))) {
-    throw new Error(`spans must be three positive integers, got ${spans}`);
-  }
-  if (minLoopLength !== null && !(Number.isInteger(minLoopLength) && minLoopLength >= 1)) {
-    throw new Error(`minLoopLength must be a positive integer or null, got ${minLoopLength}`);
-  }
+export async function solveTrack(options) {
+  const question = withDefaults(options, DEFAULTS);
+  checkSizes(question);
+  checkBounds(question);
+  checkChoices(question);
+  const solve = await ENGINES[question.engine]();
+  const built = buildModel(question);
+  const read = readerOf(question, built);
 
-  if (!['best', 'worst'].includes(direction)) {
-    throw new Error(`direction must be best or worst, got ${direction}`);
-  }
-  if (!(engine in ENGINES)) {
-    throw new Error(`engine must be one of ${Object.keys(ENGINES).join(', ')}, got ${engine}`);
-  }
-  const solve = await ENGINES[engine]();
-  const { model, rows, selectors, active } = buildModel({
-    steps, box, minY, exclude, startPose, collisions, checkTrain,
-    inventory, objective, symmetryBreaking, crossings, minCrossings, minLoopLength,
-    require, hint, fill, ranges, limits, spans, direction,
-  });
-  const routeOf = chosen => chosen.filter(r => r >= 0).map(r => PIECE_TYPES[rows[r].type]);
-  // An inactive step is forbidden by its active flag; an active one by its row.
-  const noGood = chosen => chosen.map((r, i) => (r < 0 ? active[i] : selectors[i][r].not()));
-  // Chain the route back through the model to find out what it really costs.
-  // Not `steps - route.length`: a crossed cross is two steps and one cube, so
-  // counting steps is precisely how a model mints pieces it does not own. And
-  // not read off a solver variable either — chainTrack works the revisits out
-  // from the geometry, so it is an independent count. If the route is illegal it
-  // throws, which is the right thing to do with a bug of that kind.
-  const report = route => {
-    const pieces = chainTrack(route, startPose);
-    const cubes = pieces.filter(p => !p.revisit).length;
-    const held = inventory ? Object.values(inventory).reduce((a, b) => a + b, 0) : null;
-    return {
-      route, pieces, score: scoreOf(pieces),
-      dropped: held === null ? null : held - cubes,
-    };
-  };
-
-  // Each improving solution, read the same way an answer is read: through the
-  // selectors and then through `report`, so it arrives chained, scored and counted
-  // rather than as solver variables. That ordering is the point — an illegal
-  // incumbent throws out of `chainTrack` at the moment it appears, before anything
-  // can draw it. A live callback runs inside the solve, so that throw unwinds
-  // through WASM and abandons the search, which is the right outcome for a model bug
-  // and a poor one to catch and carry on from.
-  let seen = 0;
-  const observe = onSolution && (solution => onSolution({
-    index: seen++,
-    live: solution.live,
-    seconds: solution.wallTime,
-    bound: solution.bestObjectiveBound,
-    ...report(routeOf(chosenRows(solution, selectors))),
-  }));
-
-  // numWorkers picks which subsolver portfolio runs, not just how much
-  // parallelism: 1 or >= 6, never in between. Left unset it is 8 in Node, and
-  // clamped to 1 in the browser, which has no threads — and that clamp is also what
-  // decides whether onSolution is live, since only a single-worker search can enter
-  // JS from inside itself.
-  if (enumerateAllSolutions && objective) {
+  if (question.enumerateAllSolutions && question.objective) {
     throw new Error('enumerateAllSolutions needs a model with no objective — CP-SAT '
       + 'enumerates only when there is nothing to optimise, so this would silently '
       + `report improving solutions instead. Drop the objective, or use fill to demand `
       + 'the length that maximiseScore would have reached for');
   }
 
-  const params = {
-    ...(maxTimeInSeconds ? { maxTimeInSeconds } : {}),
-    ...(numWorkers ? { numWorkers } : {}),
-    ...(enumerateAllSolutions ? { enumerateAllSolutions } : {}),
-    ...(observe ? { onSolution: observe } : {}),
-  };
-
-  if (!allSolutions) {
-    const result = await solve(model, params);
-    const status = STATUS[result.status];
-    if (status !== 'OPTIMAL' && status !== 'FEASIBLE') {
-      return { status, route: null, pieces: null, dropped: null, score: null };
-    }
-    // The solver's own objective and bound, for reporting how far from proved an
-    // answer is. Never the number an answer is judged by — that is a recount.
-    const solved = objective ? { value: result.objectiveValue, bound: result.bestObjectiveBound } : {};
-    return { status, ...solved, ...report(routeOf(chosenRows(result, selectors))) };
-  }
-
-  // No-good cuts: forbid the exact set of selectors just used, and solve again.
-  // Each round adds a clause, so this is quadratic in the number of solutions —
-  // fine for the small cases, worth capping for the large ones.
-  const routes = [];
-  for (;;) {
-    if (routes.length === maxSolutions) return { status: 'OPTIMAL', routes, truncated: true };
-    const result = await solve(model, params);
-    const status = STATUS[result.status];
-    if (status !== 'OPTIMAL' && status !== 'FEASIBLE') {
-      if (status !== 'INFEASIBLE') throw new Error(`enumeration stopped on ${status}`);
-      return { status: 'OPTIMAL', routes, truncated: false };
-    }
-    const chosen = chosenRows(result, selectors);
-    routes.push(routeOf(chosen));
-    model.addBoolOr(noGood(chosen));
-    // The hint told the solver where to start; from here on it points at a solution
-    // the cuts have just forbidden, which is the one place it is worse than nothing.
-    model.clearHints();
-  }
+  const params = paramsOf(question, read.observe);
+  return question.allSolutions
+    ? solveAll(solve, built, params, question.maxSolutions, read)
+    : solveOnce(solve, built, params, question.objective, read);
 }

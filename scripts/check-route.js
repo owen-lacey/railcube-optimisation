@@ -20,7 +20,7 @@
 
 import { createInterface } from 'node:readline';
 
-import { chainTrack, countPieces, POOLS, SET } from '../src/track.js';
+import { chainTrack, countPieces, PIECE_TYPES, SET } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
 import { metricsOf, spanOf } from '../src/metrics.js';
 
@@ -49,10 +49,10 @@ function reportOf(shape) {
   };
 
   if (againstSet) {
-    report.overflows = POOLS.filter(pool => spent[pool] > (SET[pool] ?? 0));
-    report.spare = Object.fromEntries(POOLS
-      .filter(pool => spent[pool] < (SET[pool] ?? 0))
-      .map(pool => [pool, (SET[pool] ?? 0) - spent[pool]]));
+    report.overflows = PIECE_TYPES.filter(type => spent[type] > (SET[type] ?? 0));
+    report.spare = Object.fromEntries(PIECE_TYPES
+      .filter(type => spent[type] < (SET[type] ?? 0))
+      .map(type => [type, (SET[type] ?? 0) - spent[type]]));
     report.buildable = report.overflows.length === 0;
   }
   return report;

@@ -5,7 +5,7 @@
 
 import { fn } from 'storybook/test';
 import SubmitDialogHarness from './SubmitDialogHarness.svelte';
-import { SWEEP_CROSSED_RANKED } from '$lib/sweeps.js';
+import { SWEEP_CROSSED_RANKED } from '$lib/sweeps/ranked.js';
 
 export default {
   title: 'Submit dialog',

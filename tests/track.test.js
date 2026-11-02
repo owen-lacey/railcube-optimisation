@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  POSES, FACES, OPPOSITE, PIECE_TYPES, POOLS, POOL_OF,
+  POSES, FACES, OPPOSITE, PIECE_TYPES,
   isValidPose, poseLetters, cellsFor, cubeOf, step,
   assertNoCollisions, chainTrack, chainOpen, countPieces, overflowingPool, overflowingPoolByType,
   SET, SCORES,
@@ -385,23 +385,15 @@ test('the set holds no cross', () => {
   assert.equal(SET.cross, 0);
 });
 
-test('the set names every pool, and every type has one', () => {
-  assert.deepEqual(Object.keys(SET).sort(), [...POOLS].sort());
-  for (const type of PIECE_TYPES) assert.ok(POOLS.includes(POOL_OF[type]), type);
+test('the set names every piece type', () => {
+  assert.deepEqual(Object.keys(SET).sort(), [...PIECE_TYPES].sort());
 });
 
 // The product listings count green and blue together ("8/16 combined"), and a
 // reversible curve could legitimately be spent as either — a right curve fills
 // the same cells as a left one and moves the head the same way, differing only in
 // which face the rail ends on. Owen's curves are not reversible, so they are two
-// mouldings and two pools.
-test('left and right curves are separate pools', () => {
-  assert.equal(POOL_OF.leftCurve, 'leftCurve');
-  assert.equal(POOL_OF.rightCurve, 'rightCurve');
-  assert.equal(POOLS.length, PIECE_TYPES.length, 'every piece type is its own pool');
-});
-
-// The test that pins which bookkeeping we mean. Eight curves of one colour would
+// mouldings, counted apart. The test that pins which bookkeeping we mean. Eight curves of one colour would
 // be fine against a shared pool of eight and is not fine here; four of each is
 // fine either way.
 test('one colour cannot be spent on the other colour\'s allowance', () => {

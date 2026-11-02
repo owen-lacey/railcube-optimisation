@@ -5,6 +5,13 @@
 /** Pixels a cube in the PNGs: `perCube` 60 at pixel ratio 2. */
 export const PER_CUBE_PX = 120;
 
+/**
+ * Pixels a cube in the pictures the page loads, at pixel ratio 1 (see
+ * `letter-images.js`): just over the largest a cube is ever drawn, 56rem over the
+ * top row's 55.5 cubes. They come at twice and three times this as well.
+ */
+export const WEB_PER_CUBE_PX = 17;
+
 /** Every letter is this many cubes tall. */
 export const HEIGHT = 8;
 

@@ -30,6 +30,11 @@
 // tick draws once at the end of the frame, however many writes the frame made; when
 // it is not, an invalidation asks for one frame and draws in it. So a still viewer
 // is drawn once and then costs nothing.
+//
+// **And the loop runs only while the stage is visible** (`setVisible`): a host
+// that cannot be seen — scrolled away, or in a hidden tab — says so, and from then
+// on nothing starts the loop until it is seen again, which starts it. An
+// invalidation still draws its one frame.
 
 import { AmbientLight, Box3, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, OrthographicCamera, ReplaceStencilOp, Scene, Vector3 } from 'three';
 import { geometryFor, movingMesh, soupGeometry, carriedShade } from './meshes.js';
@@ -142,7 +147,7 @@ function fixedMesh(geometry, material, { name, order = 0, at = [0, 0, 0] } = {})
  * `theme` is the overlay paint (see `readTheme` in renderer.js); `renderer` is what
  * draws — the page's shared one, or a stand-in for the tests.
  */
-export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPiece, onTrainPose, onCamera, onOverlay, onChanging, reduced = false } = {}) {
+export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainCell, onTrainPiece, onTrainPose, onCamera, onOverlay, onChanging, reduced = false, visible: seen = true } = {}) {
   const scene = new Scene();
   scene.add(new AmbientLight(0xffffff, LIGHT.ambient));
   const sun = new DirectionalLight(0xffffff, LIGHT.directional);
@@ -224,6 +229,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   const size = () => ({ width: canvas.clientWidth, height: canvas.clientHeight });
   let dirty = true;
   let requested = null;   // a frame asked for to draw in while the loop is idle
+  let disposed = false;
 
   function draw() {
     const { width, height } = size();
@@ -235,7 +241,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   /** The picture has changed: draw it at the end of this frame, or in the next. */
   function invalidate() {
     dirty = true;
-    if (loop.running() || requested !== null) return;
+    if (disposed || loop.running() || requested !== null) return;
     requested = requestAnimationFrame(() => {
       requested = null;
       draw();
@@ -245,7 +251,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   const {
     frameTo: applyDescription, applyCamera, reserve: reserveCamera, region, stepBlend, view, untouched, adjust: adjustView, reset: resetView, touched,
     applied,
-  } = createCamera(camera, size, () => { invalidate(); onCamera?.(); }, { onBlend: () => loop.start(), instant: reduced });
+  } = createCamera(camera, size, () => { invalidate(); onCamera?.(); }, { onBlend: () => start(), instant: reduced });
 
   /**
    * Where a piece at `position` would set off from to arrive from beyond the nearest
@@ -274,7 +280,9 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   let phaseAt = 0;       // loop time the head phase started, so its clock is its own
   let framed = null;     // the camera description in force, or being panned away from
   let pan = null;        // { to, seconds, spent }, null when the camera is still
-  let homing = null;     // { from, seconds, spent }, while a hand-moved view eases back
+  // { from, to, seconds, spent }, while the hand-moved view eases somewhere: back to
+  // the shot as described (`to` null, a reset), or on to a nudge's view.
+  let glide = null;
   // Edge → { box, share, shifting }: each box shots are kept clear of, kept while
   // easing away from it, how far they are clear of it — see `reserve` in camera.js —
   // and `{ from, to, spent }` while that eases.
@@ -436,11 +444,30 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   }
 
   const HOME = 0.5;      // seconds; a reset can undo a long way round, so a little longer
+  const NUDGE = 0.2;     // seconds; a button's or a key's step is short
 
-  /** Put a hand-moved view on the camera, taking over from any reset under way. */
+  /** Put a hand-moved view on the camera, taking over from any glide under way. */
   function adjust(next) {
-    homing = null;
+    glide = null;
     adjustView(next);
+  }
+
+  /** Where the hand-moved view is heading: a glide's end, or where it is. */
+  function aim() {
+    if (!glide) return view();
+    return glide.to ?? untouched();
+  }
+
+  /**
+   * Move the hand-moved view one step, `step(view)`, from wherever it is heading,
+   * so steps asked for in quick succession add up. It eases there, or goes at once
+   * for a reader who has asked for reduced motion.
+   */
+  function nudge(step) {
+    const next = step(aim());
+    if (reduced) return adjust(next);
+    glide = { from: view(), to: next, seconds: NUDGE, spent: 0 };
+    start();
   }
 
   /**
@@ -449,25 +476,27 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
    * each frame, so a reframe part-way through is followed rather than undone.
    */
   function reset({ instant = false } = {}) {
-    homing = null;
+    glide = null;
     if (!touched()) return;
     if (instant) return resetView();
-    homing = { from: view(), seconds: HOME, spent: 0 };
-    loop.start();
+    glide = { from: view(), to: null, seconds: HOME, spent: 0 };
+    start();
   }
 
-  /** Advance a reset, and say whether one is still running. */
-  function stepHome(delta) {
-    if (!homing) return false;
-    homing.spent += delta;
-    const t = Math.min(1, homing.spent / homing.seconds);
-    if (t === 1) {
-      homing = null;
-      resetView();
-      return false;
+  /** Advance a glide, and say whether one is still running. */
+  function stepGlide(delta) {
+    if (!glide) return false;
+    glide.spent += delta;
+    const t = Math.min(1, glide.spent / glide.seconds);
+    if (t < 1) {
+      adjustView(viewBetween(glide.from, aim(), smooth(t)));
+      return true;
     }
-    adjustView(viewBetween(homing.from, untouched(), smooth(t)));
-    return true;
+    const { to } = glide;
+    glide = null;
+    if (to) adjustView(to);
+    else resetView();
+    return false;
   }
 
 
@@ -484,19 +513,23 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   function reserve(boxes, { instant = false } = {}) {
     const next = new Map(boxes.map(box => [box.edge, box]));
     for (const edge of new Set([...reserved.keys(), ...next.keys()])) {
-      const box = next.get(edge);
-      const held = reserved.get(edge);
-      const to = box ? 1 : 0;
-      if (!held) {
-        reserved.set(edge, { box, share: 1, shifting: null });
-        continue;
-      }
-      if (box) held.box = box;
-      held.shifting = instant || held.share === to ? null : { from: held.share, to, spent: 0 };
-      if (!held.shifting) held.share = to;
+      reserveEdge(edge, next.get(edge), instant);
     }
     applyReserve();
-    if ([...reserved.values()].some(held => held.shifting)) loop.start();
+    if ([...reserved.values()].some(held => held.shifting)) start();
+  }
+
+  /** One edge of `reserve`: its box, or none now, taken at once or eased to. */
+  function reserveEdge(edge, box, instant) {
+    const held = reserved.get(edge);
+    if (!held) {
+      reserved.set(edge, { box, share: 1, shifting: null });
+      return;
+    }
+    const to = box ? 1 : 0;
+    if (box) held.box = box;
+    held.shifting = instant || held.share === to ? null : { from: held.share, to, spent: 0 };
+    if (!held.shifting) held.share = to;
   }
 
   function applyReserve() {
@@ -528,11 +561,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
    * predecessor.
    */
   function tick(delta, elapsed) {
-    // A reset is the reader's own hand on the camera, so like a gesture it moves
-    // whether or not everything else is held.
-    const blending = stepBlend(delta / GROW);
-    const shifted = stepShift(delta) || blending;
-    const homeward = stepHome(delta) || shifted;
+    const homeward = stepEases(delta);
     // Paused, a frame is a still: the head phase is drawn where it has got to and
     // the loop stops. That one frame is what puts a train on a track shown while
     // paused, which would otherwise sit unturned at the origin until play. Its delta
@@ -546,13 +575,27 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     // The camera is stepped first and independently: a pan outlives the phase that
     // asked for it, so the loop must not stop while one is still running.
     const panning = stepPan(delta) || homeward;
-    if (!queue.length) return panning ? undefined : false;
-    if (queue[0].advance(delta, now - phaseAt) === false) {
-      queue.shift().dispose?.();
-      phaseAt = now;
-      if (!queue.length) return panning ? undefined : false;
-    }
-    return undefined;
+    return (stepQueue(delta, now) || panning) ? undefined : false;
+  }
+
+  /**
+   * Step the blend, the reserved boxes' shifts and a reset's glide, and say whether
+   * any is still running. A reset is the reader's own hand on the camera, so like a
+   * gesture it moves whether or not everything else is held.
+   */
+  function stepEases(delta) {
+    const blending = stepBlend(delta / GROW);
+    const shifted = stepShift(delta) || blending;
+    return stepGlide(delta) || shifted;
+  }
+
+  /** Advance the head phase, moving on when it finishes, and say whether one is left. */
+  function stepQueue(delta, now) {
+    if (!queue.length) return false;
+    if (queue[0].advance(delta, now - phaseAt) !== false) return true;
+    queue.shift().dispose?.();
+    phaseAt = now;
+    return queue.length > 0;
   }
 
   // One draw at the end of every frame the loop runs, whatever that frame wrote.
@@ -561,6 +604,23 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     draw();
     return going;
   });
+
+  let visible = seen;
+
+  /** Run the loop, if the stage can be seen: it stops itself once nothing moves. */
+  function start() {
+    if (visible) loop.start();
+  }
+
+  /**
+   * Whether the stage can be seen. Hidden, the loop stops and nothing starts it;
+   * seen again, it starts, and carries on from where it stopped.
+   */
+  function setVisible(next) {
+    visible = Boolean(next);
+    if (visible) loop.start();
+    else loop.stop();
+  }
 
   /** The stage's own time: the loop's, less what was spent on paused frames. */
   const clock = () => loop.at() - lost;
@@ -903,6 +963,26 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     invalidate();
   }
 
+  /**
+   * Take everything down for good: the loop, any frame asked for, the cubes, every
+   * overlay, and the paints and geometry this stage made. The geometry shared by
+   * every stage on the page — the pieces', the trains' — is left for the others.
+   */
+  function dispose() {
+    disposed = true;
+    if (requested !== null) cancelAnimationFrame(requested);
+    requested = null;
+    clear();
+    setGrid(null);
+    setOrigin(null);
+    setGhosts([]);
+    setOrientations([]);
+    setFill([]);
+    setOutlines([]);
+    for (const material of Object.values(paint)) material.dispose();
+    cellGeometry.dispose();
+  }
+
   return {
     scene,
     camera,
@@ -923,13 +1003,15 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     zoom: () => applied().zoom,
     view,
     adjust,
+    nudge,
     reset,
     touched,
     run,
-    start: loop.start,
-    stop: loop.stop,
+    start,
+    setVisible,
     setPaused,
     clear,
+    dispose,
     setGrid,
     setOrigin,
     originTips,

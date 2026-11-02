@@ -4,15 +4,19 @@
 
 import { openScene } from './scenes.js';
 import { PIECES } from './catalogue.js';
-import { chainOpen } from '../../../src/track.js';
-import { routeOf } from '../../../src/layouts.js';
+import { chainOpen, countPieces } from '../../../src/track.js';
+import { LETTERS, routeOf } from '../../../src/layouts.js';
 
 // Sketch's limit, for the same reason: past anything the toy can build.
 export const LIMIT = 40;
-const LETTERS = PIECES.map(p => p.letter).join('');
 // The d-pad: forwards, left and right as the train sees them, since that is the
 // way the curves turn.
 const ARROWS = { ArrowUp: 'S', ArrowLeft: 'L', ArrowRight: 'R' };
+// The keys that are the builder's only while focus is in it, and what each does.
+const FOCUSED_KEYS = {
+  Backspace: { remove: true },
+  ...Object.fromEntries(Object.entries(ARROWS).map(([key, letter]) => [key, { add: letter }])),
+};
 
 /**
  * A starting shape as a builder will hold it: only the six letters, and stopped
@@ -57,12 +61,14 @@ export function removed(letters, startPose = 'DF') {
 
 /**
  * What a key does to a builder: a letter or an arrow adds a piece, Backspace takes
- * one off, and anything else — modified keys included — is not the builder's.
+ * one off, and anything else — modified keys included — is not the builder's. The
+ * letters are the builder's wherever focus is; the arrows and Backspace only while
+ * focus is in it (`focused`), since elsewhere they scroll the page and go back.
  */
-export function keyAction(event) {
+export function keyAction(event, focused) {
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
-  if (event.key === 'Backspace') return { remove: true };
-  const letter = ARROWS[event.key] ?? event.key.toUpperCase();
+  if (Object.hasOwn(FOCUSED_KEYS, event.key)) return focused ? { ...FOCUSED_KEYS[event.key] } : null;
+  const letter = event.key.toUpperCase();
   return letter.length === 1 && LETTERS.includes(letter) ? { add: letter } : null;
 }
 
@@ -73,18 +79,13 @@ export function keyAction(event) {
  */
 export function usedOf(letters, startPose = 'DF') {
   const { placed, faults } = chainOpen(routeOf(letters), startPose);
-  const down = faults.length ? placed.slice(0, faults[0].index) : placed;
-  const used = {};
-  for (const { type, revisit } of down) {
-    if (!revisit) used[type] = (used[type] ?? 0) + 1;
-  }
-  return used;
+  return countPieces(faults.length ? placed.slice(0, faults[0].index) : placed);
 }
 
 /** The letters of every piece type the letters have used all of the inventory's. */
 export function spentOut(letters, inventory, startPose = 'DF') {
   const used = usedOf(letters, startPose);
   return new Set(PIECES
-    .filter(p => (used[p.type] ?? 0) >= (inventory[p.type] ?? 0))
+    .filter(p => used[p.type] >= (inventory[p.type] ?? 0))
     .map(p => p.letter));
 }

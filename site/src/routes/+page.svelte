@@ -287,8 +287,11 @@
 		min-height: 0;
 	}
 
+	/* A panel takes focus from its tab; drawn inside it, which the page would clip. */
 	.app :global([data-tabs-content]:focus-visible) {
-		outline: none;
+		outline: 2px solid var(--grid-color);
+		outline-offset: -2px;
+		border-radius: 0.5rem;
 	}
 
 	.board {

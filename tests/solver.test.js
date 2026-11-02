@@ -12,12 +12,7 @@ import { transitionTable } from '../src/solver/transitions.js';
 import { enumerateLoops } from '../src/enumerate.js';
 import { POSES, PIECE_TYPES, startCell, step, chainTrack } from '../src/track.js';
 import { STARTER } from './fixtures.js';
-
-const LETTER = {
-  leftCurve: 'L', rightCurve: 'R', insideCurve: 'I',
-  outsideCurve: 'O', straight: 'S', cross: 'X',
-};
-const shape = route => route.map(t => LETTER[t]).join('');
+import { shapeOf as shape } from '../src/layouts.js';
 
 // ---- The transition table ------------------------------------------------
 
