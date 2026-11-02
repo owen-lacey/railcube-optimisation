@@ -63,8 +63,8 @@
 	<p>
 		Excessive repeats should also be avoided. They're a symptom of poor
 		craftsmanship, bailing the engineer out of suboptimal design decisions.
-		Two-in-a-row is OK for me because hairpin turns are cool, meaning we only
-		treat it as a repeat when it's in a repeated section of at least three.
+		Two-in-a-row is OK for me because hairpin turns are cool, so those are
+		free; every piece after that counts as a repeat, so seven in a row is five.
 	</p>
 	<TrackFigure
 		shape="LIIOILIOLOIIOIIXSSSSSSSRRSSSSSSRSXRL"

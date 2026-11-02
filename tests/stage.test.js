@@ -1155,7 +1155,7 @@ for (const [name, phaseOf] of Object.entries(HIGHLIGHTED)) {
     const [picked] = view.highlight.groups;
     assert.equal(view.highlight.groups.length, 1);
     assert.equal(picked.length, 13);
-    assert.deepEqual(view.notes.map(n => n.lines[0][0].text), ['7 in a row · 5 repeats', '6 in a row · 4 repeats']);
+    assert.deepEqual(view.notes.map(n => n.lines[0][0].text), ['7 in a row: 5 repeats (first 2 free)', '6 in a row: 4 repeats (first 2 free)']);
     stage.run([phaseOf(stage, view.pieces, { ...view.highlight, pulse: true })]);
     stage.start();
     clock.run(6);

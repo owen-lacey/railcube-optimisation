@@ -144,7 +144,7 @@ export function repeatsScene(letters) {
     notes: runs.map(run => ({
       key: `run ${run[0]}`,
       cell: trackCell(scene.pieces[run[Math.floor(run.length / 2)]]),
-      lines: [[{ text: `${run.length} in a row · ${run.length - 2} repeats` }]],
+      lines: [[{ text: `${run.length} in a row: ${run.length - 2} repeats (first 2 free)` }]],
     })),
   };
 }
