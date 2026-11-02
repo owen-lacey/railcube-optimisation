@@ -42,8 +42,12 @@
   /* While the splash or a stepped section is up the page is one screen tall, so
      its buttons and the arrows are the only ways on. The rest is clipped rather
      than the page's scrolling turned off, which would take pull-to-refresh with
-     it, and only downwards, so the splash can still reach the screen's edges. */
+     it, and only downwards, so the splash can still reach the screen's edges.
+     Positioned, so anything absolute inside it, such as a section's unseen
+     announcer, is placed against it and clipped too, rather than lengthening
+     the page from outside the clip. */
   main:has(> :global(:is(.splash, .stepped))) {
+    position: relative;
     height: 100svh;
     padding-bottom: 0;
     overflow: visible clip;
