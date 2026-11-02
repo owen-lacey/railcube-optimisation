@@ -29,8 +29,11 @@
 	// in, `'DF'` say; each null while there is no train.
 	let cube = $state(null);
 	let pose = $state(null);
-	// What each was before it last changed, so the callout can pick out what moved.
-	// Each is reported on its own, so each keeps its own.
+	// What each was on the piece before, so the callout can pick out what moved.
+	// The pose is reported only when it changes, so a new piece first takes the
+	// current pose as unchanged; the driver reports the piece before its pose, so a
+	// curve's onPose then records the turn. Otherwise a straight would still compare
+	// against the pose before the last curve, and read as a turn.
 	let was = $state({ cube: null, pose: null });
 
 	// The start cube is outlined as a step's start, in place of the origin's own
@@ -59,7 +62,7 @@
 			if (!held) at = i;
 		},
 		onPiece: (c) => {
-			was = { ...was, cube: c && cube };
+			was = { cube: c && cube, pose };
 			cube = c;
 		},
 		onPose: (p) => {
