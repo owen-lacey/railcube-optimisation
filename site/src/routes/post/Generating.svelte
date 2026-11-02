@@ -30,8 +30,9 @@
 			<TrackFigure shape={FIRST} scene={joinedScene} />
 		</li>
 		<li>
-			Perform this random selection many times, and pair up segments that, rotated
-			and joined, arrive back at the <PieceTag letter="X" /> for the first time in orientation
+			Perform this random selection many times, and pair up segments that,
+			rotated and joined, arrive back at the <PieceTag letter="X" /> for the first
+			time in orientation
 			<OrientationChip orientation={data.a.heading} />.
 			<MeetLoop loop="a" />
 		</li>
@@ -43,15 +44,16 @@
 		</li>
 		<li>
 			Finally, we need to check we're actually using the right number of
-			real-life pieces, so pick the second half of the track such that we're using
-			everything we have in the box.
+			real-life pieces, so pick the second half of the track such that we're
+			using everything we have in the box.
 			<MeetSpend />
 		</li>
 	</ol>
 	<p>
-		This approach is fairly brute force and exhaustive. It only finds a
-		valid train track for every ~500 segments it picks. Fortunately, my laptop doesn't
-		have feelings and it happily chewed away at this, giving me the 27 million or
-		so valid layouts I mentioned earlier.
+		This approach is the definition of brute force. It only finds a valid train
+		track for every ~500 segments it picks, so there's no way a rational human
+		would take this approach themselves. Fortunately, my laptop doesn't have
+		feelings and it happily chewed away at this, giving me the 27 million or so
+		valid layouts I mentioned earlier.
 	</p>
 </Chapter>

@@ -101,8 +101,8 @@
 			along the track. More is better.
 		</li>
 		<li>
-			<b>Repeats:</b> The number of times the train repeats a track piece more than
-			twice. Fewer is better.
+			<b>Repeats:</b> The number of pieces past the second in a run of the same
+			piece. Fewer is better.
 		</li>
 		<li>
 			<b>Knot:</b> Whether the layout ties itself in a knot (or knot – ha). This is
@@ -133,7 +133,9 @@
 		into one score, by putting our finger firmly in the air to create a formula
 		based on how much we care about each metric. For simplicity, I'm going with
 		a point for all metrics apart from knots, which get 10 because they're
-		awesome. Here are the top 100 when using that scoring mechanism:
+		awesome. Here are the top 100 when using that scoring mechanism. Remember,
+		these are the best of the 27 million or so layouts I've found, not the best
+		there are:
 	</p>
 
 	<ScoredRanking />

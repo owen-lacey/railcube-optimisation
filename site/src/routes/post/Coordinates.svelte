@@ -51,8 +51,8 @@
 	<p>
 		Within the cell, the train can face in four different directions on any of
 		the six faces. We call this the train's "orientation", which we write as (f
-		d), where f is the face of the cube the train lies on, and d is the direction
-		it's facing in, reusing our x y z coordinates, for example <OrientationChip
+		d), where f is the face of the cube the train lies on, and d is the
+		direction it's facing in, reusing our x y z coordinates, for example <OrientationChip
 			orientation="DF"
 		/>:
 	</p>
@@ -60,9 +60,9 @@
 	<PoseCycle />
 
 	<p>
-		Combining a train's position and an orientation gives us the "pose" the
-		following piece needs to take. Below is the effect each track piece has on
-		the train's pose for each possible orientation.
+		Together, the train's position and orientation make up its "pose", which is
+		where the next piece continues from. Below is the effect each track piece
+		has on the train's pose for each possible orientation.
 	</p>
 	<PoseStep />
 
