@@ -4,6 +4,10 @@ import adapter from '@sveltejs/adapter-static';
 export default {
   kit: {
     adapter: adapter(),
+    // owenlacey.dev serves the post under /railcube-optimisation/ by proxying
+    // this site, so every asset is loaded from here by absolute URL: a
+    // root-relative one would resolve against owenlacey.dev and 404.
+    paths: { assets: 'https://railcube.owenlacey.dev' },
     // The app's source lives in site/; the repo root's own src/ is the model.
     // Every `files` entry is set, including the ones with no file yet, so
     // nothing quietly defaults to a path inside the model.
