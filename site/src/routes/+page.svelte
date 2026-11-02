@@ -10,6 +10,10 @@
 	// render: a prerendered page has no query to read, and `replaceState` throws
 	// before then. A leaderboard link to another track is a navigation too.
 	//
+	// The leaderboard has two lists: the readers' submissions, from the Worker, and
+	// the model's own best thousand, from a file loaded the first time it is shown.
+	// `&list=model` keeps the second; `&id=` is a submission, so it opens the first.
+	//
 	// The challenge's briefing opens by itself on a reader's first visit, and from
 	// the header after that.
 	import { onMount } from "svelte";
@@ -22,6 +26,7 @@
 	import ScoreHistogram from "$lib/components/ScoreHistogram.svelte";
 	import ChallengeBriefing from "$lib/components/ChallengeBriefing.svelte";
 	import { standings, HISTOGRAM_FROM } from "$lib/leaderboard.js";
+	import { rankRows } from "$lib/ranks.js";
 
 	// The most rows the leaderboard tab lists: the Worker's cap.
 	const FULL = 100;
@@ -43,9 +48,12 @@
 	let shape = $state("");
 	let letters = $state("");
 	let tab = $state("builder");
+	let list = $state("submissions");
 	let picked = $state(null);
 	let board = $state(null);
 	let error = $state(null);
+	let model = $state(null);
+	let modelError = $state(null);
 	let routed = $state(false);
 	let briefing = $state(null);
 
@@ -65,6 +73,7 @@
 		shape = query.get("track") ?? "";
 		tab = query.get("tab") === "leaderboard" ? "leaderboard" : "builder";
 		picked = query.has("id") ? Number(query.get("id")) : null;
+		list = query.get("list") === "model" && picked === null ? "model" : "submissions";
 		routed = true;
 	});
 
@@ -76,13 +85,15 @@
 			value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
 		set("track", letters);
 		set("tab", tab === "leaderboard" ? tab : null);
-		set("id", tab === "leaderboard" && picked !== null ? String(picked) : null);
+		const shown = tab === "leaderboard" ? list : null;
+		set("list", shown === "model" ? shown : null);
+		set("id", shown === "submissions" && picked !== null ? String(picked) : null);
 		if (url.href !== location.href) replaceState(url, {});
 	});
 
-	// The board is fetched afresh each time its tab is shown.
+	// The submissions are fetched afresh each time their list is shown.
 	$effect(() => {
-		if (!routed || tab !== "leaderboard") return;
+		if (!routed || tab !== "leaderboard" || list !== "submissions") return;
 		const id = picked;
 		error = null;
 		standings(id, FULL)
@@ -94,10 +105,26 @@
 			});
 	});
 
+	// The model's list is fixed, so it is loaded once.
+	$effect(() => {
+		if (!routed || tab !== "leaderboard" || list !== "model" || model) return;
+		modelError = null;
+		import("$lib/data/sweep-crossed-top.json")
+			.then(({ default: top }) => {
+				model = { legal: top.legal, rows: rankRows(top.best) };
+			})
+			.catch((failure) => {
+				modelError = failure.message;
+			});
+	});
+
 	function results(id) {
 		picked = id;
+		list = "submissions";
 		tab = "leaderboard";
 	}
+
+	const count = (n) => n.toLocaleString("en-GB");
 </script>
 
 <svelte:head>
@@ -132,20 +159,45 @@
 		</Tabs.Content>
 		<Tabs.Content value="leaderboard">
 			<div class="board">
-				{#if error}
-					<p class="error" role="alert">{error}</p>
-				{:else if board}
-					{#if board.total >= HISTOGRAM_FROM}
-						<ScoreHistogram
-							counts={board.histogram}
-							score={board.entry?.score ?? null}
-							noun="tracks"
-						/>
-					{/if}
-					<Leaderboard standings={board} />
-				{:else}
-					<p class="quiet">Fetching the leaderboard…</p>
-				{/if}
+				<Tabs.Root bind:value={list}>
+					<Tabs.List>
+						<Tabs.Trigger value="submissions">Submissions</Tabs.Trigger>
+						<Tabs.Trigger value="model">Model</Tabs.Trigger>
+					</Tabs.List>
+					<Tabs.Content value="submissions">
+						{#if error}
+							<p class="error" role="alert">{error}</p>
+						{:else if board}
+							{#if board.total >= HISTOGRAM_FROM}
+								<ScoreHistogram
+									counts={board.histogram}
+									score={board.entry?.score ?? null}
+									noun="tracks"
+								/>
+							{/if}
+							<Leaderboard
+								rows={board.top}
+								entry={board.entry}
+								caption="{count(board.total)} {board.total === 1 ? 'track' : 'tracks'} submitted"
+							/>
+						{:else}
+							<p class="quiet">Fetching the leaderboard…</p>
+						{/if}
+					</Tabs.Content>
+					<Tabs.Content value="model">
+						{#if modelError}
+							<p class="error" role="alert">{modelError}</p>
+						{:else if model}
+							<Leaderboard
+								rows={model.rows}
+								entry={null}
+								caption="The model's top {count(model.rows.length)} of {count(model.legal)} solved layouts"
+							/>
+						{:else}
+							<p class="quiet">Loading the model's layouts…</p>
+						{/if}
+					</Tabs.Content>
+				</Tabs.Root>
 			</div>
 		</Tabs.Content>
 	</Tabs.Root>
@@ -233,6 +285,16 @@
 		max-width: 38rem;
 		margin: 0 auto;
 		overflow-y: auto;
+	}
+
+	/* The lists' tabs: a block in the board, not the page's full-height column. */
+	.board :global([data-tabs-root]) {
+		height: auto;
+	}
+
+	.board :global([data-tabs-list]) {
+		width: fit-content;
+		margin-bottom: 0.75rem;
 	}
 
 	.board :global(figure) {

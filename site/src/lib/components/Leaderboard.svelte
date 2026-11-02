@@ -1,25 +1,24 @@
 <script>
-  // The leaderboard's best rows, and the reader's own wherever it ranks: rank, name,
-  // score and the track, which opens in the front page's builder. A track whose
-  // builder never signed it is "Unnamed". Notes are never shown — the Worker does
-  // not serve them.
+  // A ranked list of tracks, and the reader's own wherever it ranks: rank, name,
+  // score and the track, which opens in the front page's builder. A row with no
+  // name is "Unnamed". Notes are never shown — the Worker does not serve them.
   import { base } from '$app/paths';
 
-  // `standings` is the Worker's `{ total, top, entry }`; `entry` is the reader's row.
-  let { standings } = $props();
+  // `rows` are `{ id, rank, name, score, shape }`, best first; `entry` is the
+  // reader's row or null.
+  let { rows, entry, caption } = $props();
 
-  const { total, top, entry } = $derived(standings);
-  const below = $derived(entry && !top.some(row => row.id === entry.id));
+  const below = $derived(entry && !rows.some(row => row.id === entry.id));
   const linkOf = shape => `${base}/?track=${shape}`;
 </script>
 
 <table>
-  <caption>{total.toLocaleString('en-GB')} {total === 1 ? 'track' : 'tracks'} submitted</caption>
+  <caption>{caption}</caption>
   <thead>
     <tr><th scope="col">Rank</th><th scope="col">Name</th><th scope="col">Score</th><th scope="col">Track</th></tr>
   </thead>
   <tbody>
-    {#each top as row (row.id)}
+    {#each rows as row (row.id)}
       {@render line(row)}
     {/each}
     {#if below}

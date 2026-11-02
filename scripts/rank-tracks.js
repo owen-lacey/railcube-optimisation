@@ -4,6 +4,15 @@
 //   node scripts/rank-tracks.js --seed 1 \
 //     --out site/src/lib/data/sweep-crossed-ranked.json [--count 10] [--db <path>]
 //
+// `--ends best` keeps the best end alone, for the front page's leaderboard of the
+// model's layouts:
+//
+//   node scripts/rank-tracks.js --seed 1 --count 1000 --ends best \
+//     --out site/src/lib/data/sweep-crossed-top.json
+//
+// The draw is per row in id order, so at one seed a longer best end starts with
+// the shorter one's rows.
+//
 // Every legal row of question 1 is scored the way the weighted tracks score it —
 // `scoreOf` in site/src/lib/weighting.js at its `WEIGHTS` — so the best here is
 // WeightedTracks' best at its default sliders. The top and bottom `--count` are
@@ -31,13 +40,16 @@ const { values: args } = parseArgs({
     seed: { type: 'string' },
     out: { type: 'string' },
     count: { type: 'string', default: '10' },
+    ends: { type: 'string', default: 'both' },
     db: { type: 'string', default: DB_PATH },
   },
 });
 const seed = Number(args.seed);
 const count = Number(args.count);
-if (!Number.isInteger(seed) || !args.out || !Number.isInteger(count) || count < 1) {
-  console.error('usage: node scripts/rank-tracks.js --seed <n> --out <file.json> [--count <n>] [--db <path>]');
+const both = args.ends === 'both';
+if (!Number.isInteger(seed) || !args.out || !Number.isInteger(count) || count < 1
+  || !['best', 'both'].includes(args.ends)) {
+  console.error('usage: node scripts/rank-tracks.js --seed <n> --out <file.json> [--count <n>] [--ends best|both] [--db <path>]');
   process.exit(2);
 }
 
@@ -56,7 +68,7 @@ function leaders(better) {
   return { offer, kept };
 }
 
-/** One read-only pass: the best and worst `count` legal, unmirrored rows. */
+/** One read-only pass: the best and (with both ends) worst `count` legal, unmirrored rows. */
 function rank(path) {
   const db = new Database(path, { readonly: true, fileMustExist: true });
   const question = JSON.parse(db.prepare('SELECT question FROM questions WHERE id = ?').get(QUESTION).question);
@@ -70,7 +82,7 @@ function rank(path) {
     if (r.mirrored === 1) continue;
     const entry = { row: r, score: scoreOf(weightingValuesOf(r), WEIGHTS), draw: next() };
     best.offer(entry);
-    worst.offer(entry);
+    if (both) worst.offer(entry);
   }
   db.close();
   return { question, legal, best: best.kept, worst: worst.kept };
@@ -85,18 +97,19 @@ const entry = ({ row, score: s }) => ({
 // One layout per line, as sample-sweep.js writes its shapes.
 const lines = list => ['[', ...list.map((e, i) => `    ${JSON.stringify(entry(e))}${i < list.length - 1 ? ',' : ''}`), '  ]'].join('\n');
 const body = JSON.stringify({
-  name: 'sweep-crossed-ranked',
+  name: both ? 'sweep-crossed-ranked' : 'sweep-crossed-top',
   generatedBy: 'scripts/rank-tracks.js',
   question,
   legal,
   seed,
   weights: WEIGHTS,
   best: [],
-  worst: [],
+  ...(both ? { worst: [] } : {}),
 }, null, 2)
   .replace('"best": []', () => `"best": ${lines(best)}`)
   .replace('"worst": []', () => `"worst": ${lines(worst)}`);
 mkdirSync(dirname(args.out), { recursive: true });
 writeFileSync(args.out, `${body}\n`);
-console.log(`ranked ${legal.toLocaleString('en-GB')} legal layouts: best ${best[0].score}, `
-  + `worst ${worst[0].score}; ${best.length + worst.length} re-derived. wrote ${args.out}`);
+const worstNote = both ? `, worst ${worst[0].score}` : '';
+console.log(`ranked ${legal.toLocaleString('en-GB')} legal layouts: best ${best[0].score}${worstNote}; `
+  + `${best.length + worst.length} re-derived. wrote ${args.out}`);

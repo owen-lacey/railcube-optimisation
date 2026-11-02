@@ -737,6 +737,13 @@ tab. Owen's calls, all of them:
   match). The board's histogram is the Worker's `GROUP BY score`, shown only from
   `HISTOGRAM_FROM` (10) submissions, the reader's own row taken out in the dialog.
 - Rank is one more than the rows scoring strictly higher; ties are listed earliest first.
+- **The tab has two lists**, Submissions (the Worker's) and Model, kept as `&list=model`;
+  `&id=` always opens Submissions. Model is the crossed sweep's best 1,000 at `WEIGHTS`,
+  `site/src/lib/data/sweep-crossed-top.json` (`rank-tracks.js --count 1000 --ends best`,
+  ~96 KB, loaded by dynamic `import()` on first show), ranked by `rankRows` in
+  `site/src/lib/ranks.js` with the Worker's tie rule. At one seed its first 100 are the
+  ranked file's `best`, which `tests/ranked-tracks.test.js` pins. No lookup carries its
+  knots, so `readingsOf(shape, knot)` takes the file's own.
 
 The front page passes `FillCard` as `TrackBuilder`'s `card`: `ExpandingCard`'s contract
 with no full-screen toggle or hand, always handled, filling the tab. The tabs are bits-ui's.
