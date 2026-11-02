@@ -43,22 +43,22 @@
 	<p>
 		Imagine our track was in a box divided into cells the size of a single <PieceTag
 			letter="S"
-		/> cube. After the train has travelled a track piece, it's resides upon a single
-		cell.
+		/> cube. After the train has travelled a track piece, it sits in a single cell,
+		on one of its faces.
 	</p>
 
 	<TrainCoordinates shape="SSSSLLIOOILL" readout="position" />
 	<p>
 		The position of the train is given by how many cubes away it is from the
 		starting <Highlight colour="grid-color">highlighted cube</Highlight>,
-		expressed in x, y and z. It's directional, so negative numbers means it's
-		going in the other direction that the arrows show.
+		expressed in x, y and z. It's directional, so negative numbers mean the
+		opposite direction to the arrows.
 	</p>
 
 	<p>
 		Within the cell, the train can face in four different directions on any of
-		the six faces. We call this the train's "orientation" and is expressed as (f
-		d) where f is the face of the cube the train lies on, and d is the direction
+		the six faces. We call this the train's "orientation", which we write as (f
+		d), where f is the face of the cube the train lies on, and d is the direction
 		it's facing in, reusing our x y z coordinates, for example <OrientationChip
 			orientation="DF"
 		/>:
@@ -115,7 +115,7 @@
 	<TrackSum a="SILISL" b="IL" />
 
 	<p>
-		For this to apply to our situation appropriately, we need to handle the <PieceTag
+		For this to apply to our situation, we need to handle the <PieceTag
 			letter="X"
 		/> piece appropriately: that is, the train needs to return to (0, 0, 0) but from
 		the <OrientationChip orientation="DL" /> orientation so it can cross over.
@@ -146,20 +146,20 @@
 			<TrackFigure shape={FIRST} scene={joinedScene} />
 		</li>
 		<li>
-			Perform this random selection many times, and pair up segments that would
-			finish when it meets the <PieceTag letter="X" /> for the first time at orientation
-			<OrientationChip orientation={data.a.heading} /> when rotated and joined together.
+			Perform this random selection many times, and pair up segments that, rotated
+			and joined, arrive back at the <PieceTag letter="X" /> for the first time in orientation
+			<OrientationChip orientation={data.a.heading} />.
 			<MeetLoop loop="a" />
 		</li>
 		<li>
-			We then do this for the other half of the figure of eight by combining
+			We then do this for the other half of the figure-of-eight by combining
 			segments that add up to <OrientationChip orientation={data.b.heading} /> when
 			exiting the <PieceTag letter="X" /> for the second time.
 			<MeetLoop loop="b" />
 		</li>
 		<li>
-			Finally, we need to check we're actually using the right number of real
-			life pieces, so pick the second half of the track such that we're using
+			Finally, we need to check we're actually using the right number of
+			real-life pieces, so pick the second half of the track such that we're using
 			everything we have in the box.
 			<MeetSpend />
 		</li>
@@ -167,7 +167,7 @@
 	<p>
 		This approach is fairly brute force and exhaustive. It only generates a
 		valid train track every ~50,000 attempts. Fortunately, my laptop doesn't
-		have feelings and it happily chewed away at this, making me over 27 million
-		valid layouts I mentioned earlier.
+		have feelings and it happily chewed away at this, giving me the 27 million or
+		so valid layouts I mentioned earlier.
 	</p>
 </Chapter>

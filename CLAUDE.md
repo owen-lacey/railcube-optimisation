@@ -957,9 +957,9 @@ the section and renders only its footer.
 
 `+page.svelte` is only the sequence: the splash, `Opening` (the first section; it hands the
 page its `StepSection` through a bindable `section`, for the zoom), `TitleZoom`, then one
-file per chapter (`Coordinates`, `TrackBuilding`, `Optimising`, `AuthorNotes`), each a
+file per chapter (`Coordinates`, `TrackBuilding`, `Optimising`, `Conclusion`), each a
 `Chapter` — a `<section>` with an id, carrying the post's prose typography. The prose in them
-is Owen's notes.md, word for word.
+is Owen's.
 
 **Two gates: the splash, then the opening's "All aboard!"** — Owen's calls. Chapter gates and
 later sections like the opening were removed as bad UX, so past the opening the post is plain

@@ -1,9 +1,6 @@
 <script>
 	// The post's opening, told over one viewer. Its first track is the title's O,
 	// which the page zooms into, so the section is the page's to hold and land.
-	//
-	// The prose is a straight transcription of notes.md — the wording is Owen's
-	// first draft and is not to be edited here.
 	import Highlight from "$lib/components/Highlight.svelte";
 	import KnownTracks from "$lib/components/KnownTracks.svelte";
 	import StepSection from "$lib/components/StepSection.svelte";
@@ -59,7 +56,7 @@
 
 {#snippet tiresome()}
 	<p>
-		In fact, I've got a bunch of these ready to use anytime my three year old
+		In fact, I've got a bunch of these ready to use any time my three-year-old
 		decrees that the existing structure is tiresome.
 	</p>
 	<p>
@@ -73,7 +70,7 @@
 
 {#snippet challenge()}
 	<p>
-		This one is my favourite so far, isn't it beautiful? I have formalised this
+		This one is my favourite so far. Isn't it beautiful? I have formalised this
 		affection in anticipation of someone improving on it. With 99.9% of layouts
 		unseen, I'm pretty confident there's a better one out there. Can you find
 		it?

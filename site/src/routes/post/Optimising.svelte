@@ -1,9 +1,6 @@
 <script>
 	// What makes a layout good, and how a model is told so. A good set and a bad
 	// set, and then the question of which is preferred.
-	//
-	// The prose is a straight transcription of notes.md — the wording is Owen's
-	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
 	import Challenge from "$lib/components/Challenge.svelte";
 	import PoseTracker from "$lib/components/PoseTracker.svelte";
@@ -33,7 +30,7 @@
 	<RankedTracks end="worst" />
 
 	<p>
-		What do you prefer, the first set or the second? The first set, right? If
+		Which do you prefer, the first set or the second? The first set, right? If
 		you prefer the latter, I can't help you. From here on I'll assume you're a
 		rational person and prefer the former like me. Good? Good.
 	</p>
@@ -48,15 +45,15 @@
 	<p>
 		I like that it's so compact; it's surely more difficult to create a track
 		that fits in a box of this size. Jamming it in a smaller box also has a
-		knock on effect where it's more likely for a train to have a close call by
+		knock-on effect where it's more likely for a train to have a close call by
 		riding next to another piece of track and narrowly missing it.
 	</p>
 	<p>
 		It would also be underwhelming if the train stayed largely face up. One of
 		the selling points of the Rail Cube is that it can ride on walls and go
-		upside down, we must please the creators and cover as many of the 24
-		orientations as we can. You can only change orientation with curved pieces
-		i.e <PieceTag letter="L" />, <PieceTag letter="R" />, <PieceTag
+		upside down. We must please the creators and cover as many of the 24
+		orientations as we can. You can only change orientation with curved pieces,
+		i.e. <PieceTag letter="L" />, <PieceTag letter="R" />, <PieceTag
 			letter="I"
 		/>, or <PieceTag letter="O" />. The maximum achievable orientation count is
 		20, since our inventory only contains 20 of those pieces. The below track
@@ -79,7 +76,7 @@
 		a roller coaster and it goes inside one of its inversions, like <a
 			href="https://www.altontowers.com/explore/theme-park/rides-attractions/the-smiler/"
 			target="_blank">The Smiler</a
-		> at Alton Towers. A layout that ties itself in knots gets bonus points in my
+		> at Alton Towers? A layout that ties itself in knots gets bonus points in my
 		book.
 	</p>
 	<TrackFigure shape="ILIOIXIRSISSRISSSOSRRSOXSLLISSLSSOSI" scene={knotScene} />
@@ -108,11 +105,11 @@
 			twice. Fewer is better.
 		</li>
 		<li>
-			<b>Knot:</b> Whether the layout ties itself in a knot (or knot - ha). This is
+			<b>Knot:</b> Whether the layout ties itself in a knot (or knot – ha). This is
 			a true or false measure. Just one knot is enough to excite me.
 		</li>
 	</ul>
-	<p>All of below layouts perform well on these five metrics:</p>
+	<p>All of the layouts below perform well on these five metrics:</p>
 	<ScoredTrack end="best" />
 
 	<p>
@@ -125,15 +122,15 @@
 	<p>
 		There might be some additional things you care about, perhaps time spent
 		upside down is pleasing to you. The real magic happens when you combine
-		different objectives into something combined you can optimise for. The
+		different objectives into one you can optimise for. The
 		metrics on their own don't always guarantee a banger:
 	</p>
 
 	<SingleMetrics />
 
 	<p>
-		To get the layouts that perform well on all fronts we take a combined score
-		of each metric, by putting our finger firmly in the air to create a formula
+		To get the layouts that perform well on all fronts, we combine the metrics
+		into one score, by putting our finger firmly in the air to create a formula
 		based on how much we care about each metric. For simplicity, I'm going with
 		a point for all metrics apart from knots, which get 10 because they're
 		awesome. Here are the top 100 when using that scoring mechanism:

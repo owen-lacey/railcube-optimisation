@@ -1,9 +1,6 @@
 <script>
 	// The rules a track must keep. Three broken tracks, and then the rules they
 	// break.
-	//
-	// The prose is a straight transcription of notes.md — the wording is Owen's
-	// first draft and is not to be edited here.
 	import Chapter from "./Chapter.svelte";
 	import PieceTag from "$lib/components/PieceTag.svelte";
 	import OrientationChip from "$lib/components/OrientationChip.svelte";
@@ -14,7 +11,7 @@
 <Chapter id="track-building">
 	<p>
 		"Valid, you say?" Yes. Admittedly, the above approach doesn't protect you
-		against any potential lawsuits when your two halves of the figure-of-eights
+		against any potential lawsuits when the two halves of your figure-of-eight
 		smash into each other, so let's talk about what makes a track valid.
 	</p>
 
@@ -28,7 +25,7 @@
 	<TrackFigure shape="SSISLILISS" />
 
 	<p>
-		Albeit intuitive, we need to express these rules in our coordinate system so
+		Albeit intuitive, these rules need expressing in our coordinate system so
 		that our generator creates valid tracks:
 	</p>
 	<ol>
@@ -39,7 +36,7 @@
 		</li>
 		<li>
 			<b>Track collisions:</b>
-			No two track pieces can share share the same (x,y,z) cell.
+			No two track pieces can share the same (x,y,z) cell.
 		</li>
 		<li>
 			<b>Train collisions:</b> No track piece can occupy the same cell as the train
@@ -47,7 +44,7 @@
 		</li>
 	</ol>
 	<p>
-		The latter is the hardest to generalise because it depends on the floor of
+		The last is the hardest to generalise because it depends on the floor of
 		the orientation: if a track piece's floor is −z then we must protect
 		(x,y,z+1), if it's +z then avoid (x,y,z−1), and so on. I said at the start
 		that leaving pieces in the box is also a deal-breaker, but that's just
@@ -55,14 +52,14 @@
 	</p>
 	<p>
 		Each time the model generates a complete track, it checks for track and
-		train collisions, keeping record only of the ones that don't cause
+		train collisions, keeping a record of only the ones that don't cause
 		fatalities.
 	</p>
 	<p>
 		All of this so far has been very boring and diligent, but necessary. I
 		forgive you for wondering when we're gonna make all those sick layouts we
 		saw at the start. We now have everything we need to build a valid Rail Cube
-		track that avoids most lawsuits, and can start optimising for aforementioned
+		track that avoids most lawsuits, and can start optimising for the aforementioned
 		awesomeness.
 	</p>
 </Chapter>
