@@ -37,7 +37,7 @@
 	<Tooltip.Provider delayDuration={200}>
 		<Tooltip.Root bind:open disableCloseOnTriggerClick>
 			<Tooltip.Trigger
-				class="orientation-chip"
+				class="prose-chip"
 				onpointerdown={(event) => {
 					tapped = event.pointerType === "touch";
 					wasOpen = open;
@@ -72,26 +72,7 @@
 		display: inline-flex;
 	}
 
-	/* Sized to the line it sits in, so the spacing between lines never changes. */
-	:global(.orientation-chip) {
-		padding: 0 0.45em;
-		border: 2px solid var(--card-border);
-		border-radius: 999px;
-		background: transparent;
-		color: inherit;
-		font: inherit;
-		font-size: 0.85em;
-		font-weight: 600;
-		line-height: 1.25;
-		white-space: nowrap;
-		cursor: default;
-	}
-
-	:global(.orientation-chip:focus-visible) {
-		outline: 2px solid currentColor;
-		outline-offset: 2px;
-	}
-
+	/* The chip itself is `.prose-chip`, in app.css. */
 	.orientation-tooltip {
 		display: flex;
 		flex-direction: column;

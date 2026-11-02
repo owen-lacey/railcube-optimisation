@@ -12,6 +12,7 @@
 	import {
 		PIECES,
 		describePose,
+		formatPosition,
 		poseLabel,
 		readerFrame,
 		trackCell
@@ -39,7 +40,7 @@
 	const scene = $derived(pieceMove(active, { pose }));
 	const camera = $derived({ ...scene.camera, zoom: scene.camera.zoom * ROOM });
 	const readout = (head) => [
-		[{ text: `Position: (${readerFrame(trackCell(head)).join(", ")})` }],
+		[{ text: `Position: ${formatPosition(readerFrame(trackCell(head)))}` }],
 		[{ text: `Orientation: (${poseLabel(head.pose)})` }]
 	];
 	const notes = $derived(

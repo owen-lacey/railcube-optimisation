@@ -4,7 +4,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { POSES, isValidPose, startCell, step } from "../src/track.js";
-import { describeDelta, describeMove, describePose, trackCell } from "../site/src/lib/catalogue.js";
+import {
+	describeDelta,
+	describeMove,
+	describePose,
+	formatPosition,
+	formatRelative,
+	poseReadout,
+	signed,
+	trackCell
+} from "../site/src/lib/catalogue.js";
 import { pieceMove, poseCycle, poseGhost } from "../site/src/lib/scenes.js";
 
 // Where the next piece goes, with Owen's convention of digits and upwards/downwards.
@@ -64,6 +73,23 @@ test("a move is written as the change from (x, y, z), in the reader's frame", ()
 	assert.equal(describeDelta(start, after("rightCurve")), "(x − 2, y + 1, z)");
 	assert.equal(describeDelta(start, after("insideCurve")), "(x, y, z + 1)");
 	assert.equal(describeDelta(start, after("outsideCurve")), "(x, y + 1, z − 2)");
+});
+
+test("a position is written with a true minus and a space after each comma", () => {
+	assert.equal(signed(-3), "−3");
+	assert.equal(signed(0), "0");
+	assert.equal(signed(4), "4");
+	assert.equal(formatPosition([2, -3, -2]), "(2, −3, −2)");
+	assert.equal(formatPosition([0, 0, 0]), "(0, 0, 0)");
+	assert.equal(formatRelative([0, 0, 0]), "(x, y, z)");
+	assert.equal(formatRelative([0, 0, 1]), "(x, y, z + 1)");
+	assert.equal(formatRelative([0, 0, -1]), "(x, y, z − 1)");
+});
+
+test("a callout's position is written the way the prose writes it", () => {
+	const head = step(startCell("DF"), "DF", "rightCurve");
+	const line = poseReadout(head)[0].map((part) => part.text).join("");
+	assert.equal(line, "Position: (−2, 1, 0)");
 });
 
 test("from every pose, the lattice is exactly the piece and the cube it hands on, and the move is the model's", () => {

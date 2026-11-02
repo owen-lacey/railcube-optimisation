@@ -173,6 +173,22 @@ export const describeTrack = (letters) =>
  */
 export const readerFrame = ([right, up, forwards]) => [0 - right, forwards, up];
 
+/** A coordinate as the post writes it, with a true minus: `-3` is `"−3"`. */
+export const signed = (n) => (n < 0 ? `−${-n}` : String(n));
+
+/** A position in the reader's frame as the post writes it: `"(−3, 4, 0)"`. */
+export const formatPosition = (values) => `(${values.map(signed).join(", ")})`;
+
+/**
+ * A position given as offsets from `(x, y, z)` in the reader's frame, as the post
+ * writes it: `[2, 1, 0]` is `"(x + 2, y + 1, z)"`, and `[0, 0, -1]` `"(x, y, z − 1)"`.
+ */
+export const formatRelative = (offsets) => {
+	const term = (name, n) =>
+		n === 0 ? name : `${name} ${n > 0 ? "+" : "−"} ${Math.abs(n)}`;
+	return `(${["x", "y", "z"].map((name, a) => term(name, offsets[a])).join(", ")})`;
+};
+
 /** A callout's line: `label: (a, b, c)`, each value marked if it differs from `was`'s. */
 const calloutLine = (label, values, was, gap) => [
 	{ text: `${label}: (` },
@@ -191,7 +207,7 @@ const calloutLine = (label, values, was, gap) => [
  */
 export const trackCell = ({ cell, pose }) => cubeOf(cell, pose);
 
-const position = (head) => readerFrame(trackCell(head)).map(String);
+const position = (head) => readerFrame(trackCell(head)).map(signed);
 
 /**
  * A pose as a callout's two lines, the track's position and the orientation, for
@@ -213,7 +229,7 @@ export const poseReadout = (head, was = null) => [
  * `{ cube, pose }` each null where there was none, marked as changed.
  */
 export const cubeReadout = (cube, pose = null, was = { cube: null, pose: null }) => [
-	calloutLine("Position", readerFrame(cube).map(String), was.cube && readerFrame(was.cube).map(String), ", "),
+	calloutLine("Position", readerFrame(cube).map(signed), was.cube && readerFrame(was.cube).map(signed), ", "),
 	...(pose ? [calloutLine("Orientation", poseAxes(pose), was.pose && poseAxes(was.pose), " ")] : [])
 ];
 
@@ -221,9 +237,5 @@ export const cubeReadout = (cube, pose = null, was = { cube: null, pose: null })
  * Where `to` is from `from`, written as `from` were `(x, y, z)` in the reader's
  * frame: two cubes left and one forwards is `(x + 2, y + 1, z)`.
  */
-export function describeDelta(from, to) {
-	const d = readerFrame(to.map((v, a) => v - from[a]));
-	const term = (name, n) =>
-		n === 0 ? name : `${name} ${n > 0 ? "+" : "−"} ${Math.abs(n)}`;
-	return `(${["x", "y", "z"].map((name, a) => term(name, d[a])).join(", ")})`;
-}
+export const describeDelta = (from, to) =>
+	formatRelative(readerFrame(to.map((v, a) => v - from[a])));

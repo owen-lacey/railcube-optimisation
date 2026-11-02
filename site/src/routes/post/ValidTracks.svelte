@@ -3,6 +3,7 @@
 	// break.
 	import Chapter from "./Chapter.svelte";
 	import OrientationChip from "$lib/components/OrientationChip.svelte";
+	import PositionChip from "$lib/components/PositionChip.svelte";
 	import TrackFigure from "$lib/components/TrackFigure.svelte";
 </script>
 
@@ -30,13 +31,13 @@
 	</p>
 	<ol>
 		<li>
-			<b>Completeness:</b> The final track piece should enter (0,0,0), facing <OrientationChip
+			<b>Completeness:</b> The final track piece should enter <PositionChip at={[0, 0, 0]} />, facing <OrientationChip
 				orientation="DF"
 			/>.
 		</li>
 		<li>
 			<b>Track collisions:</b>
-			No two track pieces can share the same (x,y,z) cell.
+			No two track pieces can share the same <PositionChip relative={[0, 0, 0]} /> cell.
 		</li>
 		<li>
 			<b>Train collisions:</b> No track piece can occupy the same cell as the train
@@ -46,7 +47,9 @@
 	<p>
 		The last is the hardest to generalise because it depends on the floor of
 		the orientation: if a track piece's floor is −z then we must protect
-		(x,y,z+1), if it's +z then avoid (x,y,z−1), and so on. I said at the start
+		<PositionChip relative={[0, 0, 1]} />, if it's +z then avoid <PositionChip
+			relative={[0, 0, -1]}
+		/>, and so on. I said at the start
 		that leaving pieces in the box is also a deal-breaker, but that's just
 		because my parents raised me right.
 	</p>
