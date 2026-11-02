@@ -13,7 +13,8 @@
     }
   ],
   "vars": {
-    // The pages allowed to call it: the deployed post, the dev server and Storybook.
-    "ALLOWED_ORIGINS": "https://railcube.owenlacey.dev,http://localhost:5173,http://localhost:6006"
+    // The pages allowed to call it: the deployed site, the post as owenlacey.dev
+    // serves it, the dev server and Storybook.
+    "ALLOWED_ORIGINS": "https://railcube.owenlacey.dev,https://owenlacey.dev,http://localhost:5173,http://localhost:6006"
   }
 }

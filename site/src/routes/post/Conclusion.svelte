@@ -24,6 +24,6 @@
 	</p>
 	<p>
 		Fear not, that wasn't your only opportunity to make a Rail Cube layout. You
-		can always come back <a href="/">here</a> later to build one.
+		can always come back <a href="https://railcube.owenlacey.dev/">here</a> later to build one.
 	</p>
 </Chapter>
