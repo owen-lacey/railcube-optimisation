@@ -27,7 +27,7 @@ import { movePhase, turnPhase, MOVE, TURN } from '../site/src/lib/render/move.js
 import { fadeInPhase, fadeOutPhase, overlayFadePhase, changingFadePhase, FADE_IN, FADE_OUT } from '../site/src/lib/render/fade.js';
 import { tumblePhase } from '../site/src/lib/render/tumble.js';
 import { buildPhase, growPhase, trackPhase, PACE, FLIGHT } from '../site/src/lib/render/build.js';
-import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene, repeatsScene, knotScene, frameFit, cornersOf } from '../site/src/lib/scenes.js';
+import { paint, boundsOf, extentOf, fixedFrame, openScene, cubeIds, REACH, sceneFromRoute, apartScene, joinedScene, layoutScene, repeatsScene, knotScene, frameFit, cornersOf, axesScene } from '../site/src/lib/scenes.js';
 import { poseReadout, trackCell } from '../site/src/lib/catalogue.js';
 import { ALARM_PERIOD, ALARM_SWELL, GRID_W, AXIS_HEAD_W, TRAIN_CELL_INSET, CUBE, RAIL } from '../site/src/lib/render/dimensions.js';
 import { gridLines, cellBox } from '../site/src/lib/render/grid.js';
@@ -614,24 +614,46 @@ test('a held train\'s cube is outlined on the lattice, one mesh moved, and goes 
   assert.equal(mark.disposed, true, 'the outline outlived its train');
 });
 
-test('a held train reports the pose it enters its piece in', () => {
+// The pose a piece is left in is the next piece's own, which is the pose it is entered in.
+const leftIn = pieces => pieces.map((_, i) => pieces[(i + 1) % pieces.length].pose);
+
+test('a held train reports the pose it leaves its piece in', () => {
   const clock = fakeClock();
   const reported = [];
   const { stage } = staged({ onTrainPose: pose => reported.push(pose) });
   for (const shape of [SET, 'XSLLLSXSRRRS']) {
     const pieces = piecesOf(shape);
+    const poses = leftIn(pieces);
     let held = 0;
     stage.run([trackPhase(stage, pieces, { trainAt: () => held })]);
     stage.start();
-    for (const [i, { pose }] of pieces.entries()) {
+    for (const i of pieces.keys()) {
       held = i;
       clock.run(0.05);
-      assert.equal(reported.at(-1), pose, `${shape} piece ${i}`);
+      assert.equal(reported.at(-1), poses[i], `${shape} piece ${i}`);
     }
   }
 });
 
-test('a driven train reports the pose of each piece it enters, in route order, once each', () => {
+test('a held train never reports a new pose on a straight', () => {
+  const clock = fakeClock();
+  const reported = [];
+  const { stage } = staged({ onTrainPose: pose => reported.push(pose) });
+  // Starts on a straight that follows a curve once the loop wraps round.
+  const pieces = piecesOf('SSSSLLIOOILL');
+  let held = pieces.length - 1;
+  stage.run([trackPhase(stage, pieces, { trainAt: () => held })]);
+  stage.start();
+  clock.run(0.05);
+  for (const [i, { type }] of pieces.entries()) {
+    const before = reported.at(-1);
+    held = i;
+    clock.run(0.05);
+    if (type === 'straight') assert.equal(reported.at(-1), before, `piece ${i}`);
+  }
+});
+
+test('a driven train reports the pose it leaves each piece in, in route order, once each', () => {
   const clock = fakeClock();
   const reported = [];
   const { stage } = staged({ onTrainPose: pose => reported.push(pose) });
@@ -646,7 +668,8 @@ test('a driven train reports the pose of each piece it enters, in route order, o
   assert.equal(reported.includes(null), false, 'the train was reported gone while running');
   // Route order, laps on end, with a pose a piece shares with the one before it said once.
   const laps = Math.ceil(poses.length / pieces.length) + 1;
-  const route = Array.from({ length: laps * pieces.length }, (_, i) => pieces[i % pieces.length].pose)
+  const left = leftIn(pieces);
+  const route = Array.from({ length: laps * pieces.length }, (_, i) => left[i % pieces.length])
     .filter((pose, i, all) => i === 0 || pose !== all[i - 1]);
   assert.deepEqual(poses, route.slice(0, poses.length));
 
@@ -1995,6 +2018,23 @@ test('from the default angle, the z label sits below the box on screen, not over
     (i >> a) & 1 ? box.hi[a] + 0.5 : box.lo[a] - 0.5)));
   const letter = CUBE / 2;   // room for the glyph above its spot
   assert.ok(height(z) + letter < Math.min(...corners.map(height)), 'the z label overlaps the box');
+});
+
+test('axesScene stands its arrows left of the box on screen, adding no height to the shot', () => {
+  const { origin } = axesScene('SSSSLLIOOILL');
+  const anchor = axisAnchor(origin);
+  const { right, up } = screenAxes(CAMERA);
+  const on = p => [new Vector3(...p).dot(right), new Vector3(...p).dot(up)];
+  const box = cornersOf(origin).map(on);
+  const left = Math.min(...box.map(([x]) => x));
+  const [low, high] = [Math.min(...box.map(([, y]) => y)), Math.max(...box.map(([, y]) => y))];
+  const letter = CUBE / 2;   // room for the glyph beside its spot
+  const tips = labelSpots(origin.size).map(({ name, position }) => ({ name, at: on(position.map((v, a) => v + anchor[a])) }));
+  for (const { name, at: [x, y] } of [{ name: 'corner', at: on(anchor) }, ...tips]) {
+    assert.ok(x + letter < left, `${name} reaches the box`);
+    assert.ok(y >= low && y <= high, `${name} is above or below the box`);
+  }
+  assert.throws(() => axisAnchor({ ...origin, corner: 'far' }), /no axis corner/);
 });
 
 test('the train cell\'s fill is six outward faces, clear of the lattice\'s lines', () => {

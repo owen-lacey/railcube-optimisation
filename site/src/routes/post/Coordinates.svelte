@@ -165,8 +165,8 @@
 		</li>
 	</ol>
 	<p>
-		This approach is fairly brute force and exhaustive. It only generates a
-		valid train track every ~50,000 attempts. Fortunately, my laptop doesn't
+		This approach is fairly brute force and exhaustive. It only finds a
+		valid train track for every ~500 segments it picks. Fortunately, my laptop doesn't
 		have feelings and it happily chewed away at this, giving me the 27 million or
 		so valid layouts I mentioned earlier.
 	</p>

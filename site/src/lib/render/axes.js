@@ -92,12 +92,28 @@ export const labelSpots = (size = 1) => AXES.map(([name, k]) => {
 });
 
 /**
- * Where the arrows' corner goes, in world units: `gap` cells (`AXIS_GAP` unless given) outside the
- * lattice box's outer corner (high x, low y and z), so the arrows run alongside the box and
- * never through the track. `box` is `{ lo, hi }` in the model's frame.
+ * The lattice box's corners the arrows can stand at, as model cells `gap` outside
+ * them. 'near' is the corner nearest the camera from the default angle (reader's
+ * low x, y and z), stood off on all three axes, so the arrows hang below the box on
+ * screen. 'left' is the box's left-hand corner on screen (reader's high x, low y and
+ * z), stood off along x and y alike, which is straight left on screen, so the arrows
+ * stand beside the box at its floor. The y arrow points right, back towards the box,
+ * so the gap must carry its label clear of the box's left edge.
  */
-export const axisAnchor = ({ lo, hi }, gap = AXIS_GAP) =>
-  toWorld([hi[0] + 0.5 + gap, lo[1] - 0.5 - gap, lo[2] - 0.5 - gap]);
+const CORNERS = {
+  near: ({ lo, hi }, gap) => [hi[0] + 0.5 + gap, lo[1] - 0.5 - gap, lo[2] - 0.5 - gap],
+  left: ({ lo }, gap) => [lo[0] - 0.5 - gap, lo[1] - 0.5, lo[2] - 0.5 - gap],
+};
+
+/**
+ * Where the arrows' corner goes, in world units: `gap` cells (`AXIS_GAP` unless given)
+ * outside one of the lattice box's `CORNERS` ('near' unless given), so the arrows run
+ * alongside the box and never through the track. `lo` and `hi` are in the model's frame.
+ */
+export function axisAnchor({ lo, hi, gap = AXIS_GAP, corner = 'near' }) {
+  if (!(corner in CORNERS)) throw new Error(`no axis corner '${corner}'`);
+  return toWorld(CORNERS[corner]({ lo, hi }, gap));
+}
 
 /** The origin cell's outline, in world units about the cell whose centre is `[0, 0, 0]`. */
 export const originCell = () => cellEdges(ORIGIN_W);

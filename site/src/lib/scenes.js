@@ -356,16 +356,35 @@ export function cellScene(letters) {
 }
 
 /**
- * `cellScene` with the origin's axis arrows at the lattice's low corner. They stand
- * outside the box, so the frame reaches them too — the arrows' corner, and each
- * label, which is past each tip.
+ * `axesScene`'s arrows, as a fraction of the post's usual, and how far left of the
+ * lattice they stand, in cells: the y arrow points back at the box, and any closer
+ * puts its label on the lattice.
+ */
+const BESIDE_ARROWS = 0.6;
+const BESIDE_GAP = 1.25;
+
+/**
+ * `cellScene` with the origin's axis arrows beside the lattice, at its left-hand
+ * corner on screen. Beside rather than under it: the box is wider on screen than
+ * tall, so arrows below it cost the frame height, and height is what binds. They
+ * stand outside the box, so the frame reaches them too — the arrows' corner, and
+ * each label, which is past each tip. A label is centred on its spot, so the frame
+ * takes in `LABEL_ROOM` round it: framed on the spot alone, a phone's shot, slid
+ * left clear of the toolbar, put half the x beyond the viewer's edge.
  */
 export function axesScene(letters) {
   const scene = cellScene(letters);
-  const anchor = axisAnchor(scene.grid);
-  const labels = labelSpots().map(({ position }) => position.map((v, a) => v + anchor[a]));
-  return { ...scene, origin: scene.grid, camera: frameFit([...cornersOf(scene.grid), anchor, ...labels]) };
+  const origin = { ...scene.grid, size: BESIDE_ARROWS, gap: BESIDE_GAP, corner: 'left' };
+  const anchor = axisAnchor(origin);
+  const labels = labelSpots(BESIDE_ARROWS).flatMap(({ position }) => roomRound(position.map((v, a) => v + anchor[a])));
+  return { ...scene, origin, camera: frameFit([...cornersOf(scene.grid), anchor, ...labels]) };
 }
+
+/** Room for a label's letter round its spot, in world units: half a cube each way. */
+const LABEL_ROOM = CUBE / 2;
+
+/** The eight corners of a cube `LABEL_ROOM` either side of `spot`, in world units. */
+const roomRound = spot => [0, 1, 2, 3, 4, 5, 6, 7].map(k => spot.map((v, a) => v + ((k >> a) & 1 ? LABEL_ROOM : -LABEL_ROOM)));
 
 /**
  * `cellScene` with the lattice's three side lengths written beside its edges.
@@ -494,8 +513,9 @@ export function sketchBox(pieces, floor = SKETCH_FLOOR) {
  * `origin` as `TrackViewer` takes it. The arrows stand outside the lattice, so a
  * frame of the track alone would crop them.
  */
-export function withAxes(box, { lo, hi, size, gap }) {
-  const anchor = axisAnchor({ lo, hi }, gap);
+export function withAxes(box, origin) {
+  const anchor = axisAnchor(origin);
+  const { size } = origin;
   const cells = [anchor, ...labelSpots(size).map(({ position }) => add(position, anchor))].map(toCell);
   return unionBox(box, boundsOf([{ material: cells }]));
 }
@@ -703,7 +723,7 @@ const CYCLE_GAP = 0.6;
  */
 export function poseCycle() {
   const grid = { lo: [0, 0, 0], hi: [0, 0, 0] };
-  const anchor = axisAnchor(grid, CYCLE_GAP);
+  const anchor = axisAnchor({ ...grid, gap: CYCLE_GAP });
   const labels = labelSpots(CYCLE_ARROWS).map(({ position }) => position.map((v, a) => v + anchor[a]));
   return {
     pieces: [],

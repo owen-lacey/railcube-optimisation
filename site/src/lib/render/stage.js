@@ -660,8 +660,8 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
     origin = [];
     tips = [];
     if (!box) return;
-    const { cell = true, size = 1, gap } = box;
-    const anchor = axisAnchor(box, gap);
+    const { cell = true, size = 1 } = box;
+    const anchor = axisAnchor(box);
     origin = [
       ...(cell ? [fixedMesh(soupGeometry(originCell()), paint.origin, { name: OVERLAY.origin })] : []),
       fixedMesh(soupGeometry(axisArrows(size)), paint.origin, { name: OVERLAY.origin, at: anchor }),
@@ -786,7 +786,7 @@ export function createStage(canvas, { theme, renderer = sharedRenderer, onTrainC
   let trainPose = null;   // the pose last reported, or null when there is no train
 
   /**
-   * The pose of the piece the train last entered, or `null` when it has gone. Only
+   * The pose the train will leave its piece in, or `null` when it has gone. Only
    * reported: a pose exists between pieces, so there is nothing to draw mid-piece.
    */
   function markTrainPose(pose) {

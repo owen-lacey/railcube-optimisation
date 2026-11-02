@@ -11,8 +11,8 @@
 	let {
 		shape,
 		// What the callout reads out: 'position', the cube of the piece the train is
-		// on, `(x, y, z)` from the start cube; or 'position-pose', that and the pose
-		// it entered the piece in.
+		// on, `(x, y, z)` from the start cube; or 'position-pose', that and the
+		// orientation it leaves the piece in, so a turn shows on the curve that makes it.
 		readout = "position",
 		// Letters → scene: `axesScene` draws the origin's axes beside the lattice,
 		// `cellScene` the lattice alone. Both in scenes.js.
@@ -25,7 +25,7 @@
 	let at = $state(0);
 	let held = $state(true);
 	// The cube of the piece the train is on, the model's `[right, up, forwards]`
-	// from the start cube (docs/coordinates.md), and the pose it entered that piece
+	// from the start cube (docs/coordinates.md), and the pose it leaves that piece
 	// in, `'DF'` say; each null while there is no train.
 	let cube = $state(null);
 	let pose = $state(null);

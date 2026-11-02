@@ -68,7 +68,7 @@
     //   onAt(i)    told the piece it has driven onto. Both redraw only — see `trackPhase`.
     //   onPiece(c) told the cube of the piece it is on, `[x, y, z]`, each time it
     //              moves onto a new one, and null when it goes. A held train only.
-    //   onPose(p)  told the pose of the piece it last entered, `'DF'` say, each time it
+    //   onPose(p)  told the pose it will leave its piece in, `'DF'` say, each time it
     //              changes, and null when it goes.
     train = null,
     // Handling: `(host, stage) => ({ destroy })`, attached at mount, or null for a
@@ -82,7 +82,7 @@
     blueprint = false,
     // Outline the origin cell and stand the axis arrows (x right, y forwards, z up)
     // at this box's corner, `{ lo, hi }`; null draws neither. `cell: false` leaves out
-    // the outline, `size` scales the arrows and `gap` sets how far outside the box they start. See `render/axes.js`.
+    // the outline, `size` scales the arrows, `gap` sets how far outside the box they start and `corner` which corner of it, 'near' or 'left'. See `render/axes.js`.
     origin = null,
     // A box of cells, `{ lo, hi }`, whose three side lengths are written beside its
     // edges; null writes none. See `render/lengths.js`.
@@ -849,7 +849,7 @@
 
   let originKey = null;
   function showOrigin() {
-    const key = origin ? `${origin.lo}|${origin.hi}|${origin.cell}|${origin.size}|${origin.gap}` : null;
+    const key = origin ? `${origin.lo}|${origin.hi}|${origin.cell}|${origin.size}|${origin.gap}|${origin.corner}` : null;
     if (key === originKey) return;
     stage.setOrigin(origin);
     originKey = key;

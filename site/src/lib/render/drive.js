@@ -57,7 +57,7 @@ export function createDriver(stage, { byPiece = false } = {}) {
   let path = [], gaps = [], lap = 0;
   let entries = [];          // how far along the lap each piece begins, in route order
   let cubes = [];            // each piece's cube, where it is on the track
-  let poses = [];            // and its pose then
+  let poses = [];            // and the pose it leaves that piece in
   let per = 0;               // rail samples per piece
   let k = 0, travelled = 0;  // travelled = distance to the start of sample k
 
@@ -85,7 +85,9 @@ export function createDriver(stage, { byPiece = false } = {}) {
     per = path.length / pieces.length;
     entries = pieces.map((_, i) => gaps.slice(0, i * per).reduce((a, b) => a + b, 0));
     cubes = pieces.map(piece => cubeOf(piece.cell, piece.pose));
-    poses = pieces.map(piece => piece.pose);
+    // A piece's own pose is the one it is entered in, so the one it is left in is
+    // the next piece's. The train only runs on a closed loop, so the last wraps.
+    poses = pieces.map((_, i) => pieces[(i + 1) % pieces.length].pose);
     k = 0; travelled = 0; // the cursor indexed the old path; it means nothing now
   }
 
@@ -97,8 +99,8 @@ export function createDriver(stage, { byPiece = false } = {}) {
     if (!lap) return null;   // no track yet, so nowhere to put a train
     const d = (entries[from % entries.length] + seconds * SPEED) % lap;
     const body = place(d);
-    // The pose is the last piece entered's: `place` leaves the cursor on the
-    // current sample, and every piece has `per` of them.
+    // Which piece: `place` leaves the cursor on the current sample, and every
+    // piece has `per` of them.
     const piece = Math.floor(k / per);
     // The lattice cell is the one the body is in, not the wheels: the body is what
     // is seen, and it rides clear of the cube, in the cell the model books as train.
