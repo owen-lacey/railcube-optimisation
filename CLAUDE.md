@@ -972,8 +972,7 @@ there now. One fixed layout, row 7932037, read from its X as `X·seg₁·seg₂�
 **segment** is the code's *half*, a **loop** its *lobe* (Owen's names, for the figure and its
 prose). `scripts/meet-figure.js` writes `site/src/lib/data/meet-figure.json` — the segments and
 seeded decoys for both loops' trials and for the inventory match — and
-`tests/meet-figure.test.js` re-derives every claim in it. The decisions and the session log are
-in `meet-figure-plan.md`.
+`tests/meet-figure.test.js` re-derives every claim in it.
 
 - Steps 3–5 auto-play a `BEATS`-style table on one timer, every beat a `move`; the ✓/✗ is a
   callout's `mark` (steps 3–4) or `InventorySlots`' (step 5, a reserved top-left `overlay`).
