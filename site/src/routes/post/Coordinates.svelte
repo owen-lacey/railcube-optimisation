@@ -38,7 +38,7 @@
 	<PieceMoves />
 	<p>
 		These are relative movements, and our building blocks for how we'll keep
-		track of the train's cell in the track.
+		track of the train's position.
 	</p>
 	<p>
 		Imagine our track was in a box divided into cells the size of a single <PieceTag
@@ -130,7 +130,7 @@
 	</p>
 	<TrackSum a="XSRRRSXSL" b="LLS" />
 
-	<p>The model I made to generate these layouts takes a similar approach:</p>
+	<p>We now know enough to describe how the model works:</p>
 	<ol>
 		<li>
 			Pick a handful of pieces from the box at random and join them together,
@@ -167,7 +167,7 @@
 	<p>
 		This approach is fairly brute force and exhaustive. It only generates a
 		valid train track every ~50,000 attempts. Fortunately, my laptop doesn't
-		have feelings and it happily chewed away at this, making me over 20 million
-		valid layouts.
+		have feelings and it happily chewed away at this, making me over 27 million
+		valid layouts I mentioned earlier.
 	</p>
 </Chapter>
