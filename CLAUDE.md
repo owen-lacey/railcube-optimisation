@@ -964,6 +964,33 @@ rendered, and the page is held to the opening's one screen as it is to the splas
 in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, fades (`FADE`,
 0.4 s) and then `onopen` — at once under reduced motion.
 
+### The meet-in-the-middle figure: `MeetFigure`
+
+How `meet.py` makes a crossed layout, stepped through in the Coordinates chapter, where it
+replaced the numbered list (Owen's call): its five captions are the list, so the wording lives
+there now. One fixed layout, row 7932037, read from its X as `X·seg₁·seg₂·X·seg₃·seg₄`; a
+**segment** is the code's *half*, a **loop** its *lobe* (Owen's names, for the figure and its
+prose). `scripts/meet-figure.js` writes `site/src/lib/data/meet-figure.json` — the segments and
+seeded decoys for both loops' trials and for the inventory match — and
+`tests/meet-figure.test.js` re-derives every claim in it. The decisions and the session log are
+in `meet-figure-plan.md`.
+
+- Steps 3–5 auto-play a `BEATS`-style table on one timer, every beat a `move`; the ✓/✗ is a
+  callout's `mark` (steps 3–4) or `InventorySlots`' (step 5, a reserved top-left `overlay`).
+  Forwards plays a trial from the start, back lands on its ✓, reduced motion goes straight to it.
+- **Square on a phone**, 16/10 otherwise, as `TrackBuilder`: at 16/10 and 390px the step-5
+  panel (338 × 184, its names wrapping) covered the whole 346 × 216 canvas.
+- **A reserved box as wide as the viewer** leaves no room beside it, and `clearOfButtons` used
+  to divide by that zero-width frame: the region came out NaN, `bandFor` never preferred
+  anything over a NaN fit, and nothing was drawn. A frameless region now has scale 0, so the
+  band under wins (`tests/controls.test.js`).
+- **A mark is kept inside the viewer with its callout.** It hangs off the callout's left edge,
+  so `calloutsFor` clamps by the callout's width plus the mark's, and re-places once a new mark
+  is drawn and has a width. Before, a callout near the left edge of a phone's viewer had its ✓
+  cut off.
+- In dev, `/post?nointro` skips the splash and the opening, which is the way to drive the
+  chapter figures over CDP.
+
 ### The title: `Splash`
 
 A screen-filling title spelled in letters Owen built from track and saved from the

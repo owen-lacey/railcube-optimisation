@@ -17,6 +17,7 @@
 	import TrackSum from "$lib/components/TrackSum.svelte";
 	import TrackRotate from "$lib/components/TrackRotate.svelte";
 	import TrackJoin from "$lib/components/TrackJoin.svelte";
+	import MeetFigure from "$lib/components/MeetFigure.svelte";
 </script>
 
 <Chapter id="coordinates">
@@ -127,29 +128,7 @@
 	<TrackSum a="XSRRRSXSL" b="LLS" />
 
 	<p>The model I made to generate these layouts does exactly this:</p>
-	<ol>
-		<li>Pick a handful of pieces from the box at random.</li>
-		<li>
-			Join them together to make a track segment, making note of their finishing
-			pose.
-		</li>
-		<li>
-			Do this many times, and pair up segments that would finish when it meets
-			the <PieceTag letter="X" /> for the first time at orientation <OrientationChip
-				orientation="DL"
-			/>.
-		</li>
-		<li>
-			Similarly, do this again with segments that add up to <OrientationChip
-				orientation="DR"
-			/>, giving the
-			other half of the figure-of-eight.
-		</li>
-		<li>
-			We then have a bunch of halves. Pair these up based on the inventory they
-			use. When combined, they must use every piece in the box.
-		</li>
-	</ol>
+	<MeetFigure />
 	<p>
 		This approach is fairly brute force and exhaustive. It only generates a
 		valid train track every ~50,000 attempts. Fortunately, my laptop doesn't

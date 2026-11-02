@@ -5,6 +5,7 @@
 	// step's segment is the next one's. A figure — see `$lib/figure.js`.
 	import ChevronLeft from "@lucide/svelte/icons/chevron-left";
 	import ChevronRight from "@lucide/svelte/icons/chevron-right";
+	import { onMount } from "svelte";
 	import Frame from "./Frame.svelte";
 	import GateButton from "./GateButton.svelte";
 	import InventorySlots from "./InventorySlots.svelte";
@@ -18,7 +19,21 @@
 
 	// `camera` is how the trials are shot: 'follow' frames each picture on its own and
 	// pans between them, 'fixed' holds one shot over every candidate in every picture.
-	let { aspect = "16 / 10", camera = "follow" } = $props();
+	// Square on a phone, 16/10 otherwise, unless `aspect` is given: the last step's
+	// inventory would otherwise cover a phone's whole viewer.
+	let { aspect = undefined, camera = "follow" } = $props();
+
+	let narrow = $state(false);
+	onMount(() => {
+		const query = window.matchMedia("(max-width: 600px)");
+		const update = () => {
+			narrow = query.matches;
+		};
+		update();
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
+	});
+	const shapeOfViewer = $derived(aspect ?? (narrow ? "1 / 1" : "16 / 10"));
 
 	const [first, second] = data.a.segments;
 	const [third, last] = data.b.segments;
@@ -205,7 +220,7 @@
 	{view}
 	centre={at === 0 && !picked ? pick : undefined}
 	overlay={used ? inventory : undefined}
-	{aspect}
+	aspect={shapeOfViewer}
 >
 	{#snippet footer()}
 		<div class="steps">
