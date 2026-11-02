@@ -58,21 +58,21 @@ test("the pose cycle stands the train in one cell in every pose, floor by floor"
 });
 
 test("a pose is worded as its face and heading, each with its axis", () => {
-	assert.equal(describePose("DF"), "down face (−z), heading forwards (+y)");
-	assert.equal(describePose("UR"), "up face (+z), heading right (−x)");
-	assert.equal(describePose("BD"), "back face (−y), heading down (−z)");
-	assert.equal(describePose("LU"), "left face (+x), heading up (+z)");
+	assert.equal(describePose("DF"), "down face (−z), heading forwards (+x)");
+	assert.equal(describePose("UR"), "up face (+z), heading right (−y)");
+	assert.equal(describePose("BD"), "back face (−x), heading down (−z)");
+	assert.equal(describePose("LU"), "left face (+y), heading up (+z)");
 });
 
 test("a move is written as the change from (x, y, z), in the reader's frame", () => {
 	const start = startCell("DF");
 	const after = (type) => step(start, "DF", type).cell;
 	assert.equal(describeDelta(start, start), "(x, y, z)");
-	// Two left and one forwards: x is left and y forwards.
-	assert.equal(describeDelta(start, after("leftCurve")), "(x + 2, y + 1, z)");
-	assert.equal(describeDelta(start, after("rightCurve")), "(x − 2, y + 1, z)");
+	// Two left and one forwards: x is forwards and y left.
+	assert.equal(describeDelta(start, after("leftCurve")), "(x + 1, y + 2, z)");
+	assert.equal(describeDelta(start, after("rightCurve")), "(x + 1, y − 2, z)");
 	assert.equal(describeDelta(start, after("insideCurve")), "(x, y, z + 1)");
-	assert.equal(describeDelta(start, after("outsideCurve")), "(x, y + 1, z − 2)");
+	assert.equal(describeDelta(start, after("outsideCurve")), "(x + 1, y, z − 2)");
 });
 
 test("a position is written with a true minus and a space after each comma", () => {
@@ -89,7 +89,7 @@ test("a position is written with a true minus and a space after each comma", () 
 test("a callout's position is written the way the prose writes it", () => {
 	const head = step(startCell("DF"), "DF", "rightCurve");
 	const line = poseReadout(head)[0].map((part) => part.text).join("");
-	assert.equal(line, "Position: (−2, 1, 0)");
+	assert.equal(line, "Position: (1, −2, 0)");
 });
 
 test("from every pose, the lattice is exactly the piece and the cube it hands on, and the move is the model's", () => {

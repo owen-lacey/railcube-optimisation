@@ -1,6 +1,6 @@
 # Orientation chip
 
-A chip in the post's prose that stands in for a hand-typed orientation, "(−z +y)", and shows a
+A chip in the post's prose that stands in for a hand-typed orientation, "(−z +x)", and shows a
 picture of it on hover or tap. Agreed with Owen and built, 26 October 2026.
 
 **Why.** A reader's feedback on `/post`: the "−x z etc axis descriptions are very dry… it did make
@@ -13,14 +13,14 @@ one colour, the pieces leave almost no hues free, and colour does not remove the
 - **`OrientationChip.svelte`** in `site/src/lib/components/`, used as
   `<OrientationChip orientation="DF" />`. The name and the prop are the prose term, not the code's
   "pose". The value is the usual two-letter code, floor then heading.
-- **The chip** is a pill reading `poseLabel(orientation)` ("−z +y"), styled like `PoseChip`:
+- **The chip** is a pill reading `poseLabel(orientation)` ("−z +x"), styled like `PoseChip`:
   `--card-border` border, 999px radius, weight 600. It sits inline in a sentence.
 - **Behaviour is `PoseChip`'s**: a bits-ui `Tooltip` that opens on hover and keyboard focus; a tap
   toggles it; a tap elsewhere, a scroll or Escape closes it. Not portalled, `strategy="fixed"`,
   `collisionPadding={8}`, `side="top"`, for the same reason as `PoseChip` (a full-screen
   `ExpandingCard` is a modal dialog). It brings its own `Tooltip.Provider`, since prose has none.
 - **The popover** holds the glyph, then the orientation in words with each axis inline:
-  "down face (−z), heading forwards (+y)".
+  "down face (−z), heading forwards (+x)".
 - **It is wrapped in an `inline-flex` span**, because bits-ui's tooltip markup leaves a
   whitespace text node beside the trigger while open, which in a sentence is a space before
   the punctuation; a flex box draws no whitespace-only text.
@@ -28,7 +28,7 @@ one colour, the pieces leave almost no hues free, and colour does not remove the
 ## The wording
 
 `describePose` in `site/src/lib/catalogue.js` changes to the popover's form, "down face (−z),
-heading forwards (+y)", so an orientation is put into words one way everywhere: `PoseChip`'s
+heading forwards (+x)", so an orientation is put into words one way everywhere: `PoseChip`'s
 tooltip, the `PoseCycle` and `OrientationStepper` captions, and the `PoseStep` and `PoseBuilder`
 labels. `tests/moves.test.js` pins the wording and changes with it.
 
@@ -52,7 +52,8 @@ labels. `tests/moves.test.js` pins the wording and changes with it.
 
 ## Where chips go
 
-Each replaces its brackets: "facing (−z +y)" becomes "facing [−z +y]".
+Each replaces its brackets: "facing (−z +y)" becomes "facing [−z +y]". (These are in the old
+reader axes, x left, y forwards; the frame is now x forwards, y left, so `DF` reads "−z +x".)
 
 | Where | Now | Chip |
 |---|---|---|

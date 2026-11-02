@@ -1,6 +1,6 @@
 <script>
-	// A position as a chip in a line of prose, in the reader's frame (x left,
-	// y forwards, z up), written as the figures' callouts write it: a true minus
+	// A position as a chip in a line of prose, in the reader's frame (x forwards,
+	// y left, z up), written as the figures' callouts write it: a true minus
 	// and a space after each comma. The same pill as `OrientationChip`, so a
 	// position and an orientation side by side read as a pair.
 	//

@@ -93,7 +93,7 @@
     // Draw the viewer on a sheet of dots that follows the camera's zoom and pan, so
     // its edges are plain to see. See `render/blueprint.js`.
     blueprint = false,
-    // Outline the origin cell and stand the axis arrows (x right, y forwards, z up)
+    // Outline the origin cell and stand the axis arrows (x forwards, y left, z up)
     // at this box's corner, `{ lo, hi }`; null draws neither. `cell: false` leaves out
     // the outline, `size` scales the arrows, `gap` sets how far outside the box they start and `corner` which corner of it, 'near' or 'left'. See `render/axes.js`.
     origin = null,

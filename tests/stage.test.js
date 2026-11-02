@@ -2045,33 +2045,40 @@ test('each axis label is projected to where its spot lands on the canvas', () =>
   assert.deepEqual(tips.map(t => t.name), ['x', 'y', 'z']);
 
   // Up is up the screen: the z label stands above the other two, and the reader's
-  // x (left) is left of their y (forwards, away up and to the right).
+  // y (left) is left of their x (forwards, away up and to the right).
   const [x, y, z] = tips;
   assert.ok(z.y < Math.min(x.y, y.y), 'the z label is not the highest');
-  assert.ok(x.x < y.x, 'x is not to the left of y');
+  assert.ok(y.x < x.x, 'y is not to the left of x');
   for (const { x: px, y: py } of tips) {
     assert.ok(px > 100 && px < 1000 && py > 50 && py < 750, `a label is off the canvas at ${px}, ${py}`);
   }
 });
 
-test('the arrows stand outside the box\'s corner and reach left, forwards and up, in the reader\'s frame', () => {
+test('the arrows stand outside the box\'s corner and reach forwards, left and up, in the reader\'s frame', () => {
   const polys = axisArrows();
   assert.ok(polys.every(p => p.vertices.length >= 3 && p.vertices.flat().every(Number.isFinite)));
-  // The world is X right, Y forwards, Z up; the reader's x is left, so it runs toward -X.
+  // The world is X right, Y forwards, Z up. The reader's x is forwards, so it runs
+  // along world Y; their y is left, so it runs toward -X; z is world Z.
   const dirs = [-1, 1, 1];
+  const world = { x: 1, y: 0, z: 2 };
   const along = k => polys.flatMap(p => p.vertices.map(v => v[k] * dirs[k]));
   for (const k of [0, 1, 2]) {
     assert.ok(Math.abs(Math.min(...along(k))) <= AXIS_HEAD_W * CUBE * Math.SQRT2 + 1, `axis ${k} does not start at the corner`);
     assert.ok(Math.max(...along(k)) >= CUBE * 1.5, `axis ${k} is too short to read`);
   }
   // Each label sits past its own arrow's tip, on its own axis.
-  for (const [k, { name, position }] of labelSpots().entries()) {
-    assert.equal(name, 'xyz'[k]);
+  const spots = labelSpots();
+  assert.deepEqual(spots.map(({ name }) => name), ['x', 'y', 'z']);
+  for (const { name, position } of spots) {
+    const k = world[name];
     assert.ok(position[k] * dirs[k] > Math.max(...along(k)) - 1, `${name}'s label is not past its tip`);
     for (const other of [0, 1, 2].filter(o => o !== k)) {
       assert.ok(Math.abs(position[other]) < 1e-9, `${name}'s label is off its axis`);
     }
   }
+  // The reader's frame is right-handed: x × y points along z.
+  const [x, y, z] = spots.map(({ position }) => new Vector3(...position).normalize());
+  assert.ok(x.clone().cross(y).distanceTo(z) < 1e-9, 'the reader\'s frame is not right-handed');
   // Clear of the box: the anchor is outside its high x corner and its low y and z ones.
   const [ax, ay, az] = axisAnchor({ lo: [0, 0, 0], hi: [3, 3, 3] });
   assert.ok(ax > 3.5 * CUBE && ay < -CUBE / 2 && az < -CUBE / 2, 'the arrows start inside the box');

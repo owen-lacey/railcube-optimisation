@@ -137,16 +137,16 @@ const HEADING_WORD = {
 	B: "backwards"
 };
 
-// The reader's axes (docs/coordinates.md): x left, y forwards, z up.
-const AXIS = { L: "+x", R: "−x", F: "+y", B: "−y", U: "+z", D: "−z" };
+// The reader's axes (docs/coordinates.md): x forwards, y left, z up.
+const AXIS = { F: "+x", B: "−x", L: "+y", R: "−y", U: "+z", D: "−z" };
 
-/** A pose's floor and heading as the post writes them: `DF` is `['−z', '+y']`. */
+/** A pose's floor and heading as the post writes them: `DF` is `['−z', '+x']`. */
 export const poseAxes = (pose) => [AXIS[pose[0]], AXIS[pose[1]]];
 
-/** A pose as the post writes it: `DF` is floor −z, heading +y, "−z +y". */
+/** A pose as the post writes it: `DF` is floor −z, heading +x, "−z +x". */
 export const poseLabel = (pose) => poseAxes(pose).join(" ");
 
-/** A pose as the post words it: `DL` is "down face (−z), heading left (+x)". */
+/** A pose as the post words it: `DL` is "down face (−z), heading left (+y)". */
 export const describePose = (pose) => {
 	const [face, heading] = poseAxes(pose);
 	return `${FACE_WORD[pose[0]]} face (${face}), heading ${HEADING_WORD[pose[1]]} (${heading})`;
@@ -168,15 +168,15 @@ export const describeTrack = (letters) =>
 // ---- A position, in the reader's frame --------------------------------------
 
 /**
- * The model's cell is [right, up, forwards]; the post's axes are x left, y
- * forwards, z up (docs/coordinates.md): the last two swap and x is negated.
+ * The model's cell is [right, up, forwards]; the post's axes are x forwards, y
+ * left, z up (docs/coordinates.md): forwards is x, right negated is y, up is z.
  */
-export const readerFrame = ([right, up, forwards]) => [0 - right, forwards, up];
+export const readerFrame = ([right, up, forwards]) => [forwards, 0 - right, up];
 
 /** A coordinate as the post writes it, with a true minus: `-3` is `"−3"`. */
 export const signed = (n) => (n < 0 ? `−${-n}` : String(n));
 
-/** A position in the reader's frame as the post writes it: `"(−3, 4, 0)"`. */
+/** A position in the reader's frame as the post writes it: `"(4, −3, 0)"`. */
 export const formatPosition = (values) => `(${values.map(signed).join(", ")})`;
 
 /**
@@ -235,7 +235,7 @@ export const cubeReadout = (cube, pose = null, was = { cube: null, pose: null })
 
 /**
  * Where `to` is from `from`, written as `from` were `(x, y, z)` in the reader's
- * frame: two cubes left and one forwards is `(x + 2, y + 1, z)`.
+ * frame: two cubes left and one forwards is `(x + 1, y + 2, z)`.
  */
 export const describeDelta = (from, to) =>
 	formatRelative(readerFrame(to.map((v, a) => v - from[a])));

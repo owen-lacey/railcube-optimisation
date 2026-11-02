@@ -1,9 +1,9 @@
 // The axes the post's coordinates are written in, drawn as three labelled arrows.
 //
-// The reader's frame is x = left, y = forwards, z = up (docs/coordinates.md). The
-// model's own is y = up, z = forwards, so everything here is built in the reader's
-// frame and sent through `toWorld` at the last moment, by swapping the last two
-// axes and negating x on the way in — the one place the two frames meet in the renderer.
+// The reader's frame is x = forwards, y = left, z = up (docs/coordinates.md). The
+// model's own is [right, up, forwards], so everything here is built in the reader's
+// frame and sent through `toWorld` at the last moment, as [−y, z, x] — the one place
+// the two frames meet in the renderer.
 //
 // The origin cell is outlined where it is. The arrows are not at it: the start cube
 // fills the cell and the track winds round it, so arrows there are lost in the
@@ -21,8 +21,8 @@ import { CUBE, AXIS_W, AXIS_LENGTH, AXIS_HEAD, AXIS_HEAD_W, AXIS_LABEL, AXIS_GAP
 import { cellEdges } from './grid.js';
 import { toWorld, cross, add, sub, unit, windToward } from './vec.js';
 
-/** A point in the reader's frame (x left, y forwards, z up), in cells, as world units. */
-const at = ([x, y, z]) => toWorld([-x, z, y]);
+/** A point in the reader's frame (x forwards, y left, z up), in cells, as world units. */
+const at = ([x, y, z]) => toWorld([-y, z, x]);
 
 const scale = (v, s) => v.map(c => c * s);
 
@@ -95,9 +95,9 @@ export const labelSpots = (size = 1) => AXES.map(([name, k]) => {
  * The lattice box's corners the arrows can stand at, as model cells `gap` outside
  * them. 'near' is the corner nearest the camera from the default angle (reader's
  * low x, y and z), stood off on all three axes, so the arrows hang below the box on
- * screen. 'left' is the box's left-hand corner on screen (reader's high x, low y and
- * z), stood off along x and y alike, which is straight left on screen, so the arrows
- * stand beside the box at its floor. The y arrow points right, back towards the box,
+ * screen. 'left' is the box's left-hand corner on screen (reader's low x, high y and
+ * low z), stood off along x and y alike, which is straight left on screen, so the arrows
+ * stand beside the box at its floor. The x arrow points right, back towards the box,
  * so the gap must carry its label clear of the box's left edge.
  */
 const CORNERS = {

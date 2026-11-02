@@ -9,7 +9,7 @@ Optimising track layouts for **Rail Cube**, a children's magnetic monorail toy: 
 ## Ground rules
 
 - **This is a learning exercise for Owen.** Do not prescribe the modelling or build ahead of his direction. Answer what's asked, flag genuine contradictions or knock-on effects, and let him drive the design decisions.
-- **Directions are ±x, ±y, ±z** (Owen relaxed the old "never x/y/z" rule): the post's axes are **x left, y forwards, z up** (`docs/coordinates.md`; the model's own frame stays (right, up, forwards)). Plain words (up, left, forwards…) are fine in prose where they read better. The frame is **fixed from the viewer's perspective** (not train-relative), matching the isometric layout used for visualisations.
+- **Directions are ±x, ±y, ±z** (Owen relaxed the old "never x/y/z" rule): the post's axes are **x forwards, y left, z up**, right-handed (`docs/coordinates.md`; the model's own frame stays (right, up, forwards)). Plain words (up, left, forwards…) are fine in prose where they read better. The frame is **fixed from the viewer's perspective** (not train-relative), matching the isometric layout used for visualisations.
 - **Three terms, Owen's call.** A **cell** is where the train is, (right, up, forwards). An **orientation** is how it stands in that cell — floor + heading, 24 of them (`DF`). A **pose** is a cell and an orientation together. Use them in all prose. Code identifiers (`pose`, `poseLetters`, `POSES`, `PoseChip`…) predate this and still say "pose" for an orientation; renaming them is a separate job, so a code name saying "pose" means the orientation. Full definitions in `docs/coordinates.md`.
 
 ## Known hard constraints

@@ -24,9 +24,9 @@
 		Here, the final position of each group is given relative to the origin cube.
 		Now that the second group continues with the same orientation that the first
 		finishes on, we can add up their positions to get the combined pose. To be
-		explicit, adding a track that finishes at <PositionChip at={[2, -3, -2]} /> to a track finishing
-		at <PositionChip at={[-3, 4, 0]} /> gives a combined track that finishes at <PositionChip
-			at={[-1, 1, -2]}
+		explicit, adding a track that finishes at <PositionChip at={[-3, 2, -2]} /> to a track finishing
+		at <PositionChip at={[4, -3, 0]} /> gives a combined track that finishes at <PositionChip
+			at={[1, -1, -2]}
 		/> so long as
 		they share the same orientation at the join.
 	</p>

@@ -353,7 +353,7 @@ export function cellScene(letters) {
 
 /**
  * `axesScene`'s arrows, as a fraction of the post's usual, and how far left of the
- * lattice they stand, in cells: the y arrow points back at the box, and any closer
+ * lattice they stand, in cells: the x arrow points back at the box, and any closer
  * puts its label on the lattice.
  */
 const BESIDE_ARROWS = 0.6;

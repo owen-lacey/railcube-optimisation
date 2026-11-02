@@ -1,7 +1,7 @@
 <script>
 	// The 24 poses: one see-through cell with the train in it, stepped from one
 	// pose to the next by hand, in the order the model lists them, wrapping both ways.
-	// It starts on DF, the canonical orientation (−z +y): nothing in the post moves
+	// It starts on DF, the canonical orientation (−z +x): nothing in the post moves
 	// until it is asked to.
 	import ChevronLeft from "@lucide/svelte/icons/chevron-left";
 	import ChevronRight from "@lucide/svelte/icons/chevron-right";

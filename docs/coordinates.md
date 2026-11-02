@@ -53,15 +53,19 @@ on top of it, (0, 1, 0).
 
 ## The reader's axes
 
-The post writes cells as (x, y, z) with **x left, y forwards, z up**. Viewed
-from the default camera (forwards up and away to the right), x then grows away from
-the reader too, which is why it was chosen. The cost: with z up this is a
-*left-handed* frame, so it is not the maths/CAD convention. The model's own frame
-above (x right, y up, z forwards) is unchanged; what the reader sees negates x and
-swaps the last two. The viewer's `origin` option outlines the origin cell and stands
+The post writes cells as (x, y, z) with **x forwards, y left, z up**. Viewed
+from the default camera, x runs up and away to the right and y up and away to the
+left, so both flat axes grow away from the reader, and with z up the frame is
+*right-handed* (x × y = z), the maths/CAD convention. It replaced x left, y forwards,
+whose x arrow pointed up and to the left and whose frame was left-handed. The model's
+own frame above (x right, y up, z forwards) is unchanged; the reader's is
+(forwards, −right, up) of it (`readerFrame` in `site/src/lib/catalogue.js`, and its
+inverse `at` in `render/axes.js`). The viewer's `origin` option outlines the origin cell and stands
 three arrows just outside the lattice's outer corner, clear of the track
 (`render/axes.js`), with x, y and z as text beside their tips; the train-cell caption
-is written in this frame, so a cell one to the right of the start reads x = -1.
+is written in this frame, so a cell one to the right of the start reads y = −1.
+Orientations are written in it too: F +x, B −x, L +y, R −y, U +z, D −z, so `DF` is
+"−z +x".
 
 ## Faces
 
@@ -196,9 +200,11 @@ formula in the two, with ′ for the opposite direction and × for the cross pro
 | Inside curve | (h, f′) | the wall ahead becomes the floor; head away from the old floor |
 | Outside curve | (h′, f) | the floor goes behind; head where the floor was |
 
-Checked against `step` on all 24 orientations, in the model's frame and in the reader's
-axes alike, computing × by components. (The reader's frame is left-handed, so there
-the components follow a left-hand rule, not the right-hand one; don't mix the two.)
+Checked against `step` on all 24 orientations, in the model's frame, computing × by
+components. The model's frame is left-handed, so × here is the left-hand rule. In the
+reader's axes, which are right-handed, the usual component formula gives the other
+side: there f × h is the train's right, and the left curve is (f, h × f). Don't mix the
+two.
 
 On the six axis directions × needs no arithmetic: round in order gives the next axis
 (x × y = z, y × z = x, z × x = y), backwards gives its opposite, an axis with itself

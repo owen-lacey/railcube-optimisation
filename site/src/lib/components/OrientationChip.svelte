@@ -1,5 +1,5 @@
 <script>
-	// An orientation as a chip in a line of prose: its two axes, "−z +y", with a
+	// An orientation as a chip in a line of prose: its two axes, "−z +x", with a
 	// picture of it and the orientation in words as its tooltip. The pictures are
 	// saved from the `Orientation snapshot` story, one per orientation.
 	//
