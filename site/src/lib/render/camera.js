@@ -142,7 +142,8 @@ function clearOfButtons(region, buttons, choice, width, height) {
     else if (box.edge === 'top-right') top = Math.max(top, box.height);
     else bottom = Math.min(bottom, height - box.height);
   }
-  const scale = Math.max(0, Math.min(1, (right - left) / frameW, (bottom - top) / frameH));
+  // A region with no room at all, beside a box as wide as the viewer, has no frame.
+  const scale = frameW > 0 ? Math.max(0, Math.min(1, (right - left) / frameW, (bottom - top) / frameH)) : 0;
   const [halfW, halfH] = [scale * frameW / 2, scale * frameH / 2];
   const cx = nearest(region.left + region.width / 2, left + halfW, right - halfW);
   const cy = nearest(region.top + region.height / 2, top + halfH, bottom - halfH);

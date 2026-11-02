@@ -151,6 +151,20 @@ test('a reserved corner frames the shot in the band that fits it larger', () => 
   assert.deepEqual(freeRegion(360, 225, []), { left: 0, top: 0, width: 360, height: 225 });
 });
 
+test('a reserved corner as wide as the viewer frames the shot under it', () => {
+  // MeetFigure's inventory on a phone's square card, with the toolbar and the hand:
+  // beside it is no room at all, which once came out NaN and was kept.
+  const boxes = [
+    { edge: 'top-left', width: 346, height: 192 },
+    { edge: 'top-right', width: 44, height: 44 },
+    { edge: 'bottom-right', width: 44, height: 44 },
+  ];
+  assert.equal(bandFor(346, 346, boxes)['top-left'], 'under');
+  const region = freeRegion(346, 346, boxes);
+  assert.ok(Object.values(region).every(Number.isFinite), JSON.stringify(region));
+  assert.ok(region.top >= 192 && region.height > 0, JSON.stringify(region));
+});
+
 test('a reserved bottom edge frames the shot above it, whatever fits larger', () => {
   assert.deepEqual(freeRegion(360, 225, [{ edge: 'bottom', width: 300, height: 60 }]), { left: 0, top: 0, width: 360, height: 165 });
 });
