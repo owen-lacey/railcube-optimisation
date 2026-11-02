@@ -8,7 +8,9 @@
 	import TrackSum from "$lib/components/TrackSum.svelte";
 </script>
 
-<Chapter id="track-building">
+<Chapter id="valid-tracks">
+	<h2>Valid tracks</h2>
+
 	<p>
 		"Valid, you say?" Yes. Admittedly, the above approach doesn't protect you
 		against any potential lawsuits when the two halves of your figure-of-eight

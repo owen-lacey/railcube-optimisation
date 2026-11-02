@@ -957,7 +957,8 @@ the section and renders only its footer.
 
 `+page.svelte` is only the sequence: the splash, `Opening` (the first section; it hands the
 page its `StepSection` through a bindable `section`, for the zoom), `TitleZoom`, then one
-file per chapter (`Coordinates`, `TrackBuilding`, `Optimising`, `Conclusion`), each a
+file per chapter (`Coordinates`, `TrackMaths`, `Generating`, `ValidTracks`, `Optimising`,
+`Conclusion`), each under its own `<h2>`, each a
 `Chapter` — a `<section>` with an id, carrying the post's prose typography. The prose in them
 is Owen's.
 
@@ -973,7 +974,7 @@ in view (`claimKeys`, so it never fights a builder's keys), it calls `onleave`, 
 
 ### The meet-in-the-middle figures: `MeetLoop`, `MeetSpend`
 
-How `meet.py` makes a crossed layout, in the Coordinates chapter as a numbered list with a
+How `meet.py` makes a crossed layout, in the Generating chapter as a numbered list with a
 figure in four of its five items (Owen's call: it was one stepped `MeetFigure`, which did too
 much; the list's wording was its captions). One fixed layout, row 7932037, read from its X as
 `X·seg₁·seg₂·X·seg₃·seg₄`; a **segment** is the code's *half*, a **loop** its *lobe* (Owen's

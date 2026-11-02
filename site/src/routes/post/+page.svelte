@@ -8,7 +8,9 @@
 	import TitleZoom from "$lib/components/TitleZoom.svelte";
 	import Opening from "./Opening.svelte";
 	import Coordinates from "./Coordinates.svelte";
-	import TrackBuilding from "./TrackBuilding.svelte";
+	import TrackMaths from "./TrackMaths.svelte";
+	import Generating from "./Generating.svelte";
+	import ValidTracks from "./ValidTracks.svelte";
 	import Optimising from "./Optimising.svelte";
 	import Conclusion from "./Conclusion.svelte";
 	import { tick } from "svelte";
@@ -88,7 +90,9 @@
 
 {#if aboard}
 	<Coordinates />
-	<TrackBuilding />
+	<TrackMaths />
+	<Generating />
+	<ValidTracks />
 	<Optimising onconclude={conclude} />
 	{#if concluded}
 		<Conclusion {submitted} />
