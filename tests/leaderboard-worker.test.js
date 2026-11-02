@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { unstable_startWorker } from 'wrangler';
 
-import { SWEEP_CROSSED_RANKED as ranked } from '../site/src/lib/sweeps.js';
+import { SWEEP_CROSSED_RANKED as ranked } from '../site/src/lib/sweeps/ranked.js';
 
 const CONFIG = 'worker/wrangler.jsonc';
 const ORIGIN = 'http://localhost:5173';
@@ -115,6 +115,23 @@ test('refuses what is not a track', async () => {
   assert.equal((await post({ shape: 'SSS' })).status, 422);
   assert.equal((await post({ shape: 'SSSSSSSSLLSSSSSSSSLL' })).status, 422);
   assert.equal((await post({ shape: 42 })).status, 400);
+});
+
+test('refuses a body that is not a JSON object, with the CORS headers to say so', async () => {
+  const sent = (method, path, body) => worker.fetch(`http://worker${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
+    body,
+  });
+  const { body: { id } } = await post({ shape: 'SRRSRR' });
+  for (const [method, path] of [['POST', '/submissions'], ['PATCH', `/submissions/${id}`]]) {
+    for (const body of ['{"shape": ', 'null', '[]', '"SLLSLL"']) {
+      const response = await sent(method, path, body);
+      assert.equal(response.status, 400, `${method} ${body}`);
+      assert.equal(response.headers.get('Access-Control-Allow-Origin'), ORIGIN);
+      assert.equal(typeof (await response.json()).error, 'string');
+    }
+  }
 });
 
 test('answers only the pages it lists', async () => {

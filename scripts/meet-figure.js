@@ -28,9 +28,9 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { chainOpen, chainTrack, countPieces, cubeOf, overflowingPoolByType, POOLS, startCell } from '../src/track.js';
+import { chainOpen, chainTrack, countPieces, cubeOf, overflowingPoolByType, PIECE_TYPES, startCell } from '../src/track.js';
 import { routeOf } from '../src/layouts.js';
-import { random } from './sweep-data.js';
+import { random } from '../site/src/lib/random.js';
 
 const SAMPLE = 'site/src/lib/data/sweep-crossed.json';
 const OUT = 'site/src/lib/data/meet-figure.json';
@@ -125,7 +125,7 @@ const inside = (placed, box) => {
 /** Whether `placed` spends `inventory` exactly, counting cubes. */
 const spends = (placed, inventory) => {
   const used = countPieces(placed);
-  return POOLS.every(pool => used[pool] === (inventory[pool] ?? 0));
+  return PIECE_TYPES.every(type => used[type] === (inventory[type] ?? 0));
 };
 
 /**
@@ -144,13 +144,8 @@ function spendDecoys(sample, a, heading, real, seed) {
     }
   }
   const misses = [...loops].filter(([b]) => {
-    let placed;
-    try {
-      placed = chainTrack(routeOf(a + b));
-    } catch {
-      return false;
-    }
-    return inside(placed, box) && !spends(placed, inventory);
+    const { placed, closed, faults } = chainOpen(routeOf(a + b));
+    return closed && faults.length === 0 && inside(placed, box) && !spends(placed, inventory);
   });
   const rand = random(seed);
   for (let j = misses.length - 1; j > 0; j--) {

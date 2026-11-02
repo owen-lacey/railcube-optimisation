@@ -45,7 +45,10 @@ function readResponse(bytes) {
   };
 }
 
-/** The parameters `CpSolver.solve` would set, with its default of 8 workers. */
+/**
+ * The parameters `CpSolver.solve` would set, with its default of 8 workers.
+ * @param {{ maxTimeInSeconds?: number, numWorkers?: number, enumerateAllSolutions?: boolean }} params
+ */
 function parametersOf({ maxTimeInSeconds, numWorkers = 8, enumerateAllSolutions }) {
   return create(SatParametersSchema, {
     numWorkers,
@@ -69,6 +72,15 @@ function framesIn(buffer) {
   return { frames, rest: buffer.subarray(at) };
 }
 
+/**
+ * @param {{ toProto(): object }} model the cpsat-js `CpModel` to solve
+ * @param {{
+ *   onSolution?: (solution: object) => void,
+ *   maxTimeInSeconds?: number,
+ *   numWorkers?: number,
+ *   enumerateAllSolutions?: boolean,
+ * }} [options] `CpSolver.solve`'s
+ */
 export function solveNative(model, { onSolution, ...params } = {}) {
   const input = Buffer.concat([
     framed(toBinary(CpModelProtoSchema, model.toProto())),
@@ -102,10 +114,18 @@ export function solveNative(model, { onSolution, ...params } = {}) {
     });
     child.stderr.on('data', chunk => stderr.push(chunk));
     child.on('error', reject);
+    // uv or Python dying before reading all of the model is an EPIPE here, which
+    // unheard would crash the process. It is reported on 'close', with the exit
+    // code and stderr, which say why.
+    let unread = null;
+    child.stdin.on('error', error => {
+      unread = error;
+    });
     child.on('close', code => {
       if (failure !== null) reject(failure);
-      else if (code !== 0 || result === null || pending.length) {
-        reject(new Error(`native CP-SAT exited ${code}: ${Buffer.concat(stderr).toString()}`));
+      else if (code !== 0 || result === null || pending.length || unread !== null) {
+        const input = unread === null ? '' : ` (writing its input: ${unread.message})`;
+        reject(new Error(`native CP-SAT exited ${code}${input}: ${Buffer.concat(stderr).toString()}`));
       } else resolve(result);
     });
     child.stdin.end(input);

@@ -16,11 +16,9 @@ import { routeOf } from '../src/layouts.js';
 import { knotInput, knotReader } from '../scripts/knot-curves.js';
 import { knotOf } from '../site/src/lib/knots.js';
 import { readingsOf } from '../site/src/lib/readings.js';
-import { SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps.js';
-import { DIRECTIONS, ends, MAX_WEIGHTS, scoreOf, settings } from '../site/src/lib/weighting.js';
-
-const SLOW = process.env.SLOW === '1';
-const slow = SLOW ? test : (name, fn) => test(`${name} [skipped: set SLOW=1]`, { skip: true }, fn);
+import { SWEEP_CROSSED_WEIGHTS as table } from '../site/src/lib/sweeps/weights.js';
+import { DIRECTIONS, ends, MAX_WEIGHTS, scoreOf, settings, termsOf } from '../site/src/lib/weighting.js';
+import { slow } from './fixtures.js';
 
 const NAMES = Object.keys(DIRECTIONS);
 
@@ -71,11 +69,24 @@ test('every slider setting has its count at both ends', () => {
 
 test('one weight alone ranks by that metric, in its direction', () => {
   for (const name of NAMES) {
-    const { best, worst } = ends(table, { [name]: 1 });
+    const alone = Object.fromEntries(NAMES.map(other => [other, other === name ? 1 : 0]));
+    const { best, worst } = ends(table, alone);
     const values = table.rows.map(r => r[name]);
     const [low, high] = [Math.min(...values), Math.max(...values)];
     const [good, bad] = DIRECTIONS[name] > 0 ? [high, low] : [low, high];
     assert.equal(best[0].row[name], good, `${name} best`);
     assert.equal(worst[0].row[name], bad, `${name} worst`);
+  }
+});
+
+test('a misspelt or missing weight throws rather than weighing nothing', () => {
+  const [row] = table.rows;
+  const all = Object.fromEntries(NAMES.map(name => [name, 1]));
+  const { poses, ...missing } = all;
+  const misspelt = { ...missing, pose: poses };
+  for (const score of [w => scoreOf(row, w), w => termsOf(row, w), w => ends(table, w)]) {
+    assert.throws(() => score(missing), /no weight for poses/);
+    assert.throws(() => score(misspelt), /unknown weight pose/);
+    assert.doesNotThrow(() => score(all));
   }
 });

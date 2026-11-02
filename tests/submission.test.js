@@ -6,8 +6,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { assess, INVENTORY } from '../site/src/lib/submission.js';
-import { SWEEP_CROSSED_RANKED as ranked } from '../site/src/lib/sweeps.js';
+import { assess, INVENTORY, MAX_LETTERS } from '../site/src/lib/submission.js';
+import { SWEEP_CROSSED_RANKED as ranked } from '../site/src/lib/sweeps/ranked.js';
 import { trackHash } from '../scripts/sweep-data.js';
 
 test('scores the ranked layouts at their stored scores', async () => {
@@ -40,4 +40,15 @@ test('refuses an open route, a collision and an overspent pool', async () => {
   await assert.rejects(assess('SSS'), /does not close/);
   await assert.rejects(assess('LLLLLLLL'), /collision|collide/i);
   await assert.rejects(assess('SSSSSSSSLLSSSSSSSSLL'), /16 straight pieces, and there are only 14/);
+});
+
+test('the longest shape the inventory makes is every cube plus the cross\'s second pass', () => {
+  assert.equal(MAX_LETTERS, 36);
+  assert.equal(MAX_LETTERS, ranked.question.steps);
+  assert.equal(ranked.best[0].shape.length, MAX_LETTERS);
+});
+
+test('refuses a shape longer than the inventory makes, before chaining it', async () => {
+  await assert.rejects(assess('S'.repeat(MAX_LETTERS + 1)), /is 37 pieces long, and the inventory makes at most 36/);
+  await assert.rejects(assess('LLLL'.repeat(250000)), /is 1000000 pieces long/);
 });

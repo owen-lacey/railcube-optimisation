@@ -5,12 +5,13 @@
 	//
 	// Each metric is said again, with what it is worth at the post's weights, fixed,
 	// since a reader may have moved the sliders above it. The board's numbers are asked for as soon as
-	// this mounts, not when it opens, and their line appears only once they are back:
-	// a board that cannot be reached leaves the score to beat standing alone.
+	// this mounts, not when it opens, and their line appears only once they are back.
+	// A board that cannot be reached says so, as the leaderboard tab does, and the
+	// score to beat still stands.
 	import { onMount } from "svelte";
 	import Modal from "./Modal.svelte";
 	import { standings } from "$lib/leaderboard.js";
-	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps.js";
+	import { SWEEP_CROSSED_RANKED } from "$lib/sweeps/ranked.js";
 	import { DIRECTIONS, WEIGHTS } from "$lib/weighting.js";
 
 	// `onconfirm` is called once the reader takes the challenge on, and `ondecline`,
@@ -57,11 +58,14 @@
 
 	let dialog = $state(null);
 	let board = $state(null);
+	let error = $state(null);
 
 	onMount(() => {
 		standings(null, 1)
 			.then((answer) => (board = answer))
-			.catch(() => {});
+			.catch((failure) => {
+				error = failure.message;
+			});
 	});
 
 	// The board's mean score, from its histogram.
@@ -100,6 +104,9 @@
 		three-year-old). If you like, leave your internet handle as your name and
 		I'll give you a shout-out.
 	</p>
+	{#if error}
+		<p class="error" role="alert">{error}</p>
+	{/if}
 	<p class="cta">
 		{#if board?.total}
 			So far, {board.total} tracks have been built by readers, with an average score of
@@ -127,6 +134,10 @@
 
 	li {
 		margin-bottom: 0.375rem;
+	}
+
+	.error {
+		color: var(--error-text);
 	}
 
 	/* Set apart from the briefing by a bar of the lattice's blue down its left,

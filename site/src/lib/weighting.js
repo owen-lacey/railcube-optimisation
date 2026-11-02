@@ -31,9 +31,26 @@ export const MAX_WEIGHTS = { knotted: 20, poses: 5, closeCalls: 5, repeats: 5, l
 
 const NAMES = Object.keys(DIRECTIONS);
 
-/** A row's score under `weights`, a missing one weighing nothing: whole numbers, so ties are exact. */
-export const scoreOf = (row, weights) => NAMES.reduce(
-  (total, name) => total + (weights[name] ?? 0) * DIRECTIONS[name] * row[name], 0);
+/**
+ * `weights`, once every one of its keys is a metric and every metric has a
+ * number: a misspelt or missing weight would otherwise weigh nothing, silently.
+ */
+function checked(weights) {
+  for (const name in weights) {
+    if (!(name in DIRECTIONS)) throw new Error(`unknown weight ${name}: the metrics are ${NAMES.join(', ')}`);
+  }
+  for (const name of NAMES) {
+    if (!Number.isFinite(weights[name])) throw new Error(`no weight for ${name}, got ${weights[name]}`);
+  }
+  return weights;
+}
+
+/** A row's score under weights already `checked`. */
+const total = (row, weights) => NAMES.reduce(
+  (sum, name) => sum + weights[name] * DIRECTIONS[name] * row[name], 0);
+
+/** A row's score under `weights`, one for every metric: whole numbers, so ties are exact. */
+export const scoreOf = (row, weights) => total(row, checked(weights));
 
 /**
  * A row's score written out term by term, for showing the working: per metric
@@ -41,8 +58,9 @@ export const scoreOf = (row, weights) => NAMES.reduce(
  * (value × points), in DIRECTIONS order, and their `total`, which is `scoreOf`.
  */
 export function termsOf(row, weights) {
+  checked(weights);
   const terms = NAMES.map(name => {
-    const points = (weights[name] ?? 0) * DIRECTIONS[name];
+    const points = weights[name] * DIRECTIONS[name];
     return { name, value: row[name], points, contribution: row[name] * points };
   });
   return { terms, total: terms.reduce((sum, t) => sum + t.contribution, 0) };
@@ -62,12 +80,13 @@ function leaders(entries, before, count) {
 
 /**
  * The `count` best and `count` worst rows under `weights` ({ knotted, poses,
- * closeCalls, repeats, longestSide }, a missing one weighing nothing), best and
- * worst first, each `{ row, score }`. A tie goes to the row whose shape comes
- * first alphabetically, at either end.
+ * closeCalls, repeats, longestSide }, every one given), best and worst first,
+ * each `{ row, score }`. A tie goes to the row whose shape comes first
+ * alphabetically, at either end.
  */
 export function ends({ rows, count }, weights) {
-  const scored = rows.map(row => ({ row, score: scoreOf(row, weights) }));
+  checked(weights);
+  const scored = rows.map(row => ({ row, score: total(row, weights) }));
   const first = (a, b) => a.row.shape < b.row.shape;
   const best = leaders(scored, (a, b) => a.score > b.score || (a.score === b.score && first(a, b)), count);
   const worst = leaders(scored, (a, b) => a.score < b.score || (a.score === b.score && first(a, b)), count);

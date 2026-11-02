@@ -42,7 +42,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 
 import { chainTrack } from '../src/track.js';
 import { solveTrack } from '../src/solver/index.js';
-import { loopsOf, routeOf, shapeOf } from '../src/layouts.js';
+import { loopsOf, mirrorOf, routeOf, shapeOf } from '../src/layouts.js';
 
 /** Extents of the material, the same three numbers check-route.js reports. */
 const spanOf = placed => {
@@ -115,20 +115,16 @@ const shapes = new Set(already.map(r => r.shape));
 const started = Date.now();
 let written = already.length;
 
-/**
- * The mirror of a shape, which is a legal track spending the same inventory.
- *
- * Reflection maps left curves to right ones and leaves every other piece alone,
- * so it stays affordable only because this inventory holds four of each — the
- * same condition `symmetryBreaking` needs, and the reason the two go together
- * here. Verified through `chainTrack` like anything else before it is recorded.
- *
- * Not to be confused with a cyclic shift of the route, which is *not* a new
- * layout: entering the same closed loop at a different piece describes the same
- * physical track, rotated in space. Those are excluded deliberately — a list
- * padded with them would be one track claiming to be thirty-six.
- */
-const mirrorOf = shape => [...shape].map(l => ({ L: 'R', R: 'L' }[l] ?? l)).join('');
+// Every layout is written with its mirror (`mirrorOf`). Reflection maps left
+// curves to right ones and leaves every other piece alone, so it stays affordable
+// only because this inventory holds four of each — the same condition
+// `symmetryBreaking` needs, and the reason the two go together here. Verified
+// through `chainTrack` like anything else before it is recorded.
+//
+// Not to be confused with a cyclic shift of the route, which is *not* a new
+// layout: entering the same closed loop at a different piece describes the same
+// physical track, rotated in space. Those are excluded deliberately — a list
+// padded with them would be one track claiming to be thirty-six.
 
 const write = (shape, mirrored, s) => {
   if (shapes.has(shape)) return;   // an incumbent can repeat within a round
@@ -207,8 +203,10 @@ try {
   console.log(`status ${result.status}${result.truncated ? ' (truncated at --max)' : ''}`);
 } catch (error) {
   // `allSolutions` throws when a round ends on anything but a solution or
-  // INFEASIBLE — a per-solve timeout, typically. Everything found is already on
-  // disk, so this is the end of the sweep rather than a lost run.
+  // INFEASIBLE. UNKNOWN is a per-solve timeout: everything found is already on
+  // disk, so that is the end of the sweep rather than a lost run. Anything else
+  // (MODEL_INVALID, a throw from `record`, a crashed engine) is a fault.
+  if (error.message !== 'enumeration stopped on UNKNOWN') throw error;
   console.log(`sweep ended: ${error.message}`);
 }
 

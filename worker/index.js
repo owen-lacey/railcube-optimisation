@@ -44,8 +44,20 @@ const byId = (db, id) => db.prepare(`SELECT ${ROW} FROM submissions WHERE id = ?
 
 const refuse = (status, error) => Response.json({ error }, { status });
 
+/** A request's JSON object body, or null when it is not one (malformed, or not an object). */
+async function bodyOf(request) {
+  try {
+    const body = await request.json();
+    return body !== null && typeof body === 'object' && !Array.isArray(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
 async function submit(request, db) {
-  const { shape } = await request.json();
+  const body = await bodyOf(request);
+  if (body === null) return refuse(400, 'the body must be a JSON object');
+  const { shape } = body;
   if (typeof shape !== 'string') return refuse(400, 'shape must be a string');
   let assessed;
   try {
@@ -67,17 +79,25 @@ async function submit(request, db) {
   return Response.json(inserted ? { ...entry, duplicate: false, token } : { ...entry, duplicate: true });
 }
 
-async function sign(request, id, db) {
-  const { token, name, notes = '' } = await request.json();
+/** A signing's fields, checked, the name trimmed; or `{ refusal }` when they will not do. */
+function signatureOf({ token, name, notes = '' }) {
   if (typeof token !== 'string' || typeof name !== 'string' || typeof notes !== 'string') {
-    return refuse(400, 'token, name and notes must be strings');
+    return { refusal: refuse(400, 'token, name and notes must be strings') };
   }
   const signed = name.trim();
-  if (!signed) return refuse(422, 'a name is required');
-  if (signed.length > NAME_LIMIT) return refuse(422, `names are limited to ${NAME_LIMIT} characters`);
-  if (notes.length > NOTES_LIMIT) return refuse(422, `notes are limited to ${NOTES_LIMIT} characters`);
+  if (!signed) return { refusal: refuse(422, 'a name is required') };
+  if (signed.length > NAME_LIMIT) return { refusal: refuse(422, `names are limited to ${NAME_LIMIT} characters`) };
+  if (notes.length > NOTES_LIMIT) return { refusal: refuse(422, `notes are limited to ${NOTES_LIMIT} characters`) };
+  return { token, name: signed, notes };
+}
+
+async function sign(request, id, db) {
+  const body = await bodyOf(request);
+  if (body === null) return refuse(400, 'the body must be a JSON object');
+  const { refusal, token, name, notes } = signatureOf(body);
+  if (refusal) return refusal;
   const { meta } = await db.prepare('UPDATE submissions SET name = ?, notes = ? WHERE id = ? AND token_hash = ?')
-    .bind(signed, notes || null, id, await sha256(token))
+    .bind(name, notes || null, id, await sha256(token))
     .run();
   if (meta.changes === 0) return refuse(403, 'that track is not yours to sign');
   return Response.json(entryOf(await byId(db, id)));

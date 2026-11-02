@@ -20,6 +20,14 @@ import ranked from './data/sweep-crossed-ranked.json' with { type: 'json' };
 /** The crossed sweep's pieces, since its scores are the ones to beat. */
 export const INVENTORY = ranked.question.inventory;
 
+/**
+ * The most letters a track built from INVENTORY can have: one a cube, and one more
+ * a cross, since a crossed cross is its one piece traversed twice (never three
+ * times, which `chainTrack` refuses). A longer shape cannot be spent from the
+ * inventory, so it is refused before it is chained.
+ */
+export const MAX_LETTERS = Object.values(INVENTORY).reduce((sum, count) => sum + count, 0) + INVENTORY.cross;
+
 /** The longest artist's notes a submission may carry, in characters. */
 export const NOTES_LIMIT = 1000;
 
@@ -34,10 +42,13 @@ export async function sha256(text) {
 
 /**
  * `{ shape, readings, score, hash }` for a shape, or a throw saying why it is not
- * a track: it does not close, it collides, or it uses more of a piece than the
- * inventory holds.
+ * a track: it is longer than the inventory can make, it does not close, it
+ * collides, or it uses more of a piece than the inventory holds.
  */
 export async function assess(shape) {
+  if (shape.length > MAX_LETTERS) {
+    throw new Error(`is ${shape.length} pieces long, and the inventory makes at most ${MAX_LETTERS}`);
+  }
   const placed = chainTrack(routeOf(shape));
   for (const [pool, count] of Object.entries(countPieces(placed))) {
     if (count > INVENTORY[pool]) throw new Error(`uses ${count} ${pool} pieces, and there are only ${INVENTORY[pool]}`);

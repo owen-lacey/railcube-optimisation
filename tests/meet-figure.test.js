@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { chainOpen, chainTrack, countPieces, cubeOf, overflowingPoolByType, POOLS, startCell } from '../src/track.js';
+import { chainOpen, chainTrack, countPieces, cubeOf, overflowingPoolByType, PIECE_TYPES, startCell } from '../src/track.js';
 import { routeOf, trackKey } from '../src/layouts.js';
 
 const FILE = 'site/src/lib/data/meet-figure.json';
@@ -120,7 +120,7 @@ test("each of loop B's decoys is within the inventory alone, joins the ¾ track 
 
 test('the real track spends the box exactly', () => {
   const used = countPieces(chainTrack(routeOf(data.reading)));
-  for (const pool of POOLS) assert.equal(used[pool], sample.question.inventory[pool] ?? 0, pool);
+  for (const pool of PIECE_TYPES) assert.equal(used[pool], sample.question.inventory[pool] ?? 0, pool);
 });
 
 test("each step-5 decoy is another layout's loop B that closes with loop A but miscounts the box", () => {
@@ -148,7 +148,7 @@ test("each step-5 decoy is another layout's loop B that closes with loop A but m
     const used = countPieces(placed);
     const cubes = n => Object.values(n).reduce((t, k) => t + k, 0);
     assert.equal(cubes(used), cubes(inventory), loop);
-    assert.ok(POOLS.some(pool => used[pool] !== (inventory[pool] ?? 0)), `${loop} spends the box`);
+    assert.ok(PIECE_TYPES.some(pool => used[pool] !== (inventory[pool] ?? 0)), `${loop} spends the box`);
   }
 });
 
