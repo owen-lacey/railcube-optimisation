@@ -761,18 +761,22 @@
     const order = shown.map((_, i) => i).filter(i => !shown[i].side).sort((a, b) => spots[a].y - spots[b].y);
     const above = new Set(order.slice(0, Math.ceil(order.length / 2)));
     // Where each side puts a note `w` by `h` for the cell at `to`: the point on its
-    // edge nearest the drawing, which is the leader's end.
+    // edge nearest the drawing, which is the leader's end. A mark hangs `lead` off
+    // the note's left edge, so it is kept inside the viewer with the note.
     const PLACE = {
-      left: (w, h, to) => ({ x: across(left - CALLOUT_GAP, w), y: down(to.y + h / 2, h) - h / 2 }),
-      above: (w, h, to) => ({ x: across(to.x + w / 2, w) - w / 2, y: down(top - CALLOUT_GAP, h) }),
-      below: (w, h, to) => ({ x: across(to.x + w / 2, w) - w / 2, y: down(bottom + CALLOUT_GAP + h, h) - h }),
+      left: (w, h, to, lead) => ({ x: across(left - CALLOUT_GAP, w + lead), y: down(to.y + h / 2, h) - h / 2 }),
+      above: (w, h, to, lead) => ({ x: across(to.x + w / 2, w + lead) - w / 2, y: down(top - CALLOUT_GAP, h) }),
+      below: (w, h, to, lead) => ({ x: across(to.x + w / 2, w + lead) - w / 2, y: down(bottom + CALLOUT_GAP + h, h) - h }),
     };
     return shown.map(({ key, lines, flash, mark, changing, side: pinned }, i) => {
       const side = pinned ?? (above.has(i) ? 'above' : 'below');
       const w = noteEls[key]?.offsetWidth ?? 0;
       const h = noteEls[key]?.offsetHeight ?? 0;
-      const { x, y } = PLACE[side](w, h, spots[i]);
-      return { key, lines, flash, mark, changing, side, x: dodge(side, x, y, w, h, width, height), y, to: spots[i], measured: Boolean(noteEls[key]) };
+      const lead = noteEls[key]?.querySelector('.mark')?.offsetWidth ?? 0;
+      const { x, y } = PLACE[side](w, h, spots[i], lead);
+      // A mark not yet drawn has no width to keep in, so it is measured once drawn too.
+      const measured = Boolean(noteEls[key]) && (!mark || lead > 0);
+      return { key, lines, flash, mark, changing, side, x: dodge(side, x, y, w, h, width, height), y, to: spots[i], measured };
     });
   }
 
