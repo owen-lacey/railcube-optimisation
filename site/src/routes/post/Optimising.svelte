@@ -116,7 +116,7 @@
 	<ScoredTrack end="best" />
 
 	<p>
-		On the other hand, we can actually put something objective against why the
+		On the other hand, we can actually put something concrete against why the
 		bad tracks offend us so:
 	</p>
 
@@ -134,22 +134,28 @@
 	<p>
 		To get the layouts that perform well on all fronts we take a combined score
 		of each metric, by putting our finger firmly in the air to create a formula
-		based on how much we care about each metric. Here are the top 100:
+		based on how much we care about each metric. For simplicity, I'm going with
+		a point for all metrics apart from knots, which get 10 because they're
+		awesome. Here are the top 100 when using that scoring mechanism:
 	</p>
 
 	<ScoredRanking />
 
 	<p>
-		By making the weighting of each metric dynamic, you can change the formula
-		yourself and see how that affects what layouts score the best. It might be
-		you prefer a different recipe to me.
+		We can make this less simple by making the weighting of each metric
+		configurable. Try changing the formula yourself and see how that affects
+		what layouts score the best. It might be you prefer a different recipe to
+		me.
 	</p>
 
 	<WeightedTracks />
 
 	<p>
-		Back to the challenge I set you at the start: can you do better? Try build
-		one yourself and see if you can beat my score of 42 with the same pieces.
+		We're nearing the end of this wonderful journey; our train is approaching
+		the final boss, where this service terminates. At the beginning of the post
+		I conjectured that someone out there would be able to beat my best scoring
+		layout. Now's your time to apply the lessons so enthusiastically learned in
+		this post and prove me right.
 	</p>
 
 	<Challenge {onconclude} />
