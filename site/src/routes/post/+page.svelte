@@ -79,6 +79,16 @@
 
 <svelte:head>
 	<title>Optimising the Rail Cube</title>
+	<link rel="canonical" href="https://owenlacey.dev/railcube-optimisation/post" />
+	<meta property="og:type" content="article" />
+	<meta property="og:title" content="Optimising the Rail Cube" />
+	<meta property="og:url" content="https://owenlacey.dev/railcube-optimisation/post" />
+	<meta property="og:image" content="https://owenlacey.dev/img/uploads/optimising-the-rail-cube/hero.png" />
+	<meta property="og:image:width" content="1260" />
+	<meta property="og:image:height" content="780" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Optimising the Rail Cube" />
+	<meta name="twitter:image" content="https://owenlacey.dev/img/uploads/optimising-the-rail-cube/hero.png" />
 </svelte:head>
 
 {#if !passed}
